@@ -918,11 +918,14 @@ const MODS = {
    ══════════════════════════════════════════════════════════ */
 const SAVE_KEY = 'neonpurge_extract_v1';
 
+/* 免费保底枪：永远拥有、备弹无限。破产了也一定能再战一局。 */
+const STARTER_WEAPON = 'g17';
+
 const DEFAULT_SAVE = () => ({
   credits: 3500,
-  owned: { pistol: true },
+  owned: { [STARTER_WEAPON]: true },
   armorMax: 0,
-  equippedWeapon: 'pistol',
+  equippedWeapon: STARTER_WEAPON,
   equippedArmor: 0,
   medkits: 2,
   grenades: 1,
@@ -934,12 +937,17 @@ const DEFAULT_SAVE = () => ({
 });
 
 /* 旧存档的武器 id（smg/shotgun/rifle/sniper）迁到具体的枪上。
+   早期的免费手枪 id 就是 'pistol'（93R），现在 93R 改成收费枪，
+   但老档既然曾经白拿，就保留这份所有权，不要凭空没收。
    注意：这里不能引用 WEAPONS —— 存档在数据表之前就加载了。 */
-const WEAPON_ID_MIGRATE = { smg: 'bizon', shotgun: 'm870', rifle: 'm4a1', sniper: 'r93' };
-const KNOWN_WEAPON_IDS = { pistol: 1, bizon: 1, m870: 1, m4a1: 1, sr9: 1, r93: 1 };
+const WEAPON_ID_MIGRATE = { smg: 'bizon', shotgun: 'm870', rifle: 'm4a1', sniper: 'r93', pistol: '93r' };
+const KNOWN_WEAPON_IDS = { g17: 1, '93r': 1, g18: 1, bizon: 1, m870: 1, m4a1: 1, sr9: 1, r93: 1 };
+/* 手枪不能装枪托 —— 存档加载时就要判断，同样不能等 WEAPONS 表。
+   以后加手枪，这里和 KNOWN_WEAPON_IDS 都要补上。 */
+const PISTOL_IDS = { g17: 1, '93r': 1, g18: 1 };
 
 function migrateWeaponIds(owned) {
-  const out = { pistol: true };
+  const out = { [STARTER_WEAPON]: true };
   for (const id in owned) {
     if (!owned[id]) continue;
     const to = WEAPON_ID_MIGRATE[id] || id;
@@ -954,13 +962,13 @@ function loadSave() {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return base;
     const d = JSON.parse(raw);
-    const owned = migrateWeaponIds(Object.assign({ pistol: true }, d.owned || {}));
-    const eqW = WEAPON_ID_MIGRATE[d.equippedWeapon] || d.equippedWeapon || 'pistol';
+    const owned = migrateWeaponIds(Object.assign({}, DEFAULT_SAVE().owned, d.owned || {}));
+    const eqW = WEAPON_ID_MIGRATE[d.equippedWeapon] || d.equippedWeapon || STARTER_WEAPON;
     return {
       credits: typeof d.credits === 'number' ? d.credits : base.credits,
       owned: owned,
       armorMax: d.armorMax | 0,
-      equippedWeapon: KNOWN_WEAPON_IDS[eqW] ? eqW : 'pistol',
+      equippedWeapon: KNOWN_WEAPON_IDS[eqW] ? eqW : STARTER_WEAPON,
       equippedArmor: d.equippedArmor | 0,
       medkits: d.medkits | 0,
       grenades: d.grenades | 0,
@@ -997,13 +1005,20 @@ function cleanModBag(raw) {
   return out;
 }
 
-/* 枪上的配件：槽位必须对得上，枪必须是已知的 */
+/* 这把枪总共有几个可装槽位（手枪没有枪托，只有 4 个） */
+function modSlotTotal(wid) {
+  return PISTOL_IDS[wid] ? MOD_SLOTS.length - 1 : MOD_SLOTS.length;
+}
+
+/* 枪上的配件：槽位必须对得上，枪必须是已知的。
+   老档里 93R 的 id 是 'pistol'，这里顺手迁到新 id 上。 */
 function cleanGunMods(raw) {
   const out = {};
   if (!raw || typeof raw !== 'object') return out;
-  for (const wid in raw) {
+  for (const wid0 in raw) {
+    const wid = WEAPON_ID_MIGRATE[wid0] || wid0;
     if (!KNOWN_WEAPON_IDS[wid]) continue;
-    const src = raw[wid];
+    const src = raw[wid0];
     if (!src || typeof src !== 'object') continue;
     const gun = {};
     for (const s of MOD_SLOTS) {
@@ -1018,7 +1033,7 @@ function cleanGunMods(raw) {
 
 /* 手枪没有枪托 —— 别把托装到手枪上 */
 function slotAllowed(wid, slotId) {
-  if (slotId === 'stock' && wid === 'pistol') return false;
+  if (slotId === 'stock' && PISTOL_IDS[wid]) return false;
   return true;
 }
 
@@ -1035,7 +1050,7 @@ function saveGame() {
    ══════════════════════════════════════════════════════════ */
 /* ── 武器分类：军火库按这个顺序分组，每类先放一把 ── */
 const WEAPON_CATS = [
-  { id: 'pistol',  cn: '手枪',         en: 'PISTOL',  trait: '副武器 · 备弹无限' },
+  { id: 'pistol',  cn: '手枪',         en: 'PISTOL',  trait: '近身自保 · 免费保底' },
   { id: 'smg',     cn: '冲锋枪',       en: 'SMG',     trait: '射速压制 · 大弹容' },
   { id: 'shotgun', cn: '霰弹枪',       en: 'SHOTGUN', trait: '贴脸爆发 · 破盾' },
   { id: 'rifle',   cn: '步枪',         en: 'RIFLE',   trait: '全能主力 · 穿透 1 人' },
@@ -1045,14 +1060,32 @@ const WEAPON_CATS = [
 
 /* mode：auto 扣住连发 / semi 每发都要重新扣扳机 / burst 一次三连点射 */
 const WEAPONS = {
-  pistol: {
-    cat: 'pistol', label: '手枪 · 93R', short: '93R', name: '93R', code: 'BERETTA 93R', price: 0,
-    desc: '三连发点射的制式手枪。单发不重，但一轮三发刚好放倒小兵；备弹无限，永远不会彻底断火。',
-    dmg: 23, rate: 0.52, spread: 0.048, count: 1, mode: 'burst', burst: 3, burstGap: 0.062,
-    bspeed: 1300, mag: 20, reload: 1.25, recoil: 2.2, size: 3.2, reserveMul: 0,
+  g17: {
+    cat: 'pistol', label: '手枪 · G17', short: 'G17', name: 'G17', code: 'GLOCK 17', price: 0,
+    desc: '免费保底手枪。17 发弹匣、单发点射、备弹无限——哪怕破产掉光，手里也总有一把能打响的枪。',
+    dmg: 25, rate: 0.21, spread: 0.042, count: 1, mode: 'semi',
+    bspeed: 1250, mag: 17, reload: 1.15, recoil: 2.0, size: 3.1, reserveMul: 0,
+        ads: { spread: 0.56, move: 0.80, time: 0.12 },
+    color: '#ffe08a', range: 900, knock: 55, sound: 'pistol', noise: 620,
+    bars: { dmg: .30, rate: .34, mag: .42, acc: .68 },
+  },
+  '93r': {
+    cat: 'pistol', label: '手枪 · 93R', short: '93R', name: '93R', code: 'BERETTA 93R', price: 1200,
+    desc: '三连发点射手枪。单发不重，但一轮三发刚好放倒小兵；冲锋枪买不起的时候，它是最便宜的爆发。',
+    dmg: 26, rate: 0.44, spread: 0.048, count: 1, mode: 'burst', burst: 3, burstGap: 0.055,
+    bspeed: 1300, mag: 20, reload: 1.25, recoil: 2.2, size: 3.2, reserveMul: 8,
         ads: { spread: 0.55, move: 0.78, time: 0.13 },
     color: '#ffd66b', range: 950, knock: 60, sound: '93r', noise: 640,
     bars: { dmg: .26, rate: .50, mag: .50, acc: .66 },
+  },
+  g18: {
+    cat: 'pistol', label: '手枪 · G18', short: 'G18', name: 'G18', code: 'GLOCK 18', price: 2200,
+    desc: '全自动手枪。33 发长弹匣，扣住扳机就是一片弹雨，走廊和房间里贴脸极凶；散布与后坐都大，出了十米基本靠运气。',
+    dmg: 17, rate: 0.072, spread: 0.105, count: 1, mode: 'auto',
+    bspeed: 1150, mag: 33, reload: 1.55, recoil: 2.8, size: 3.0, reserveMul: 6,
+        ads: { spread: 0.70, move: 0.86, time: 0.12 },
+    color: '#ffc46b', range: 700, knock: 38, sound: 'g18', noise: 700,
+    bars: { dmg: .22, rate: .66, mag: .62, acc: .34 },
   },
   bizon: {
     cat: 'smg', label: '冲锋枪 · 野牛', short: '野牛', name: '野牛', code: 'PP-19 BIZON', price: 1400,
@@ -1106,8 +1139,8 @@ function adsOf(w) {
   return (w && w.ads) || { spread: 0.5, move: 0.6, time: 0.18 };
 }
 
-/* 快捷栏 / 滚轮 / HUD 都按这个顺序（数字键 1~6） */
-const WEAPON_ORDER = ['pistol', 'bizon', 'm870', 'm4a1', 'sr9', 'r93'];
+/* 快捷栏 / 滚轮 / HUD 都按这个顺序（数字键 1~8） */
+const WEAPON_ORDER = ['g17', '93r', 'g18', 'bizon', 'm870', 'm4a1', 'sr9', 'r93'];
 
 /* ══════════════════════════════════════════════════════════
    改枪：把「基础枪 + 已装配件」算成一份生效数值
@@ -1118,8 +1151,8 @@ const WEAPON_ORDER = ['pistol', 'bizon', 'm870', 'm4a1', 'sr9', 'r93'];
 const WSTAT_CACHE = {};
 
 function weaponStats(id) {
-  const base = WEAPONS[id] || WEAPONS.pistol;
-  const wid = WEAPONS[id] ? id : 'pistol';
+  const base = WEAPONS[id] || WEAPONS[STARTER_WEAPON];
+  const wid = WEAPONS[id] ? id : STARTER_WEAPON;
   const eq = (SAVE.mods && SAVE.mods[wid]) || {};
 
   let sig = wid;
@@ -1354,6 +1387,7 @@ const Sfx = {
   shoot(kind) {
     switch (kind) {
       case 'pistol':  this.noiseBurst(0.10, 1600, 1.2, 0.30); this.tone(190, 0.08, 0.16, 'square', 70); break;
+      case 'g18':     this.noiseBurst(0.05, 2500, 1.4, 0.17); this.tone(330, 0.04, 0.06, 'square', 150); break;
       case '93r':     this.noiseBurst(0.06, 2400, 1.3, 0.20); this.tone(300, 0.05, 0.09, 'square', 120); break;
       case 'dmr':     this.noiseBurst(0.16, 2800, 1.5, 0.30); this.tone(230, 0.12, 0.16, 'square', 70); break;
       case 'smg':     this.noiseBurst(0.07, 2200, 1.0, 0.20); this.tone(240, 0.05, 0.10, 'square', 120); break;
@@ -1403,7 +1437,10 @@ window.addEventListener('keydown', e => {
   if (k === 'r') startReload();
   if (k === 'f') useMedkit();
   if (k === 'g') throwGrenade();
-  if (k >= '1' && k <= '6') switchWeapon(WEAPON_ORDER[+k - 1]);
+  if (k >= '1' && k <= '9') {
+    const wq = WEAPON_ORDER[+k - 1];
+    if (wq) switchWeapon(wq);
+  }
 });
 window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
 window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; mouse.down = false; mouse.right = false; });
@@ -1500,8 +1537,8 @@ const P = {
   dashCd: 0,
   invuln: 0,
   hurtFlash: 0,
-  weapon: 'pistol',
-  owned: { pistol: true },
+  weapon: STARTER_WEAPON,
+  owned: { [STARTER_WEAPON]: true },
   ammo: {},
   walkPhase: 0,
   recoil: 0,
@@ -2171,20 +2208,22 @@ function resetPlayer() {
   P.hurtDirT = 0;
 
   // 每局只携带出击时选定的那一把武器，搜到的临时武器不会保留到下一局
-  P.owned = { pistol: true };
+  // 免费保底枪永远带在身上（备弹无限），破产也不至于空手
+  P.owned = {};
+  P.owned[STARTER_WEAPON] = true;
   let wq = SAVE.equippedWeapon;
-  if (!SAVE.owned[wq] || !WEAPONS[wq]) wq = 'pistol';
+  if (!SAVE.owned[wq] || !WEAPONS[wq]) wq = STARTER_WEAPON;
   P.owned[wq] = true;
   P.weapon = wq;
 
-  const W = weaponStats(wq);
-  const WP = weaponStats('pistol');
   const ammoMul = 1 + SAVE.ammoPacks * 0.5;
-  P.ammo = {
-    pistol: { mag: WP.mag, reserve: Infinity },
-  };
-  if (wq !== 'pistol') {
-    P.ammo[wq] = { mag: W.mag, reserve: Math.round(W.mag * (W.reserveMul || 4) * ammoMul) };
+  P.ammo = {};
+  for (const id of Object.keys(P.owned)) {
+    const WS = weaponStats(id);
+    P.ammo[id] = {
+      mag: WS.mag,
+      reserve: WS.reserveMul > 0 ? Math.round(WS.mag * WS.reserveMul * ammoMul) : Infinity,
+    };
   }
 
   P.armorDR = ARMORS[SAVE.equippedArmor] ? ARMORS[SAVE.equippedArmor].dr : 0;
@@ -2195,7 +2234,7 @@ function resetPlayer() {
 function currentAmmo() {
   if (!P.ammo[P.weapon]) {
     const W = weaponStats(P.weapon);
-    P.ammo[P.weapon] = { mag: W.mag, reserve: P.weapon === 'pistol' ? Infinity : W.mag * (W.reserveMul || 4) };
+    P.ammo[P.weapon] = { mag: W.mag, reserve: W.reserveMul > 0 ? W.mag * W.reserveMul : Infinity };
   }
   return P.ammo[P.weapon];
 }
@@ -4155,9 +4194,9 @@ function makeWeaponItem(wk) {
     color: '#c9a3ff', weapon: wk, tier: 'rare',
   };
 }
-/* 抽一把枪：优先抽还没有的，让武器箱真的能开图鉴 */
+/* 抽一把枪：优先抽还没有的，让武器箱真的能开图鉴（免费保底枪不进池子） */
 function pickGun(preferNew) {
-  const all = WEAPON_ORDER.filter(k => k !== 'pistol');
+  const all = WEAPON_ORDER.filter(k => k !== STARTER_WEAPON);
   if (preferNew && Math.random() < 0.68) {
     const pool = all.filter(k => !P.owned[k]);
     if (pool.length) return pick(pool);
@@ -4318,11 +4357,11 @@ function relicCount() {
   return n;
 }
 
-/* 给当前武器补备弹；手枪备弹无限，就转给背包里别的枪 */
+/* 给当前武器补备弹；备弹无限的枪（免费保底手枪）就转给背包里别的枪 */
 function addAmmo(mags) {
   let w = P.weapon;
   if (!P.ammo[w] || P.ammo[w].reserve === Infinity) {
-    w = WEAPON_ORDER.find(k => k !== 'pistol' && P.owned[k] &&
+    w = WEAPON_ORDER.find(k => k !== P.weapon && P.owned[k] &&
       P.ammo[k] && P.ammo[k].reserve !== Infinity) || null;
   }
   if (!w) return 0;
@@ -4351,7 +4390,9 @@ function applyLootItem(it, c) {
       P.owned[w] = true;
       P.ammo[w] = {
         mag: WS.mag,
-        reserve: Math.round(WS.mag * (WS.reserveMul || 4) * (1 + SAVE.ammoPacks * 0.5)),
+        reserve: WS.reserveMul > 0
+          ? Math.round(WS.mag * WS.reserveMul * (1 + SAVE.ammoPacks * 0.5))
+          : Infinity,
       };
     }
   } else if (it.kind === 'mod') {
@@ -4930,11 +4971,22 @@ function drawPlayerGun(W, rec) {
 }
 
 /* ── 改装台的枪械预览：侧视图，改哪儿一眼看得出 ── */
+/* 侧视轮廓长度（改装台与预览共用）：手枪按弹匣容量分三档，
+   93R 长管 / G18 长弹匣 / G17 制式尺寸，一眼能分开 */
+function gunSideLen(W) {
+  const c = W.cat;
+  if (c === 'sniper') return 92;
+  if (c === 'dmr') return 86;
+  if (c === 'rifle') return 78;
+  if (c === 'shotgun') return 72;
+  if (c === 'smg') return 64;
+  return W.mag >= 30 ? 50 : W.mag >= 19 ? 55 : 48;
+}
+
 function drawGunSide(g, W) {
   const cat = W.cat;
   const S = W.slots || {};
-  const L = cat === 'sniper' ? 92 : cat === 'dmr' ? 86 : cat === 'rifle' ? 78
-    : cat === 'shotgun' ? 72 : cat === 'smg' ? 64 : 52;
+  const L = gunSideLen(W);
   const C = {
     body: '#33475a',
     body2: '#45627b',
@@ -5018,8 +5070,9 @@ function drawGunSide(g, W) {
 
   /* 弹匣 / 供弹 */
   if (cat !== 'shotgun') {
-    let mh = 13, mw = 6;
-    if (S.mag === 'extmag') mh = 20;
+    let mh = cat === 'pistol' ? (W.mag >= 30 ? 18 : W.mag >= 19 ? 12 : 10) : 13;
+    let mw = 6;
+    if (S.mag === 'extmag') mh = cat === 'pistol' ? 20 : 20;
     else if (S.mag === 'quickmag') { mh = 11; mw = 6.4; }
     else if (S.mag === 'lightmag') mh = 10;
     const mx = L * 0.375;
@@ -5046,9 +5099,14 @@ function drawGunSide(g, W) {
     rr(L * 0.10, 2.6, L * 0.30, 2.8, 1.2); g.fill();
   }
 
-  /* 枪托 */
+  /* 枪托（手枪没有枪托，用一小段套筒尾部收口） */
   const sx = L * 0.735;
-  if (S.stock === 'folding') {
+  if (cat === 'pistol') {
+    g.fillStyle = C.body;
+    rr(sx - 1.5, -5.4, L * 0.10, 10.8, 1.6); g.fill();
+    g.fillStyle = 'rgba(255,255,255,0.10)';
+    g.fillRect(sx - 1, -4.6, L * 0.08, 1.4);
+  } else if (S.stock === 'folding') {
     g.strokeStyle = C.body2; g.lineWidth = 2.2;
     g.beginPath();
     g.moveTo(sx, -3); g.lineTo(sx + 7, -3.5); g.lineTo(sx + 7, 3.4); g.lineTo(sx, 3);
@@ -5136,8 +5194,7 @@ function drawGunPreview(wid) {
   g.setTransform(2, 0, 0, 2, 0, 0);
 
   const W = weaponStats(wid);
-  const L = W.cat === 'sniper' ? 92 : W.cat === 'dmr' ? 86 : W.cat === 'rifle' ? 78
-    : W.cat === 'shotgun' ? 72 : W.cat === 'smg' ? 64 : 52;
+  const L = gunSideLen(W);
 
   /* 逻辑坐标：x 从 -18（枪口）到 L，y 从 -13 到 20 */
   const spanX = L + 20, spanY = 34;
@@ -7255,7 +7312,7 @@ function refreshLobby() {
     nm: weaponName(w),
     ds: '伤害 ' + w.dmg + (w.count > 1 ? ' ×' + w.count : '') + ' · 弹匣 ' + w.mag + ' · ' +
         (w.mode === 'burst' ? '三连点射' : '射速 ' + (1 / w.rate).toFixed(1) + '/s') +
-        ' · 改装 ' + modN + '/5',
+        ' · 改装 ' + modN + '/' + modSlotTotal(SAVE.equippedWeapon),
     val: '主武器',
     onClick: () => {
       if (ownedWeapons.length < 2) { uiToast('只有一把武器，去军火库看看', 'small'); return; }
@@ -7308,7 +7365,7 @@ function refreshLobby() {
     if (secretRaid) {
       risk.textContent = '机密行动：敌人血量与伤害全面上调，但军械与保险柜更多、品质更高';
     } else if (ownedWeapons.length < 2) {
-      risk.textContent = '只有手枪时仍可免费出击，先去军火库补一把主武器';
+      risk.textContent = '手上还只有保底手枪——照样能免费出击，攒够钱去军火库补一把主武器';
     } else if (SAVE.credits < 800) {
       risk.textContent = '资金吃紧：建议用手枪低成本出击，撤离后再升级装备';
     } else {
@@ -7352,7 +7409,7 @@ function closeShop() {
    配件库是「物资」：装上去就从库里扣一件，拆下来再还回去。
    同一件配件不能同时装在两把枪上 —— 想换就拆。
    ══════════════════════════════════════════════════════════ */
-let gsPick = { weapon: 'pistol', slot: 'muzzle' };
+let gsPick = { weapon: STARTER_WEAPON, slot: 'muzzle' };
 let gsFrom = 'lobby';           // 从大厅还是军火库进来的
 
 const MOD_LABEL = {
@@ -7386,7 +7443,7 @@ function openGunsmith(wid) {
   Sfx.init();
   const owned = WEAPON_ORDER.filter(k => SAVE.owned[k]);
   gsPick.weapon = (wid && SAVE.owned[wid]) ? wid
-    : (SAVE.owned[SAVE.equippedWeapon] ? SAVE.equippedWeapon : (owned[0] || 'pistol'));
+    : (SAVE.owned[SAVE.equippedWeapon] ? SAVE.equippedWeapon : (owned[0] || STARTER_WEAPON));
   gsPick.slot = 'muzzle';
   gsFrom = $('shop').classList.contains('hidden') ? 'lobby' : 'shop';
   $('lobby').classList.add('hidden');
@@ -7405,7 +7462,7 @@ function refreshGunsmith() {
   $('gsCredit').textContent = fmtMoney(SAVE.credits);
 
   const owned = WEAPON_ORDER.filter(k => SAVE.owned[k]);
-  if (!SAVE.owned[gsPick.weapon]) gsPick.weapon = owned[0] || 'pistol';
+  if (!SAVE.owned[gsPick.weapon]) gsPick.weapon = owned[0] || STARTER_WEAPON;
   $('gsGunCount').textContent = owned.length;
 
   /* ── 左：已拥有的枪 ── */
@@ -7418,8 +7475,13 @@ function refreshGunsmith() {
     b.type = 'button';
     b.className = 'gunrow' + (id === gsPick.weapon ? ' on' : '');
     b.innerHTML = '<span class="gn">' + w.short + '</span>' +
-      '<span class="gm">' + (n ? '改 ' + n + '/5' : '无改装') + '</span>';
-    b.addEventListener('click', () => { gsPick.weapon = id; refreshGunsmith(); });
+      '<span class="gm">' + (n ? '改 ' + n + '/' + modSlotTotal(id) : '无改装') + '</span>';
+    b.addEventListener('click', () => {
+      gsPick.weapon = id;
+      /* 手枪没有枪托槽：切到手枪时把选中的槽位挪到枪口，免得停在不适用的格子上 */
+      if (!slotAllowed(id, gsPick.slot)) gsPick.slot = 'muzzle';
+      refreshGunsmith();
+    });
     list.appendChild(b);
   }
 
@@ -7431,7 +7493,7 @@ function refreshGunsmith() {
   $('gsHead').innerHTML =
     '<span class="hn">' + w.name + '</span>' +
     '<span class="hc">' + w.code + ' · ' + weaponCatOf(w).cn + '</span>' +
-    '<span class="hd">改装 ' + st.modCount + ' / 5</span>';
+    '<span class="hd">改装 ' + st.modCount + ' / ' + modSlotTotal(wid) + '</span>';
 
   drawGunPreview(wid);
 
@@ -7975,7 +8037,7 @@ function refreshShop() {
         const modN = owned ? gunModCount(id) : 0;
         el.innerHTML =
           '<div class="top"><span class="nm">' + w.name + '</span>' +
-          (owned ? '<span class="tag own">改装 ' + modN + '/5</span>' : '<span class="tag cat">' + cat.cn + '</span>') + '</div>' +
+          (owned ? '<span class="tag own">改装 ' + modN + '/' + modSlotTotal(id) + '</span>' : '<span class="tag cat">' + cat.cn + '</span>') + '</div>' +
           '<div class="code">' + w.code + '</div>' +
           '<div class="ds">' + w.desc + '</div>' +
           '<div class="specs">' + weaponSpecs(w) + '</div>' +
@@ -8259,7 +8321,7 @@ function endRaid(success) {
     SAVE.stats.deaths++;
     SAVE.stats.kills += G.kills;
 
-    const lostWeapon = SAVE.equippedWeapon !== 'pistol' ? WEAPONS[SAVE.equippedWeapon].short : null;
+    const lostWeapon = SAVE.equippedWeapon !== STARTER_WEAPON ? WEAPONS[SAVE.equippedWeapon].short : null;
     const lostArmor = SAVE.equippedArmor > 0 ? ARMORS[SAVE.equippedArmor].name : null;
     const lostN = relicCount();
     const lostModN = gunModCount(SAVE.equippedWeapon);
@@ -8268,7 +8330,7 @@ function endRaid(success) {
     if (lostWeapon) SAVE.owned[SAVE.equippedWeapon] = false;
     // 枪没了，装在上面的配件跟着一起没；背包里还没入库的也一起丢
     if (lostWeapon) delete SAVE.mods[SAVE.equippedWeapon];
-    SAVE.equippedWeapon = 'pistol';
+    SAVE.equippedWeapon = STARTER_WEAPON;
     SAVE.equippedArmor = 0;
     SAVE.armorMax = 0;
     SAVE.medkits = 0;
