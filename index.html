@@ -228,6 +228,7 @@
   .whead .mk { margin-left:auto; font-size:10px; color:#4f7d99; letter-spacing:.06em; }
   .specs { display:grid; grid-template-columns:1fr 1fr; gap:6px 16px; margin:2px 0; }
   .spec { display:flex; align-items:baseline; gap:6px; font-size:10px; color:#4f7d99; letter-spacing:.06em; }
+  .spec > i { flex:none; white-space:nowrap; }
   .spec b { margin-left:auto; color:#cfe9f7; font-weight:700; font-variant-numeric:tabular-nums; }
   .spec b i { font-style:normal; color:#4f7d99; font-size:9px; margin-left:2px; }
 
@@ -586,6 +587,7 @@
       <button class="tab on" data-tab="weapon">武 器</button>
       <button class="tab" data-tab="melee">近 战</button>
       <button class="tab" data-tab="armor">护 甲</button>
+      <button class="tab" data-tab="ammo">弹 药</button>
       <button class="tab" data-tab="supply">补 给</button>
     </div>
     <div class="grid" id="shopGrid"></div>
@@ -1107,8 +1109,12 @@ const DEFAULT_SAVE = () => ({
   surgs: { surg_simple: { uses: 2 } },
   carePick: 'med:' + STARTER_MEDKIT,   // 上次用的那种 —— 短按 5 直接掏它
   grenades: 1,
-  ammoPacks: 0,
-  pistolAmmo: 0,
+  /* 弹药库存：按口径 × 弹级存「还剩几发」。新档只送 68 发 9×19 一级白弹
+     （正好 4 个 G17 弹匣），别的口径自己买。 */
+  ammo: { '919': { 1: 68 } },
+  ammoPick: { '919': 1 },     // 每个口径选用哪一级弹
+  ammoPacks: 0,               // 弹药包：出击备弹上限 +50%
+  pistolAmmo: 0,              // 已废弃：老档的「手枪弹盒」，迁移时折算成 9×19 白弹
   stash: {},          // 仓库里的收集品：{ 收集品id: 数量 }
   modBag: {},         // 配件库存：{ 配件id: 数量 }
   mods: {},           // 每把枪装了什么：{ 枪id: { 槽位id: 配件id } }
@@ -1124,6 +1130,50 @@ const KNOWN_WEAPON_IDS = { g17: 1, '93r': 1, g18: 1, bizon: 1, m870: 1, m4a1: 1,
 /* 手枪不能装枪托 —— 存档加载时就要判断，同样不能等 WEAPONS 表。
    以后加手枪，这里和 KNOWN_WEAPON_IDS 都要补上。 */
 const PISTOL_IDS = { g17: 1, '93r': 1, g18: 1 };
+
+/* 弹药清洗：补齐 6 个口径 × 8 个弹级。
+   老档（没有 ammo 字段）按拥有的枪各补 3 个弹匣的 1 级白弹，
+   当年买的「手枪弹盒」按一盒 51 发折算成 9×19 白弹，不白没收。 */
+function cleanAmmo(raw, owned, legacyPistolBoxes) {
+  const out = {};
+  for (const cal of CAL_ORDER) {
+    out[cal] = {};
+    for (let lv = 0; lv <= AMMO_LV_MAX; lv++) out[cal][lv] = 0;
+  }
+  const has = raw && typeof raw === 'object';
+  if (has) {
+    for (const cal of CAL_ORDER) {
+      const src = raw[cal];
+      if (!src || typeof src !== 'object') continue;
+      for (let lv = 0; lv <= AMMO_LV_MAX; lv++) {
+        const n = Math.floor(Number(src[lv]) || 0);
+        out[cal][lv] = n > 0 ? Math.min(n, 9999) : 0;
+      }
+    }
+  } else {
+    for (const id in owned) {
+      if (!owned[id]) continue;
+      const cal = CAL_OF_WEAPON[id];
+      if (cal && STARTER_AMMO[cal]) out[cal][1] += STARTER_AMMO[cal];
+    }
+  }
+  const boxes = Math.max(0, legacyPistolBoxes | 0);
+  if (boxes) out['919'][1] += boxes * 51;
+  return out;
+}
+
+function cleanAmmoPick(raw) {
+  const out = {};
+  for (const cal of CAL_ORDER) out[cal] = 1;
+  if (!raw || typeof raw !== 'object') return out;
+  for (const cal of CAL_ORDER) {
+    const lv = raw[cal];
+    if (lv == null) continue;
+    const n = Math.floor(Number(lv));
+    if (Number.isFinite(n) && n >= 0 && n <= AMMO_LV_MAX) out[cal] = n;
+  }
+  return out;
+}
 
 function migrateWeaponIds(owned) {
   /* 老档当年是白送 G17 的，这里保留这份所有权，不凭空没收；
@@ -1157,8 +1207,10 @@ function loadSave() {
       surgs: cleanSurgs(d.surgs),
       carePick: normCareKey(d.carePick || d.medPick),
       grenades: d.grenades | 0,
+      ammo: cleanAmmo(d.ammo, owned, d.pistolAmmo),
+      ammoPick: cleanAmmoPick(d.ammoPick),
       ammoPacks: d.ammoPacks | 0,
-      pistolAmmo: d.pistolAmmo | 0,
+      pistolAmmo: 0,
       stash: cleanStash(d.stash),
       modBag: cleanModBag(d.modBag),
       mods: cleanGunMods(d.mods),
@@ -1310,6 +1362,66 @@ function slotAllowed(wid, slotId) {
   return true;
 }
 
+
+/* ══════════════════════════════════════════════════════════
+   弹药：口径 × 弹级
+   ──────────────────────────────────────────────────────────
+   每把枪吃一种真实规格的弹（G17/G18 打 9×19mm，M4A1 打 5.56×45mm…），
+   同一口径下再分 0~7 级，级别决定「啃得动几级甲」：
+     弹级 - 甲级 ≥ 2  → 100% 肉伤
+     弹级 - 甲级 = 1  →  75%
+     弹级 - 甲级 = 0  →  50%
+     弹级 < 甲级      →   0%（全被甲吃住，只磨损护甲）
+   0 级是 RIP/CT 修脚弹：一点甲都穿不动，但打无甲目标肉伤暴涨。
+   这张表必须排在 loadSave 之前 —— 老档清洗要用它。
+   ══════════════════════════════════════════════════════════ */
+const CALIBERS = {
+  '919': { id:'919', name:'9×19mm 帕拉贝鲁姆', short:'9×19', box:50, base:4,
+           desc:'最通用的手枪弹，G17 / 93R / G18 共用。' },
+  '918': { id:'918', name:'9×18mm 马卡洛夫', short:'9×18', box:50, base:3,
+           desc:'野牛冲锋枪的螺旋弹鼓装的就是它，便宜量大。' },
+  '12g': { id:'12g', name:'12 号霰弹', short:'12Ga', box:25, base:9,
+           desc:'M870 一次喷 8 枚弹丸，每颗单独结算。' },
+  '556': { id:'556', name:'5.56×45mm NATO', short:'5.56', box:30, base:7,
+           desc:'M4A1 的制式步枪弹，穿甲与手感最均衡。' },
+  '762': { id:'762', name:'7.62×51mm NATO', short:'7.62', box:20, base:12,
+           desc:'SR9 的全威力步枪弹，单发很重。' },
+  '338': { id:'338', name:'.338 Lapua Magnum', short:'.338', box:10, base:25,
+           desc:'R93 的远程重弹，一发就是一笔钱。' },
+};
+const CAL_ORDER = ['919', '918', '12g', '556', '762', '338'];
+
+/* 0~7 级：颜色 / 伤害倍率 / 价格倍率（价格 = 口径基价 × 倍率 × 每盒发数） */
+const AMMO_TIERS = [
+  { lv:0, key:'rip', name:'RIP 修脚弹', grade:'0 级', color:'#ff7a9c', dmgMul:0.72, fleshMul:1.9, priceMul:0.45,
+    desc:'空尖碎裂弹。一级甲都啃不动，但打无甲目标肉伤接近两倍。' },
+  { lv:1, key:'fmj', name:'白弹', grade:'1 级', color:'#dfe9f2', dmgMul:1.00, fleshMul:1, priceMul:1,
+    desc:'普通全金属被甲弹。压得住 1 级甲，最便宜的通用弹。' },
+  { lv:2, key:'steel', name:'绿弹', grade:'2 级', color:'#63d68a', dmgMul:1.02, fleshMul:1, priceMul:1.75,
+    desc:'钢芯弹。压 2 级甲，打小兵和盾兵够用。' },
+  { lv:3, key:'ap', name:'蓝弹', grade:'3 级', color:'#4fa8ff', dmgMul:1.04, fleshMul:1, priceMul:2.9,
+    desc:'标准穿甲弹。3 级甲正面也能咬进一半伤害。' },
+  { lv:4, key:'apcr', name:'紫弹', grade:'4 级', color:'#b782ff', dmgMul:1.06, fleshMul:1, priceMul:4.6,
+    desc:'硬芯穿甲。4 级甲及以下全通，机枪兵的重甲开始扛不住。' },
+  { lv:5, key:'tungsten', name:'金弹', grade:'5 级', color:'#ffcc4d', dmgMul:1.08, fleshMul:1, priceMul:7.2,
+    desc:'钨芯穿甲。5 级甲也只剩一半吸收。' },
+  { lv:6, key:'m995', name:'红弹', grade:'6 级', color:'#ff5d5d', dmgMul:1.10, fleshMul:1, priceMul:11,
+    desc:'M995 / M61 级军用穿甲，6 级甲正面 50%。' },
+  { lv:7, key:'apex', name:'顶级穿甲', grade:'7 级', color:'#ff2fd0', dmgMul:1.13, fleshMul:1, priceMul:17,
+    desc:'实验性顶级弹。打 6 级甲仍有 75% 肉伤，最贵也最不讲道理。' },
+];
+const AMMO_LV_MAX = AMMO_TIERS.length - 1;
+/* 1~6 级甲的颜色，敌人血条外圈用 */
+const ARMOR_LV_COLOR = ['#5a6b78', '#dfe9f2', '#63d68a', '#4fa8ff', '#b782ff', '#ffcc4d', '#ff5d5d'];
+
+/* 枪 → 口径。以后加枪，这里必须补一条，否则默认按 9×19 算。 */
+const CAL_OF_WEAPON = {
+  g17: '919', '93r': '919', g18: '919',
+  bizon: '918', m870: '12g', m4a1: '556', sr9: '762', r93: '338',
+};
+/* 老档迁移时按「3 个弹匣」补的 1 级白弹（新档只送 9×19） */
+const STARTER_AMMO = { '919': 51, '918': 64, '12g': 21, '556': 90, '762': 54, '338': 15 };
+
 /* 存档必须等 KNOWN_WEAPON_IDS / MODS 都就位之后再读，
    否则旧档会在 TDZ 里被 catch 吞掉，等于每次刷新都重置。 */
 let SAVE = loadSave();
@@ -1334,8 +1446,8 @@ const WEAPON_CATS = [
 /* mode：auto 扣住连发 / semi 每发都要重新扣扳机 / burst 一次三连点射 */
 const WEAPONS = {
   g17: {
-    cat: 'pistol', label: '手枪 · G17', short: 'G17', name: 'G17', code: 'GLOCK 17', price: 700,
-    desc: '制式手枪，最便宜的入门枪。17 发弹匣、单发点射，备弹只有 4 个弹匣 —— 打空了要么局内捡弹匣，要么自带手枪弹盒。',
+    cat: 'pistol', label: '手枪 · G17', short: 'G17', name: 'G17', code: 'GLOCK 17', price: 700, cal: '919',
+    desc: '制式手枪，最便宜的入门枪。17 发弹匣、单发点射，吃 9×19mm 弹 —— 备弹只有 4 个弹匣，打空了要么局内捡，要么出击前在「弹药」页多买两盒。',
     dmg: 25, rate: 0.21, spread: 0.042, count: 1, mode: 'semi',
     bspeed: 1250, mag: 17, reload: 1.15, recoil: 2.0, size: 3.1, reserveMul: 4,
         ads: { spread: 0.56, move: 0.80, time: 0.12 },
@@ -1343,7 +1455,7 @@ const WEAPONS = {
     bars: { dmg: .30, rate: .34, mag: .42, acc: .68 },
   },
   '93r': {
-    cat: 'pistol', label: '手枪 · 93R', short: '93R', name: '93R', code: 'BERETTA 93R', price: 1200,
+    cat: 'pistol', label: '手枪 · 93R', short: '93R', name: '93R', code: 'BERETTA 93R', price: 1200, cal: '919',
     desc: '三连发点射手枪。单发不重，但一轮三发刚好放倒小兵；冲锋枪买不起的时候，它是最便宜的爆发。',
     dmg: 26, rate: 0.44, spread: 0.048, count: 1, mode: 'burst', burst: 3, burstGap: 0.055,
     bspeed: 1300, mag: 20, reload: 1.25, recoil: 2.2, size: 3.2, reserveMul: 8,
@@ -1352,7 +1464,7 @@ const WEAPONS = {
     bars: { dmg: .26, rate: .50, mag: .50, acc: .66 },
   },
   g18: {
-    cat: 'pistol', label: '手枪 · G18', short: 'G18', name: 'G18', code: 'GLOCK 18', price: 2200,
+    cat: 'pistol', label: '手枪 · G18', short: 'G18', name: 'G18', code: 'GLOCK 18', price: 2200, cal: '919',
     desc: '全自动手枪。33 发长弹匣，扣住扳机就是一片弹雨，走廊和房间里贴脸极凶；散布与后坐都大，出了十米基本靠运气。',
     dmg: 17, rate: 0.072, spread: 0.105, count: 1, mode: 'auto',
     bspeed: 1150, mag: 33, reload: 1.55, recoil: 2.8, size: 3.0, reserveMul: 6,
@@ -1361,7 +1473,7 @@ const WEAPONS = {
     bars: { dmg: .22, rate: .66, mag: .62, acc: .34 },
   },
   bizon: {
-    cat: 'smg', label: '冲锋枪 · 野牛', short: '野牛', name: '野牛', code: 'PP-19 BIZON', price: 1400,
+    cat: 'smg', label: '冲锋枪 · 野牛', short: '野牛', name: '野牛', code: 'PP-19 BIZON', price: 1400, cal: '918',
     desc: '64 发螺旋弹鼓，一个弹匣能扫穿半个据点，几乎不用为换弹发愁。单发很轻，靠泼水压制。',
     dmg: 14, rate: 0.065, spread: 0.072, count: 1, mode: 'auto',
     bspeed: 1120, mag: 64, reload: 2.3, recoil: 1.3, size: 2.8, reserveMul: 4,
@@ -1370,7 +1482,7 @@ const WEAPONS = {
     bars: { dmg: .28, rate: .96, mag: 1.0, acc: .40 },
   },
   m870: {
-    cat: 'shotgun', label: '霰弹枪 · M870', short: 'M870', name: 'M870', code: 'REMINGTON M870', price: 2400,
+    cat: 'shotgun', label: '霰弹枪 · M870', short: 'M870', name: 'M870', code: 'REMINGTON M870', price: 2400, cal: '12g',
     desc: '泵动霰弹枪，一次糊出 8 枚弹丸。一发打碎盾兵的盾，两发送走重甲。远一点就基本打空。',
     dmg: 13, rate: 0.85, spread: 0.215, count: 8, mode: 'semi',
     bspeed: 1000, mag: 7, reload: 2.6, recoil: 10, size: 3.0, reserveMul: 4,
@@ -1379,7 +1491,7 @@ const WEAPONS = {
     bars: { dmg: .90, rate: .22, mag: .22, acc: .12 },
   },
   m4a1: {
-    cat: 'rifle', label: '步枪 · M4A1', short: 'M4A1', name: 'M4A1', code: 'COLT M4A1', price: 4000,
+    cat: 'rifle', label: '步枪 · M4A1', short: 'M4A1', name: 'M4A1', code: 'COLT M4A1', price: 4000, cal: '556',
     desc: '全自动主力步枪。射速、精度、手感都在中上，子弹能穿透一名敌人——据点里最稳的一把。',
     dmg: 33, rate: 0.095, spread: 0.021, count: 1, mode: 'auto',
     bspeed: 1700, mag: 30, reload: 1.85, recoil: 3.4, size: 3.6, reserveMul: 5,
@@ -1388,7 +1500,7 @@ const WEAPONS = {
     bars: { dmg: .52, rate: .74, mag: .60, acc: .82 },
   },
   sr9: {
-    cat: 'dmr', label: '精确射手步枪 · SR9', short: 'SR9', name: 'SR9', code: 'SR-9 DMR', price: 5200,
+    cat: 'dmr', label: '精确射手步枪 · SR9', short: 'SR9', name: 'SR9', code: 'SR-9 DMR', price: 5200, cal: '762',
     desc: '半自动精确射手步枪。单发 70 点、后坐极轻，两三发一个点射就能清掉远处探头的人。',
     dmg: 70, rate: 0.33, spread: 0.009, count: 1, mode: 'semi',
     bspeed: 2100, mag: 18, reload: 2.1, recoil: 7, size: 3.8, reserveMul: 5,
@@ -1397,7 +1509,7 @@ const WEAPONS = {
     bars: { dmg: .72, rate: .46, mag: .42, acc: .94 },
   },
   r93: {
-    cat: 'sniper', label: '狙击枪 · R93', short: 'R93', name: 'R93', code: 'BLASER R93', price: 6800,
+    cat: 'sniper', label: '狙击枪 · R93', short: 'R93', name: 'R93', code: 'BLASER R93', price: 6800, cal: '338',
     desc: '栓动狙击枪。单发 310 点，一枪一个重甲兵，子弹能穿三名目标；代价是每发都要拉一次栓。',
     dmg: 310, rate: 1.35, spread: 0.003, count: 1, mode: 'semi',
     bspeed: 2800, mag: 5, reload: 2.7, recoil: 16, size: 4.2, reserveMul: 5,
@@ -1494,6 +1606,82 @@ function gunModCount(wid) {
   return n;
 }
 
+
+/* ── 弹药库存 ──
+   SAVE.ammo[口径][弹级] = 剩余发数。出击装弹时扣，局内捡到的直接加进弹匣。 */
+function calOfWeapon(id) { return CAL_OF_WEAPON[id] || '919'; }
+function caliberOf(id) { return CALIBERS[calOfWeapon(id)] || CALIBERS['919']; }
+function ammoTier(lv) { return AMMO_TIERS[clamp(lv | 0, 0, AMMO_LV_MAX)] || AMMO_TIERS[1]; }
+function ammoTierName(cal, lv) {
+  const C = CALIBERS[cal], T = ammoTier(lv);
+  return (C ? C.short : '?') + ' · ' + T.grade + ' ' + T.name;
+}
+function ammoStock(cal, lv) {
+  const b = SAVE.ammo && SAVE.ammo[cal];
+  return b ? Math.max(0, b[lv] | 0) : 0;
+}
+function takeAmmoStock(cal, lv, n) {
+  if (!SAVE.ammo) SAVE.ammo = {};
+  if (!SAVE.ammo[cal]) SAVE.ammo[cal] = {};
+  const have = Math.max(0, SAVE.ammo[cal][lv] | 0);
+  const take = Math.min(have, Math.max(0, Math.round(n)));
+  SAVE.ammo[cal][lv] = have - take;
+  return take;
+}
+function addAmmoStock(cal, lv, n) {
+  if (!CALIBERS[cal] || lv < 0 || lv > AMMO_LV_MAX) return 0;
+  if (!SAVE.ammo) SAVE.ammo = {};
+  if (!SAVE.ammo[cal]) SAVE.ammo[cal] = {};
+  const add = Math.max(0, Math.round(n));
+  SAVE.ammo[cal][lv] = Math.min(9999, Math.max(0, SAVE.ammo[cal][lv] | 0) + add);
+  return add;
+}
+function ammoTotalOf(cal) {
+  let n = 0;
+  for (let lv = 0; lv <= AMMO_LV_MAX; lv++) n += ammoStock(cal, lv);
+  return n;
+}
+/* 一盒的价格：口径基价 × 弹级倍率 × 每盒发数 */
+function ammoPrice(cal, lv) {
+  const C = CALIBERS[cal], T = ammoTier(lv);
+  if (!C || !T) return 0;
+  return Math.max(1, Math.round(C.base * T.priceMul * C.box));
+}
+/* 这个口径现在实际会装进枪里的弹级：
+   优先用玩家选的；那一级没货，就找最近的有货的级别，差得最少的那一档。 */
+function ammoPickOf(cal) {
+  const pick = (SAVE.ammoPick && SAVE.ammoPick[cal] != null) ? clamp(SAVE.ammoPick[cal] | 0, 0, AMMO_LV_MAX) : 1;
+  if (ammoStock(cal, pick) > 0) return pick;
+  for (let d = 1; d <= AMMO_LV_MAX; d++) {
+    const lo = pick - d, hi = pick + d;
+    if (lo >= 0 && ammoStock(cal, lo) > 0) return lo;
+    if (hi <= AMMO_LV_MAX && ammoStock(cal, hi) > 0) return hi;
+  }
+  return pick;
+}
+
+/* 弹级打甲级 —— 完全照抄那张对照表：
+   弹级比甲级高 2 级以上 = 全穿透；高 1 级 = 75%；同级 = 50%；比甲低 = 一点不进。 */
+function penRatio(pen, armorLv) {
+  const lv = armorLv | 0;
+  if (lv <= 0) return 1;
+  const d = lv - (pen | 0);
+  if (d <= -2) return 1;
+  if (d === -1) return 0.75;
+  if (d === 0) return 0.5;
+  return 0;
+}
+/* 这颗弹对某级甲能打出百分之多少 —— 一行塞得下：
+   「对甲 1-6 级 100/75/50/×/×/×」 */
+function penTableText(pen) {
+  const parts = [];
+  for (let lv = 1; lv <= 6; lv++) {
+    const r = penRatio(pen, lv);
+    parts.push(r > 0 ? String(Math.round(r * 100)) : '×');
+  }
+  return '对甲 1-6 级 ' + parts.join('/');
+}
+
 const ARMORS = [
   { id: 0, name: '无护甲',   short: '无护甲',   dr: 0,    price: 0,    desc: '没有任何防护，承受全额伤害。' },
   { id: 1, name: '轻型护甲', short: '轻型护甲', dr: 0.20, price: 700,  desc: '轻便的防弹背心，减免 20% 伤害。' },
@@ -1503,27 +1691,26 @@ const ARMORS = [
 
 const SUPPLY = {
   grenade: { name: '破片手雷', price: 500, desc: '局内按 G 投掷，范围爆炸伤害。' },
-  ammoPack:{ name: '弹药包',  price: 800, desc: '出击时所有武器备弹量 +50%。可叠加。' },
-  pistolAmmo:{ name: '手枪弹盒', price: 260, desc: '出击时给带上的每把手枪多塞 3 个弹匣。出击消耗一盒，没带手枪就不消耗。' },
+  ammoPack:{ name: '弹药包',  price: 800, desc: '出击时备弹上限 +50%，等于能多带半份子弹进图。可叠加。' },
 };
 
 
 const ENEMY_TYPES = {
   /* 阿萨拉小兵：全家最小的个头、跑得最快，边冲边短点射，贴脸还有一记近身 */
-  runner:  { hp: 34,  r: 11, speed: 168, dmg: 9,  score: 12,  color: '#ff4d6d', glow: '#ff2d55', shape: 'tri',
+  runner:  { hp: 34,  r: 11, speed: 168, dmg: 9,  score: 12,  armor: 0,   // 突击兵是全线唯一无甲的：RIP 修脚弹就是给他们准备的  color: '#ff4d6d', glow: '#ff2d55', shape: 'tri',
              sight: 320, fov: 1.0,
              burst: { n: 3, gap: 0.11, dmg: 5.2, spd: 560, spread: 0.055, cd: [1.9, 2.7], range: 520 } },
   /* 阿萨拉盾兵：中等身板，正面一块厚盾挡子弹（能被打碎），盾后探头点射 */
-  shooter: { hp: 34,  r: 17, speed: 104, dmg: 8,  score: 22,  color: '#ffa23a', glow: '#ff8a1f', shape: 'sq',
+  shooter: { hp: 34,  r: 17, speed: 104, dmg: 8,  score: 22,  armor: 2,  color: '#ffa23a', glow: '#ff8a1f', shape: 'sq',
              sight: 350, fov: 0.9, keep: 300, shield: 120, shieldArc: 0.78,
              burst: { n: 2, gap: 0.18, dmg: 6.5, spd: 560, spread: 0.045, cd: [2.1, 2.9], range: 620 } },
   /* 阿萨拉机枪兵：大块头、慢吞吞，一挺加特林先转后喷，血厚得像堵墙 */
-  brute:   { hp: 280, r: 29, speed: 58,  dmg: 24, score: 48,  color: '#b46bff', glow: '#a040ff', shape: 'hex',
+  brute:   { hp: 280, r: 29, speed: 58,  dmg: 24, score: 48,  armor: 4,  color: '#b46bff', glow: '#a040ff', shape: 'hex',
              sight: 300, fov: 1.15, keep: 330,
              gat: { spin: 0.55, rounds: 20, rate: 0.075, cd: [2.1, 3.1],
                     spd: 780, dmg: 6, spread: 0.05, bloom: 0.05, range: 820 } },
   /* BOSS「赤霄」：守着据点不动窝，扛一挺重机枪打压制，燃烧瓶封锁走位，翻滚拉开距离 */
-  boss:    { hp: 1400, r: 44, speed: 96, dmg: 36, score: 450, color: '#ff2d55', glow: '#ff0040', shape: 'boss',
+  boss:    { hp: 1400, r: 44, speed: 96, dmg: 36, score: 450,  armor: 5, color: '#ff2d55', glow: '#ff0040', shape: 'boss',
              sight: 520, fov: 1.45, keep: 330, leash: 260,
              // 重机枪：预热 → 长点射 → 过热冷却；后坐力会让弹道越打越散
              hmg: { spin: 0.44, rounds: 26, rate: 0.05, cd: [2.6, 3.6],
@@ -1531,19 +1718,19 @@ const ENEMY_TYPES = {
              molotovCd: [7.2, 9.6], rollCd: [3.8, 5.2], rollSpd: 470, rollTime: 0.34 },
 
   /* 阿萨拉狙击兵：视野最远但视锥很窄，开火前有一道瞄准激光，一枪见血 */
-  sniper:  { hp: 30, r: 13, speed: 96, dmg: 10, score: 34, color: '#5ce1e6', glow: '#18a8bd', shape: 'dia',
+  sniper:  { hp: 30, r: 13, speed: 96, dmg: 10, score: 34,  armor: 1, color: '#5ce1e6', glow: '#18a8bd', shape: 'dia',
              sight: 500, fov: 0.62, keep: 470,
              /* charge 是激光锁定的时间——看到红线就开始走位；dmg 38 一枪能打掉小半管血 */
              snipe: { charge: 0.9, dmg: 38, spd: 1500, spread: 0.006, cd: [2.4, 3.3], range: 520 } },
 
   /* 阿萨拉火箭筒兵：慢吞吞地扛着筒子，装填完打一发直飞的火箭，范围爆炸 */
-  rocket:  { hp: 72, r: 19, speed: 72, dmg: 12, score: 40, color: '#8ad34a', glow: '#4d9a1a', shape: 'roc',
+  rocket:  { hp: 72, r: 19, speed: 72, dmg: 12, score: 40,  armor: 2, color: '#8ad34a', glow: '#4d9a1a', shape: 'roc',
              sight: 460, fov: 0.85, keep: 380,
              /* load 装填（有预警），火箭飞得慢，侧身就能躲；打爆半空的火箭会提前炸 */
              rkt: { load: 0.75, spd: 300, radius: 112, dmg: 48, life: 3.6, cd: [3.4, 4.4], range: 560 } },
 
   /* 阿萨拉喷火兵：逼近到十来米就开喷，火舌绕过掩体边缘会持续烧，地上还会留火 */
-  flamer:  { hp: 130, r: 20, speed: 84, dmg: 14, score: 44, color: '#ffd24a', glow: '#ff8a1f', shape: 'flm',
+  flamer:  { hp: 130, r: 20, speed: 84, dmg: 14, score: 44,  armor: 3, color: '#ffd24a', glow: '#ff8a1f', shape: 'flm',
              sight: 300, fov: 1.05, keep: 165,
              flame: { dur: 1.9, tick: 0.3, dmg: 4.5, range: 228, arc: 0.34, cd: [2.4, 3.2],
                       fireR: 44, fireLife: 2.0, fireDmg: 2.0 } },
@@ -1558,6 +1745,9 @@ const ENEMY_TYPES = {
    ══════════════════════════════════════════════════════════ */
 const SECRET = {
   hp: { runner: 68, shooter: 60, sniper: 55, rocket: 105, flamer: 170, brute: 360, boss: 2400 },
+  /* 机密甲抬升：0 表示不变。抬 1 会让 5.56 三级弹对机枪兵一发都进不去，
+     手感太硬，先留 0；以后想要更硬核改成 1 就行。 */
+  armorAdd: 0,
   dmgMul: { runner: 1.35, shooter: 1.23, sniper: 0.84, rocket: 0.83, flamer: 1.33, brute: 1.33, boss: 1.33 },
   shield: 140,          // 盾兵的盾，普通是 120
   playerInvuln: 0.30,   // 玩家挨打后的无敌帧，普通是 0.55（围攻才开始有压力）
@@ -2554,30 +2744,32 @@ function resetPlayer() {
   P.swingT = 0;
   P.swingHit = 0;
 
+  /* 装弹：按口径选用的弹级，从库存里真扣发数。
+     能带的量 = 弹匣 + 弹匣×reserveMul（弹药包再 +50%）；
+     库存不够就带多少算多少 —— 没子弹的枪就是根烧火棍。 */
   const ammoMul = 1 + SAVE.ammoPacks * 0.5;
   P.ammo = {};
+  let tookAny = 0;
   for (const id of Object.keys(P.owned)) {
     const WS = weaponStats(id);
-    P.ammo[id] = {
-      mag: WS.mag,
-      reserve: WS.reserveMul > 0 ? Math.round(WS.mag * WS.reserveMul * ammoMul) : Infinity,
-    };
+    const cal = calOfWeapon(id);
+    const lv = ammoPickOf(cal);
+    const cap = WS.mag + (WS.reserveMul > 0 ? Math.round(WS.mag * WS.reserveMul * ammoMul) : 0);
+    const take = takeAmmoStock(cal, lv, Math.min(cap, ammoStock(cal, lv)));
+    const inMag = Math.min(WS.mag, take);
+    P.ammo[id] = { mag: inMag, reserve: take - inMag, tier: lv, cal };
+    tookAny += take;
   }
+  if (tookAny) saveGame();
 
-  /* 手枪弹盒：出击消耗一盒，给带进来的每把手枪多塞 3 个弹匣。
-     一把手枪都没带就不扣，别白烧钱。 */
-  if ((SAVE.pistolAmmo | 0) > 0) {
-    let guns = 0;
+  /* 提醒：哪个口径一颗子弹都没有 */
+  {
+    const dry = [];
     for (const id of Object.keys(P.owned)) {
-      if (!PISTOL_IDS[id] || !P.ammo[id]) continue;
-      P.ammo[id].reserve += weaponStats(id).mag * 3;
-      guns++;
+      const a = P.ammo[id];
+      if (!a || a.mag + a.reserve <= 0) dry.push(weaponStats(id).short);
     }
-    if (guns) {
-      SAVE.pistolAmmo = Math.max(0, (SAVE.pistolAmmo | 0) - 1);
-      saveGame();
-      uiToast('手枪弹盒 · ' + guns + ' 把手枪各 +3 匣备弹', 'small');
-    }
+    if (dry.length) uiToast('没子弹：' + dry.join(' / ') + ' · 去军需处买弹药', 'warn');
   }
 
   P.armorDR = ARMORS[SAVE.equippedArmor] ? ARMORS[SAVE.equippedArmor].dr : 0;
@@ -2604,8 +2796,9 @@ function resetPlayer() {
 function currentAmmo() {
   if (!P.weapon) return { mag: 0, reserve: 0 };     // 空手：没有弹匣可谈
   if (!P.ammo[P.weapon]) {
-    const W = weaponStats(P.weapon);
-    P.ammo[P.weapon] = { mag: W.mag, reserve: W.reserveMul > 0 ? W.mag * W.reserveMul : Infinity };
+    /* 没登记过的枪（理论上不会）当成空枪，绝不凭空发子弹 */
+    const cal = calOfWeapon(P.weapon);
+    P.ammo[P.weapon] = { mag: 0, reserve: 0, tier: ammoPickOf(cal), cal };
   }
   return P.ammo[P.weapon];
 }
@@ -3054,9 +3247,9 @@ function finishReload() {
   const W = weaponStats(P.weapon);
   const a = currentAmmo();
   const need = W.mag - a.mag;
-  const take = a.reserve === Infinity ? need : Math.min(need, a.reserve);
+  const take = Math.min(need, Math.max(0, a.reserve));
   a.mag += take;
-  if (a.reserve !== Infinity) a.reserve -= take;
+  a.reserve -= take;
 }
 
 /* 扣扳机：全自动按住就连，半自动每发都要重新按，点射一次打三发 */
@@ -3083,6 +3276,9 @@ function playerShoot() {
   if (a.mag <= 0) { startReload(); return; }
 
   a.mag--;
+  /* 这一发吃的是什么弹：弹级决定穿甲和肉伤倍率 */
+  const T = ammoTier(a.tier == null ? 1 : a.tier);
+  const calId = a.cal || calOfWeapon(P.weapon);
   /* 点射内的间隔很短，打完整轮才进入循环冷却 */
   P.fireCd = (P.burstLeft > 1) ? (W.burstGap || 0.06) : W.rate;
   if (P.burstLeft > 0) P.burstLeft--;
@@ -3103,9 +3299,11 @@ function playerShoot() {
       x: mx, y: my, px: mx, py: my,
       vx: Math.cos(ang) * spd,
       vy: Math.sin(ang) * spd,
-      r: W.size, dmg: W.dmg, color: W.color,
+      r: W.size, dmg: W.dmg * T.dmgMul, color: T.color,
       life: W.range / W.bspeed,
       hostile: false,
+      /* pen 是弹级，fleshMul 只对 0 级修脚弹生效；cal 只用于飘字/统计 */
+      pen: T.lv, fleshMul: T.fleshMul, cal: calId, tier: T.lv,
       pierce: W.pierce || 0,
       hitSet: null,
       knock: W.knock,
@@ -3114,7 +3312,7 @@ function playerShoot() {
 
   burst(mx, my, W.count > 1 ? 10 : 5, {
     angle: P.aim, spread: 0.45, spdMin: 120, spdMax: 440,
-    color: ['#fff3c4', W.color], life: 0.2, r: 3, glow: true,
+    color: ['#fff3c4', T.color], life: 0.2, r: 3, glow: true,
   });
   G.particles.push({
     x: mx, y: my, vx: 0, vy: 0, life: 0.07, max: 0.07,
@@ -3745,6 +3943,9 @@ function spawnEnemy(type, atX, atY) {
   const hpBase = (sec && SECRET.hp[type]) ? SECRET.hp[type] : T.hp;
   const dmgMul = sec ? (SECRET.dmgMul[type] || 1) : 1;
   const shieldBase = (sec && type === 'shooter') ? SECRET.shield : (T.shield || 0);
+  /* 护甲等级：决定「几级弹才打得进」。护甲本身有耐久，磨光了就裸奔。 */
+  const armorLv = Math.max(0, (T.armor || 0) + (sec ? (SECRET.armorAdd || 0) : 0));
+  const armorHp = armorLv * 48;
   let x = atX, y = atY, nest = null;
 
   if (atX === undefined) {
@@ -3803,6 +4004,8 @@ function spawnEnemy(type, atX, atY) {
     ptN: 0, ptT: 0, ptInt: 0.1, ptDmg: 0, ptSpd: 0, ptSpr: 0,
     /* 盾牌：正面吃子弹，打完就碎；shieldAim 是盾面朝向，转身比眼睛慢半拍 */
     shield: shieldBase, maxShield: shieldBase, shieldAim: 0, shieldFlash: 0,
+    /* 护甲：armorLv 是等级（0~6），armorHp 是耐久 —— 挡住的弹会磨甲，磨穿就裸了 */
+    armorLv, armorHp, armorMax: armorHp, armorFlash: 0,
     /* 加特林：spin 预热 / burst 剩余弹数 / fire 连发间隔 / heat 枪管热度 / bloom 弹道扩散 */
     gatCd: rand(0.7, 1.6), gatSpin: 0, gatBurst: 0, gatFire: 0, gatHeat: 0, gatBloom: 0, gatPhase: 0,
 
@@ -4686,6 +4889,7 @@ function updateEnemies(dt) {
       }
     }
     e.shieldFlash = Math.max(0, e.shieldFlash - dt * 4);
+    e.armorFlash = Math.max(0, (e.armorFlash || 0) - dt * 5);
 
     resolveCircleRects(e);
     clampWorld(e);
@@ -4788,6 +4992,30 @@ function updateEnemies(dt) {
   G.alarm = Math.max(0, G.alarm - dt * 0.08);
 }
 
+/* 子弹打在身上：先过护甲那道关。
+   返回 {dmg 实际肉伤, ratio 穿透比例, blocked 是否被完全挡住}。
+   挡住的弹不掉血，但会磨护甲耐久 —— 所以低级弹磨也能把甲磨穿，
+   只是要多打半个弹匣。修脚弹（0 级）打无甲目标时肉伤按 fleshMul 放大。 */
+function bulletDamage(e, b) {
+  const pen = b.pen || 0;
+  let dmg = b.dmg;
+  let ratio = 1;
+  if (e.armorHp > 0 && e.armorLv > 0) {
+    ratio = penRatio(pen, e.armorLv);
+    /* 打甲都会磨耐久：被吃住磨得快（0.6），穿进去磨得慢（0.25） */
+    e.armorHp = Math.max(0, e.armorHp - b.dmg * (ratio > 0 ? 0.25 : 0.6));
+    if (ratio <= 0) e.armorFlash = 1;
+    if (e.armorHp <= 0) {
+      popup(e.x, e.y - e.r - 32, '护甲被打穿', '#ffd66b', 13);
+      burst(e.x, e.y, 12, { color: ['#bfe4ff', '#ffffff', '#8fb6d0'], life: 0.4, r: 3, spdMin: 60, spdMax: 240, glow: true });
+    }
+    dmg *= ratio;
+  } else if (pen === 0) {
+    dmg *= (b.fleshMul || 1.6);
+  }
+  return { dmg, ratio, blocked: ratio <= 0 };
+}
+
 function damageEnemy(e, dmg, dirX, dirY, knock) {
   if (e.invuln > 0) return;        // 翻滚中的 BOSS 不吃伤害
   e.hp -= dmg;
@@ -4865,9 +5093,13 @@ function collectPickup(p) {
     Sfx.pickup();
   } else if (p.kind === 'ammo') {
     const a = currentAmmo();
-    if (a.reserve !== Infinity) a.reserve += weaponStats(P.weapon).mag * 2;
-    else P.hp = Math.min(P.maxHp, P.hp + 8);
-    popup(P.x, P.y - 30, '弹药补给', '#8ef2ff', 14);
+    if (P.weapon) {
+      a.reserve += weaponStats(P.weapon).mag * 2;
+      popup(P.x, P.y - 30, '弹药补给 +' + weaponStats(P.weapon).mag * 2 + ' 发', ammoTier(a.tier).color, 14);
+    } else {
+      P.hp = Math.min(P.maxHp, P.hp + 8);
+      popup(P.x, P.y - 30, '没有枪，先回血', '#8ef2ff', 14);
+    }
     Sfx.pickup();
   } else if (p.kind === 'relic' && p.relicId && RELICS[p.relicId]) {
     const r = RELICS[p.relicId];
@@ -4946,15 +5178,27 @@ function updateBullets(dt) {
             if (dist2(b.x, b.y, e.x, e.y) > bodyR2) continue;
             b.hitSet.add(e);
             const len = Math.hypot(b.vx, b.vy) || 1;
-            damageEnemy(e, b.dmg, b.vx / len, b.vy / len, b.knock);
-
-            burst(b.x, b.y, 6, {
-              angle: Math.atan2(b.vy, b.vx) + Math.PI, spread: 0.8,
-              spdMin: 40, spdMax: 220, color: ['#ff3355', '#ff6b81', '#ffffff'],
-              life: 0.35, r: 3, glow: false, drag: 0.9,
-            });
-            addDecal(e.x + rand(-6, 6), e.y + rand(-6, 6), rand(5, 11), '#4a0a18', 0.42);
-            Sfx.hit();
+            const res = bulletDamage(e, b);
+            if (res.blocked) {
+              /* 被甲吃住：不掉血，只磨耐久，溅一圈冷色火星 */
+              e.armorFlash = 1;
+              burst(b.x, b.y, 4, {
+                angle: Math.atan2(b.vy, b.vx) + Math.PI, spread: 1.1,
+                spdMin: 30, spdMax: 150, color: ['#bfe4ff', '#ffffff', '#8fb6d0'],
+                life: 0.24, r: 2.4, glow: true, drag: 0.9,
+              });
+              if (Math.random() < 0.22) popup(b.x, b.y - 14, '被 ' + e.armorLv + ' 级甲挡住', '#8fb6d0', 11);
+              Sfx.hit();
+            } else {
+              damageEnemy(e, res.dmg, b.vx / len, b.vy / len, b.knock * (res.ratio < 1 ? 0.6 : 1));
+              burst(b.x, b.y, 6, {
+                angle: Math.atan2(b.vy, b.vx) + Math.PI, spread: 0.8,
+                spdMin: 40, spdMax: 220, color: ['#ff3355', '#ff6b81', '#ffffff'],
+                life: 0.35, r: 3, glow: false, drag: 0.9,
+              });
+              addDecal(e.x + rand(-6, 6), e.y + rand(-6, 6), rand(5, 11), '#4a0a18', 0.42);
+              Sfx.hit();
+            }
 
             if (b.pierce > 0) { b.pierce--; b.dmg *= 0.75; }
             else { G.bullets.splice(i, 1); removed = true; }
@@ -5519,12 +5763,12 @@ function relicCount() {
   return n;
 }
 
-/* 给当前武器补备弹；备弹无限的枪就转给背包里别的枪 */
+/* 局内捡到的弹匣：加给手里的枪（空手就转给背包里别的枪）。
+   局内捡的弹不挑级，就跟枪上现在装的那种同款。 */
 function addAmmo(mags) {
   let w = P.weapon;
-  if (!P.ammo[w] || P.ammo[w].reserve === Infinity) {
-    w = WEAPON_ORDER.find(k => k !== P.weapon && P.owned[k] &&
-      P.ammo[k] && P.ammo[k].reserve !== Infinity) || null;
+  if (!P.ammo[w]) {
+    w = WEAPON_ORDER.find(k => k !== P.weapon && P.owned[k] && P.ammo[k]) || null;
   }
   if (!w) return 0;
   const n = weaponStats(w).mag * mags;
@@ -5548,16 +5792,13 @@ function applyLootItem(it, c) {
     const WS = weaponStats(w);
     if (P.owned[w]) {
       // 已经有一把了：拆成两个弹匣的备弹
-      const a = P.ammo[w] || (P.ammo[w] = { mag: WS.mag, reserve: 0 });
+      const a = P.ammo[w] || (P.ammo[w] = { mag: 0, reserve: 0, tier: ammoPickOf(calOfWeapon(w)), cal: calOfWeapon(w) });
       a.reserve += WS.mag * 2;
     } else {
+      /* 局内缴获的枪自带两个弹匣的子弹（不扣库存） */
+      const cal = calOfWeapon(w);
       P.owned[w] = true;
-      P.ammo[w] = {
-        mag: WS.mag,
-        reserve: WS.reserveMul > 0
-          ? Math.round(WS.mag * WS.reserveMul * (1 + SAVE.ammoPacks * 0.5))
-          : Infinity,
-      };
+      P.ammo[w] = { mag: WS.mag, reserve: WS.mag * 2, tier: ammoPickOf(cal), cal };
       const sl = stowGun(w);
       if (sl) {
         const sd = SLOT_DEFS.find(d => d.id === sl);
@@ -7146,7 +7387,8 @@ function drawEnemy(e) {
     ctx.strokeRect(e.x - w / 2, y, w, 3);
   }
 
-  if (e.hp < e.maxHp) {
+  /* 血条：有甲时即使满血也画 —— 外圈那道边就是甲级，颜色越亮甲越硬 */
+  if (e.hp < e.maxHp || (e.armorMax > 0 && e.armorHp > 0)) {
     const w = Math.max(26, e.r * 2);
     const h = e.type === 'boss' ? 6 : 4;
     const y = e.y - e.r - 12;
@@ -7158,6 +7400,21 @@ function drawEnemy(e) {
     ctx.strokeStyle = 'rgba(255,255,255,0.18)';
     ctx.lineWidth = 1;
     ctx.strokeRect(e.x - w / 2, y, w, h);
+
+    if (e.armorMax > 0 && e.armorHp > 0) {
+      const ar = clamp(e.armorHp / e.armorMax, 0, 1);
+      ctx.save();
+      ctx.globalAlpha = 0.35 + ar * 0.65;
+      ctx.strokeStyle = ARMOR_LV_COLOR[e.armorLv] || '#8fb6d0';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(e.x - w / 2 - 1, y - 1, w + 2, h + 2);
+      if (e.armorFlash > 0.05) {
+        ctx.globalAlpha = e.armorFlash * 0.85;
+        ctx.strokeStyle = '#ffffff';
+        ctx.strokeRect(e.x - w / 2 - 1, y - 1, w + 2, h + 2);
+      }
+      ctx.restore();
+    }
   }
 }
 
@@ -7994,15 +8251,24 @@ function drawHUD() {
   const carePk = P.curSlot === 'medkit' ? carePickNow() : null;
   /* 手枪槽的槽位名和枪种名都是「手枪」，别写成"手枪 · 手枪 · G17" */
   const headTxt = inHand
-    ? (slotTag.cn === weaponCatOf(W).cn ? (slotTag.cn + ' · ' + W.name) : (slotTag.cn + ' · ' + weaponName(W)))
+    ? (slotTag.cn + ' · ' + W.name)
     : (slotTag.cn + ' · ' + (P.curSlot === 'melee'
         ? (MELEES[P.melee] || MELEES[STARTER_MELEE]).name
         : (carePk ? careName(carePk) : '无治疗物品')));
-  ctx.fillText(headTxt, wx, wy - 58);
+  ctx.fillText(headTxt, wx, wy - 58);      // 下面那行 wy-44 是小方格弹匣条
 
   if (inHand) {
+    /* 弹种一行：口径 + 弹级 —— 打不动甲的时候先看这里是不是白弹 */
+    const AT = ammoTier(a.tier == null ? 1 : a.tier);
+    const CAL = CALIBERS[a.cal] || CALIBERS['919'];
+    ctx.textAlign = 'right';
+    ctx.font = '700 10px ' + mono;
+    ctx.fillStyle = AT.color;
+    /* 放在「1主 2副…」快捷栏上面一行，那里正好空着 */
+    ctx.fillText(CAL.short + ' · ' + AT.grade + ' ' + AT.name + ' · 穿甲 ' + AT.lv, wx, wy - 90);
+
     const magStr = String(a.mag).padStart(2, '0');
-    const resStr = '/ ' + (a.reserve === Infinity ? '∞' : a.reserve);
+    const resStr = '/ ' + a.reserve;
     ctx.font = '800 34px ' + mono;
     const magW = ctx.measureText(magStr).width;
     ctx.font = '700 16px ' + mono;
@@ -8029,7 +8295,7 @@ function drawHUD() {
     const totalW = cells * (cw + gap);
     for (let i = 0; i < cells; i++) {
       const filled = i < Math.ceil(cells * (a.mag / W.mag));
-      ctx.fillStyle = filled ? W.color : 'rgba(70,100,125,0.3)';
+      ctx.fillStyle = filled ? AT.color : 'rgba(70,100,125,0.3)';
       ctx.fillRect(wx - totalW + i * (cw + gap), wy - 44, cw, 4);
     }
   } else if (P.curSlot === 'melee') {
@@ -9048,9 +9314,9 @@ function refreshLobby() {
     ico: '✚',
     nm: '医疗 ×' + medN + ' · 急救 ×' + stopN + ' · 手术 ' + surgN + ' 次',
     ds: '首选 ' + careName(pickKey) + ' · 手雷 ×' + SAVE.grenades + ' · 弹药包 ×' + SAVE.ammoPacks +
-        ' · 手枪弹 ×' + (SAVE.pistolAmmo | 0) + ' 盒 · 备弹 +' + (SAVE.ammoPacks * 50) + '%',
+        ' · 备弹上限 +' + (SAVE.ammoPacks * 50) + '%',
     val: '补给',
-    empty: medN + stopN + surgN + SAVE.grenades + (SAVE.pistolAmmo | 0) === 0,
+    empty: medN + stopN + surgN + SAVE.grenades === 0,
     onClick: () => openShop('supply'),
   }));
 
@@ -9067,12 +9333,19 @@ function refreshLobby() {
   const risk = $('riskLine');
   if (risk) {
     const secretRaid = G.tier === 'secret';
+    /* 带进去的枪里，有哪个口径一颗子弹都没有 */
+    const dryGuns = GUN_SLOTS
+      .map(k => SAVE.loadout[k])
+      .filter(id => id && WEAPONS[id] && ammoTotalOf(calOfWeapon(id)) <= 0);
     if (secretRaid) {
       risk.textContent = '机密行动：敌人血量与伤害全面上调，但军械与保险柜更多、品质更高';
     } else if (!ownedWeapons.length) {
       risk.textContent = '一把枪都没有 · 现在只能空手带刀出击，先去军火库买把枪（G17 ¥700 起）';
     } else if (!SAVE.loadout.primary) {
       risk.textContent = '主武器槽是空的 · 只能带手枪和刀出击，去军火库买一把长枪';
+    } else if (dryGuns.length) {
+      risk.textContent = '没子弹：' + dryGuns.map(id => WEAPONS[id].short).join(' / ') +
+        ' · 去军需处「弹药」页买一盒，不然进图就是烧火棍';
     } else if (!SAVE.loadout.secondary && ownedWeapons.length < 3) {
       risk.textContent = '副武器槽空着 · 多带一把枪能少跑一趟，但阵亡会一起丢';
     } else if (SAVE.credits < 800) {
@@ -9125,12 +9398,14 @@ function gunSlot(o) {
   }
   const w = weaponStats(id);
   const modN = gunModCount(id);
+  const C = caliberOf(id);
+  const lv = ammoPickOf(C.id);
+  const stock = ammoTotalOf(C.id);
   return makeSlot({
     ico: o.ico,
     nm: weaponName(w),
-    ds: '伤害 ' + w.dmg + (w.count > 1 ? ' ×' + w.count : '') + ' · 弹匣 ' + w.mag + ' · ' +
-        (w.mode === 'burst' ? '三连点射' : '射速 ' + (1 / w.rate).toFixed(1) + '/s') +
-        ' · 改装 ' + modN + '/' + modSlotTotal(id),
+    ds: C.short + ' · ' + ammoTier(lv).grade + '弹 · 库存 ' + stock + ' 发' +
+        (stock > 0 ? '' : '（没子弹）') + ' · 改装 ' + modN + '/' + modSlotTotal(id),
     val: o.cn,
     onClick: () => cycleLoadout(o.slot, o.pool, o.allowEmpty),
   });
@@ -9855,6 +10130,81 @@ function refreshShop() {
     return;
   }
 
+
+  /* ── 弹药：按口径分组，每组 0~7 级 ──
+     只列出「手上有枪的口径」，没枪的弹买了也打不出去。 */
+  if (shopTab === 'ammo') {
+    grid.classList.add('stack');
+
+    const cals = CAL_ORDER.filter(cal => WEAPON_ORDER.some(id => SAVE.owned[id] && calOfWeapon(id) === cal));
+    if (!cals.length) {
+      const el = document.createElement('div');
+      el.className = 'item';
+      el.innerHTML = '<div class="ds">还没有枪 · 先去「武器」买一把，这里才会卖对应的弹。</div>';
+      grid.appendChild(el);
+      return;
+    }
+
+    for (const cal of cals) {
+      const CC = CALIBERS[cal];
+      const guns = WEAPON_ORDER.filter(id => SAVE.owned[id] && calOfWeapon(id) === cal).map(id => WEAPONS[id].short);
+      const pick = ammoPickOf(cal);
+
+      const sec = document.createElement('div');
+      sec.className = 'wsec';
+
+      const head = document.createElement('div');
+      head.className = 'whead';
+      head.innerHTML = '<span class="cn">' + CC.name + '</span>' +
+        '<span class="en">' + CC.short + '</span>' +
+        '<span class="mk">' + guns.join(' / ') + ' · 库存 ' + ammoTotalOf(cal) + ' 发 · 每盒 ' + CC.box + ' 发</span>';
+      sec.appendChild(head);
+
+      const sub = document.createElement('div');
+      sub.className = 'grid';
+
+      for (const T of AMMO_TIERS) {
+        const stock = ammoStock(cal, T.lv);
+        const price = ammoPrice(cal, T.lv);
+        const canAfford = SAVE.credits >= price;
+        const isPick = pick === T.lv;
+
+        const el = document.createElement('div');
+        el.className = 'item' + (isPick ? ' owned' : '');
+        if (isPick) el.style.outline = '1px solid ' + T.color;
+        el.style.cursor = 'pointer';
+        el.innerHTML =
+          '<div class="top"><span class="nm" style="color:' + T.color + '">' + T.grade + ' · ' + T.name + '</span>' +
+          '<span class="tag' + (isPick ? ' own' : '') + '">' +
+            (isPick ? '装填中' : (stock > 0 ? '库存 ' + stock + ' 发' : '未持有')) + '</span></div>' +
+          '<div class="code">' + T.key.toUpperCase() + ' · 穿透 ' + T.lv + ' 级 · 伤害 ×' + T.dmgMul.toFixed(2) + '</div>' +
+          '<div class="ds">' + T.desc + '</div>' +
+          '<div class="ds" style="color:#6fb0cf">' + penTableText(T.lv) + '</div>' +
+          '<div class="ds" style="color:' + (stock > 0 ? T.color : '#4a6579') + '">' +
+            (stock > 0 ? ('手上 ' + stock + ' 发') : '手上没有这一级') + '</div>' +
+          '<div class="buyrow">' +
+            '<span class="price"><i>¥</i>' + fmtMoney(price) + '<i> / ' + CC.box + ' 发</i></span>' +
+            '<button class="buybtn"' + (canAfford ? '' : ' disabled') + '>' +
+            (canAfford ? '购买' : '资金不足') + '</button>' +
+          '</div>';
+
+        el.addEventListener('click', ev => {
+          if (ev.target.closest('.buybtn')) return;
+          selectAmmo(cal, T.lv);
+        });
+        el.querySelector('.buybtn').addEventListener('click', ev => {
+          ev.stopPropagation();
+          buyAmmo(cal, T.lv);
+        });
+        sub.appendChild(el);
+      }
+
+      sec.appendChild(sub);
+      grid.appendChild(sec);
+    }
+    return;
+  }
+
   grid.classList.remove('stack');
   if (shopTab === 'melee') {
     for (const id of MELEE_ORDER) {
@@ -10006,7 +10356,6 @@ function refreshShop() {
       let count = 0, ownedTag = '';
       if (key === 'grenade') { count = SAVE.grenades; ownedTag = '持有 ×' + count; }
       if (key === 'ammoPack') { count = SAVE.ammoPacks; ownedTag = '持有 ×' + count; }
-      if (key === 'pistolAmmo') { count = SAVE.pistolAmmo | 0; ownedTag = '持有 ×' + count + ' 盒'; }
 
       const canAfford = SAVE.credits >= s.price;
 
@@ -10051,13 +10400,15 @@ function weaponSpecs(w) {
     ? (w.burst || 3) + ' 连发'
     : (1 / w.rate).toFixed(1) + ' 发/秒';
   const fireTxt = w.mode === 'auto' ? '全自动' : (w.mode === 'burst' ? '三连点射' : '半自动');
+  const C = CALIBERS[w.cal] || CALIBERS['919'];
   const rows = [
+    ['口径', C.short],
     ['单发伤害', w.count > 1 ? per + '<i>(' + w.dmg + '×' + w.count + ')</i>' : String(w.dmg)],
     ['射速', rateTxt],
     ['射击方式', fireTxt],
     ['穿透', w.pierce ? w.pierce + ' 人' : '—'],
     ['弹匣', w.mag + ' 发'],
-    ['备弹', w.reserveMul > 0 ? (w.mag * w.reserveMul) + ' 发' : '∞'],
+    ['备弹', w.reserveMul > 0 ? (w.mag * w.reserveMul) + ' 发' : '—'],
     ['理论 DPS', String(dps)],
     ['射程', String(w.range)],
     ['开镜精度', '散布 ×' + adsOf(w).spread.toFixed(2)],
@@ -10157,13 +10508,41 @@ function buySurg(id) {
   uiToast('已购入 ' + S.name + ' · ' + S.uses + ' 次', 'small');
 }
 
+/* 买一盒弹药：按口径的盒装发数进库存 */
+function buyAmmo(cal, lv) {
+  const C = CALIBERS[cal], T = ammoTier(lv);
+  if (!C || !T) return;
+  const price = ammoPrice(cal, lv);
+  if (SAVE.credits < price) return;
+  SAVE.credits -= price;
+  addAmmoStock(cal, lv, C.box);
+  /* 第一次买这个口径，或者原来选的那级已经打光，就顺手设成默认弹 */
+  if (!SAVE.ammoPick) SAVE.ammoPick = {};
+  if (SAVE.ammoPick[cal] == null || ammoStock(cal, SAVE.ammoPick[cal] | 0) <= 0) SAVE.ammoPick[cal] = lv;
+  saveGame();
+  Sfx.init(); Sfx.resume(); Sfx.pickup();
+  refreshShop();
+  uiToast('已购入 ' + C.short + ' ' + T.grade + ' ×' + C.box + ' 发', 'small');
+}
+
+/* 把某一级设为这个口径的默认装填 */
+function selectAmmo(cal, lv) {
+  if (!CALIBERS[cal]) return;
+  if (ammoStock(cal, lv) <= 0) { uiToast('这一级还没货 · 先买一盒', 'small warn'); return; }
+  if (!SAVE.ammoPick) SAVE.ammoPick = {};
+  SAVE.ammoPick[cal] = lv;
+  saveGame();
+  Sfx.init(); Sfx.resume(); Sfx.pickup();
+  refreshShop();
+  uiToast('已选用 ' + CALIBERS[cal].short + ' ' + ammoTier(lv).grade + ' 弹', 'small');
+}
+
 function buySupply(key) {
   const s = SUPPLY[key];
   if (!s || SAVE.credits < s.price) return;
   SAVE.credits -= s.price;
   if (key === 'grenade') SAVE.grenades++;
   if (key === 'ammoPack') SAVE.ammoPacks++;
-  if (key === 'pistolAmmo') SAVE.pistolAmmo = (SAVE.pistolAmmo | 0) + 1;
   saveGame();
   Sfx.init(); Sfx.resume(); Sfx.pickup();
   refreshShop();
