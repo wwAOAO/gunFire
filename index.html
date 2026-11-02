@@ -992,6 +992,87 @@ const STARTER_MEDKIT = 'inject_s';
 const PAIN_DR = 0.10;      // 止痛效果：受伤减免
 const WOUND_HEAL_K = 0.75; // 带伤口时包扎效率
 
+/* ── 止血消耗品 ──
+   流血只能靠这两种东西止住：绷带做局部压迫，止血带直接把近心端的血流掐住。
+   都是一次性，用掉就没，所以要按卷囤。止痛药压不住流血，别指望它。 */
+const STOPS = {
+  bandage: {
+    name: '弹力绷带', short: '绷带', code: 'ELASTIC BANDAGE',
+    sec: 1.8, price: 140, layers: 1, color: '#cfe6f2',
+    desc: '一次性。压迫包扎一处创口，止住 1 层流血。便宜，多带几卷。',
+  },
+  tourniquet: {
+    name: '止血带', short: '止血带', code: 'TOURNIQUET',
+    sec: 2.6, price: 320, layers: 99, color: '#ff9b6b',
+    desc: '一次性。扎紧近心端，一次压住全部流血层。失血太多时这是保命的东西。',
+  },
+  painkiller: {
+    name: '止痛药', short: '止痛药', code: 'PAINKILLER',
+    sec: 1.2, price: 260, pain: 45, color: '#82ffcd',
+    desc: '一次性。45 秒内受伤 -10%，手臂骨折的负面被屏蔽，贯穿伤的黑边淡下去。压不住流血，也接不上骨头。',
+  },
+};
+const STOP_ORDER = ['bandage', 'tourniquet', 'painkiller'];
+
+/* ── 手术包 ──
+   不是回血用的：它把贯穿伤缝上、把断骨接回去、把骨裂固定住。
+   一次读条处理一项，每用一次扣一次，剩余次数跟着你进下一局。 */
+const SURGERIES = {
+  surg_simple: {
+    name: '简易手术包', short: '简易手术', code: 'SIMPLE SURGERY KIT',
+    grade: '白', uses: 2, sec: 10, price: 1600, color: '#e8eef4',
+    desc: '2 次 · 单次读条 10 秒。缝合与正骨的基础器械，慢，但能把命拼回来。',
+  },
+  surg_tactical: {
+    name: '战术快拆手术包', short: '战术手术', code: 'TACTICAL SURGERY KIT',
+    grade: '绿', uses: 4, sec: 7, price: 3200, color: '#46e08a',
+    desc: '4 次 · 单次读条 7 秒。预拆封的快取器械，摊开就能动刀，适合边打边处理。',
+  },
+  surg_dek: {
+    name: 'DEK 野战手术包', short: 'DEK 手术', code: 'DEK FIELD SURGERY',
+    grade: '紫', uses: 7, sec: 5, price: 6400, color: '#b46bff',
+    desc: '7 次 · 单次读条 5 秒。DEK 的野战外科箱，五次呼吸就能缝完一道贯穿伤。',
+  },
+};
+const SURG_ORDER = ['surg_simple', 'surg_tactical', 'surg_dek'];
+
+/* ── 创伤 debuff 的数值 ──
+   流血：每层每秒扣血，但锁 1 血，不会自己流死。
+   贯穿伤：每层 -10% 血量上限，黑边 + 视野发糊；止痛只屏蔽视觉。
+   骨折：手术包才治得了；手臂的负面止痛能压住，腿的不行。 */
+const DEBUFF = {
+  baseHp: 100,
+  bleedMax: 6, bleedDps: 0.9, bleedLock: 1,
+  redMax: 2, redHp: 0.10,
+  weakHp: 0.20,
+  armAds: 1.6, armReload: 1.35, armHeal: 1.3, armSpread: 1.35,
+  legMove: 0.60, fissureMove: 0.12,
+};
+
+/* 治疗物品的统一 key：'med:inject_s' / 'stop:bandage' / 'surg:surg_dek' */
+function careKeyMake(kind, id) { return kind + ':' + id; }
+function careKindOf(key) {
+  if (typeof key !== 'string') return 'med';
+  const i = key.indexOf(':');
+  return i < 0 ? 'med' : key.slice(0, i);
+}
+function careIdOf(key) {
+  if (typeof key !== 'string') return '';
+  const i = key.indexOf(':');
+  return i < 0 ? key : key.slice(i + 1);
+}
+/* 把任意来源（老档的纯 id、新档的复合 key）规范化成合法 key */
+function normCareKey(v) {
+  if (typeof v !== 'string' || !v) return careKeyMake('med', STARTER_MEDKIT);
+  const i = v.indexOf(':');
+  if (i < 0) return MEDKITS[v] ? careKeyMake('med', v) : careKeyMake('med', STARTER_MEDKIT);
+  const k = v.slice(0, i), id = v.slice(i + 1);
+  if (k === 'med' && MEDKITS[id]) return v;
+  if (k === 'stop' && STOPS[id]) return v;
+  if (k === 'surg' && SURGERIES[id]) return v;
+  return careKeyMake('med', STARTER_MEDKIT);
+}
+
 const DEFAULT_SAVE = () => ({
   credits: 3500,
   owned: { [STARTER_WEAPON]: true },
@@ -1003,7 +1084,11 @@ const DEFAULT_SAVE = () => ({
   equippedArmor: 0,
   /* 每种医疗包的库存：n 是没开封的支数，left 是当前拆开那支的剩余耐久 */
   meds: { [STARTER_MEDKIT]: { n: 2, left: 0 } },
-  medPick: STARTER_MEDKIT,   // 上次用的那种 —— 短按 5 直接掏它
+  /* 止血消耗品：一次性，按个数算 */
+  stops: { bandage: 1, tourniquet: 0, painkiller: 1 },
+  /* 手术包：uses 是这包还能动几次刀 */
+  surgs: { surg_simple: { uses: 2 } },
+  carePick: 'med:' + STARTER_MEDKIT,   // 上次用的那种 —— 短按 5 直接掏它
   grenades: 1,
   ammoPacks: 0,
   stash: {},          // 仓库里的收集品：{ 收集品id: 数量 }
@@ -1048,7 +1133,9 @@ function loadSave() {
       equippedMelee: MELEES[d.equippedMelee] ? d.equippedMelee : STARTER_MELEE,
       equippedArmor: d.equippedArmor | 0,
       meds: cleanMeds(d.meds, d.medkits),
-      medPick: MEDKITS[d.medPick] ? d.medPick : STARTER_MEDKIT,
+      stops: cleanStops(d.stops),
+      surgs: cleanSurgs(d.surgs),
+      carePick: normCareKey(d.carePick || d.medPick),
       grenades: d.grenades | 0,
       ammoPacks: d.ammoPacks | 0,
       stash: cleanStash(d.stash),
@@ -1114,6 +1201,32 @@ function cleanMeds(raw, legacyCount) {
   const lc = Math.floor(Number(legacyCount) || 0);
   if (lc > 0 && !(raw && raw[STARTER_MEDKIT])) {
     out[STARTER_MEDKIT].n = Math.min(99, out[STARTER_MEDKIT].n + lc);
+  }
+  return out;
+}
+
+/* 止血消耗品清洗：只认这两种，数量取 0~99 */
+function cleanStops(raw) {
+  const out = {};
+  for (const id of STOP_ORDER) out[id] = 0;
+  if (!raw || typeof raw !== 'object') return out;
+  for (const id of STOP_ORDER) {
+    const n = Math.floor(Number(raw[id]) || 0);
+    out[id] = n > 0 ? Math.min(n, 99) : 0;
+  }
+  return out;
+}
+
+/* 手术包清洗：次数夹在 [0, 这包上限]，不认识的 id 直接丢 */
+function cleanSurgs(raw) {
+  const out = {};
+  for (const id of SURG_ORDER) out[id] = { uses: 0 };
+  if (!raw || typeof raw !== 'object') return out;
+  for (const id of SURG_ORDER) {
+    const s = raw[id];
+    if (!s || typeof s !== 'object') continue;
+    const u = Math.floor(Number(s.uses) || 0);
+    out[id].uses = u > 0 ? Math.min(u, SURGERIES[id].uses) : 0;
   }
   return out;
 }
@@ -1570,7 +1683,7 @@ const Sfx = {
 const keys = Object.create(null);
 const mouse = { x: VW / 2, y: VH / 2, wx: 0, wy: 0, down: false, pressed: false, right: false };
 
-/* 医疗包选择器：按 5 不立刻动作 —— 松手那一刻再判断是短按（用）还是长按（选）。
+/* 治疗物品选择器：按 5 不立刻动作 —— 松手那一刻再判断是短按（用）还是长按（选）。
    hold 累计按住时长，open 表示选择盘已经弹出，wheel 是滚轮攒下的步数。 */
 const MED_SEL = { down: false, hold: 0, open: false, idx: 0, wheel: 0, list: [] };
 const MED_HOLD_T = 0.34;   // 按住超过这个时长就算长按
@@ -1714,15 +1827,21 @@ const P = {
   adsPrev: 0,
   alive: true,
   armorDR: 0,
-  /* 医疗：meds 是这一局随身带的六种包，medPick 是上次用的那种 */
+  /* 医疗：meds 是这一局随身带的六种包，carePick 是上次用的那种治疗物品
+     key 形如 'med:inject_s' / 'stop:bandage' / 'surg:surg_dek' */
   meds: {},
-  medPick: STARTER_MEDKIT,
-  medOn: null,        // 正在包扎的医疗包 id，null 表示没在包扎
+  stops: {},
+  surgs: {},
+  carePick: 'med:' + STARTER_MEDKIT,
+  medOn: null,        // 正在使用的治疗物品 key，null 表示没在用
+  medKind: 'med',     // med / stop / surg —— 决定读条走完干什么
   medWind: 0,         // 启动读条剩余时间（读条期间不回血）
   medWindT: 0,        // 这次读条总时长，用来算进度
   healAcc: 0,         // 累计回血，用来凑一个飘字，别每帧刷屏
-  wound: 0,           // 伤口：移速与包扎效率都打折，只有医疗箱能治
-  painT: 0,           // 止痛剩余时间（减伤 + 无视伤口减速）
+  /* 创伤：流血 / 三处贯穿伤 / 手臂与腿部骨折 / 骨裂 / 虚弱 */
+  deb: { bleed: 0, redHead: 0, redChest: 0, redAbdomen: 0, arm: 0, leg: 0, fissure: 0, weak: 0 },
+  bleedAcc: 0,        // 流血累计掉的血，凑够一点飘个字
+  painT: 0,           // 止痛剩余时间（减伤 + 屏蔽部分创伤惩罚）
   grenades: 0,
   nadeCd: 0,
   medCd: 0,
@@ -2354,6 +2473,7 @@ function resetPlayer() {
   G.spawn = { x: sp.x, y: sp.y };
   P.x = clamp(sp.x, P.r, WORLD.w - P.r);
   P.y = clamp(sp.y, P.r, WORLD.h - P.r);
+  resetDebuff();              // 先把创伤清干净，血量上限按基础值重算
   P.hp = P.maxHp;
   P.stamina = 100;
   P.aim = 0;
@@ -2378,9 +2498,8 @@ function resetPlayer() {
   P.medOn = null;
   P.medWind = 0;
   P.medWindT = 0;
+  P.medKind = 'med';
   P.healAcc = 0;
-  P.wound = 0;
-  P.painT = 0;
   MED_SEL.down = false;
   MED_SEL.open = false;
   MED_SEL.hold = 0;
@@ -2429,7 +2548,16 @@ function resetPlayer() {
     const s = (SAVE.meds && SAVE.meds[id]) || {};
     P.meds[id] = { n: Math.max(0, s.n | 0), left: Math.max(0, Number(s.left) || 0) };
   }
-  P.medPick = MEDKITS[SAVE.medPick] ? SAVE.medPick : STARTER_MEDKIT;
+  P.carePick = normCareKey(SAVE.carePick);
+
+  /* 止血与手术包：同样拷一份带进来，用剩的再写回去 */
+  P.stops = {};
+  for (const id of STOP_ORDER) P.stops[id] = Math.max(0, (SAVE.stops && SAVE.stops[id]) | 0);
+  P.surgs = {};
+  for (const id of SURG_ORDER) {
+    const u = (SAVE.surgs && SAVE.surgs[id] && SAVE.surgs[id].uses) | 0;
+    P.surgs[id] = { uses: Math.max(0, Math.min(u, SURGERIES[id].uses)) };
+  }
   P.grenades = SAVE.grenades;
 }
 
@@ -2441,8 +2569,16 @@ function currentAmmo() {
   return P.ammo[P.weapon];
 }
 
-/* ── 医疗包：库存查询 ──
-   一支包 = 一个耐久池。拆开的那支记在 left 里，用完再从 n 里拿下一支。 */
+/* ══════════════════════════════════════════════════════════
+   医疗 / 创伤
+   ──────────────────────────────────────────────────────────
+   三种东西共用一个「医疗槽 + 长按 5 选择盘」：
+     med  医疗包  —— 耐久池，读条后持续回血（见下面的 startMedHeal）
+     stop 止血件  —— 一次性，止住流血层
+     surg 手术包  —— 有次数，读条后处理一项贯穿伤 / 骨折 / 骨裂
+   key 统一写成 'med:inject_s' 这种形式，短按 5 直接用 carePick。
+   ══════════════════════════════════════════════════════════ */
+
 function medUnit(id) { return (P.meds && P.meds[id]) || null; }
 function medCount(id) {
   const s = medUnit(id);
@@ -2461,11 +2597,62 @@ function medLeftOf(id) {
   if (s.left > 0.01) return s.left;
   return s.n > 0 ? MEDKITS[id].dur : 0;
 }
-/* 这次要用的型号：优先上次用的那种；用光了就退回第一个还剩下的 */
-function medPickNow() {
-  const own = medOwnedIds();
+
+/* 止血消耗品的个数 */
+function stopCount(id) {
+  return (P.stops && (P.stops[id] | 0)) || 0;
+}
+function stopTotal() {
+  let n = 0;
+  for (const id of STOP_ORDER) n += stopCount(id);
+  return n;
+}
+/* 手术包还剩几次刀 */
+function surgUses(id) {
+  const s = P.surgs && P.surgs[id];
+  return s ? (s.uses | 0) : 0;
+}
+function surgTotal() {
+  let n = 0;
+  for (const id of SURG_ORDER) n += surgUses(id);
+  return n;
+}
+
+/* 治疗物品的通用查询 */
+function careCount(key) {
+  const k = careKindOf(key), id = careIdOf(key);
+  if (k === 'med') return medCount(id);
+  if (k === 'stop') return stopCount(id);
+  if (k === 'surg') return surgUses(id);
+  return 0;
+}
+function careName(key) {
+  const k = careKindOf(key), id = careIdOf(key);
+  if (k === 'med') return (MEDKITS[id] || MEDKITS[STARTER_MEDKIT]).name;
+  if (k === 'stop') return (STOPS[id] || STOPS.bandage).name;
+  if (k === 'surg') return (SURGERIES[id] || SURGERIES.surg_simple).name;
+  return '医疗包';
+}
+function careColor(key) {
+  const k = careKindOf(key), id = careIdOf(key);
+  if (k === 'med') return (MEDKITS[id] || MEDKITS[STARTER_MEDKIT]).color;
+  if (k === 'stop') return (STOPS[id] || STOPS.bandage).color;
+  if (k === 'surg') return (SURGERIES[id] || SURGERIES.surg_simple).color;
+  return '#8fffc4';
+}
+/* 身上还带着的全部治疗物品，按「医疗包 → 止血 → 手术包」的顺序 */
+function careOwnedKeys() {
+  const out = [];
+  for (const id of MEDKIT_ORDER) if (medCount(id) > 0) out.push(careKeyMake('med', id));
+  for (const id of STOP_ORDER) if (stopCount(id) > 0) out.push(careKeyMake('stop', id));
+  for (const id of SURG_ORDER) if (surgUses(id) > 0) out.push(careKeyMake('surg', id));
+  return out;
+}
+/* 这次要用的：优先上次那种，没了就退回第一个还带着的 */
+function carePickNow() {
+  const own = careOwnedKeys();
   if (!own.length) return null;
-  if (own.indexOf(P.medPick) >= 0) return P.medPick;
+  if (own.indexOf(P.carePick) >= 0) return P.carePick;
   return own[0];
 }
 
@@ -2475,7 +2662,18 @@ function addMed(id, n) {
   if (!P.meds) P.meds = {};
   const s = P.meds[key] || (P.meds[key] = { n: 0, left: 0 });
   s.n = Math.min(99, (s.n | 0) + Math.max(1, n | 0));
-  if (medCount(P.medPick) <= 0) P.medPick = key;
+  if (medCount(careIdOf(P.carePick)) <= 0) P.carePick = careKeyMake('med', key);
+}
+function addStop(id, n) {
+  const key = STOPS[id] ? id : 'bandage';
+  if (!P.stops) P.stops = {};
+  P.stops[key] = Math.min(99, (P.stops[key] | 0) + Math.max(1, n | 0));
+}
+function addSurg(id, n) {
+  const key = SURGERIES[id] ? id : SURG_ORDER[0];
+  if (!P.surgs) P.surgs = {};
+  const s = P.surgs[key] || (P.surgs[key] = { uses: 0 });
+  s.uses = Math.min(SURGERIES[key].uses, (s.uses | 0) + Math.max(1, n | 0));
 }
 
 /* 大厅里查存档的那一套（与局内的 medCount / medTotal 对应） */
@@ -2488,17 +2686,218 @@ function saveMedTotal() {
   for (const id of MEDKIT_ORDER) n += saveMedCount(id);
   return n;
 }
+function saveStopTotal() {
+  let n = 0;
+  for (const id of STOP_ORDER) n += (SAVE.stops && SAVE.stops[id]) | 0;
+  return n;
+}
+function saveSurgTotal() {
+  let n = 0;
+  for (const id of SURG_ORDER) n += (SAVE.surgs && SAVE.surgs[id] && SAVE.surgs[id].uses) | 0;
+  return n;
+}
 /* 大厅里"短按 5 会用哪种"：上次用的那种还留着就用它，否则第一个还有的 */
-function saveMedPick() {
-  if (MEDKITS[SAVE.medPick] && saveMedCount(SAVE.medPick) > 0) return SAVE.medPick;
-  const own = MEDKIT_ORDER.find(id => saveMedCount(id) > 0);
-  return own || STARTER_MEDKIT;
+function saveCarePick() {
+  const list = [];
+  for (const id of MEDKIT_ORDER) if (saveMedCount(id) > 0) list.push(careKeyMake('med', id));
+  for (const id of STOP_ORDER) if (((SAVE.stops && SAVE.stops[id]) | 0) > 0) list.push(careKeyMake('stop', id));
+  for (const id of SURG_ORDER) if (((SAVE.surgs && SAVE.surgs[id] && SAVE.surgs[id].uses) | 0) > 0) list.push(careKeyMake('surg', id));
+  if (!list.length) return careKeyMake('med', STARTER_MEDKIT);
+  const pick = normCareKey(SAVE.carePick);
+  return list.indexOf(pick) >= 0 ? pick : list[0];
+}
+
+/* ══════════════════════════════════════════════════════════
+   创伤 debuff
+   ──────────────────────────────────────────────────────────
+   bleed   流血：每层每秒掉血，最低锁 1 血；绷带 / 止血带处理
+   red*    贯穿伤（头 / 胸 / 腹）：每层 -10% 血量上限 + 黑边；手术包治
+   arm     手臂骨折：开镜 / 换弹 / 打药变慢、散布变大；止痛可屏蔽
+   leg     腿部骨折：不能冲刺、移速大降；止痛只屏蔽视觉
+   fissure 骨裂：腿骨折后强行冲刺触发，更慢；止痛无效
+   weak    虚弱：被拉起后 -20% 上限（目前没有救起流程，先留底）
+   ══════════════════════════════════════════════════════════ */
+function resetDebuff() {
+  P.deb = { bleed: 0, redHead: 0, redChest: 0, redAbdomen: 0, arm: 0, leg: 0, fissure: 0, weak: 0 };
+  P.bleedAcc = 0;
+  P.painT = 0;
+  recalcMaxHp();
+}
+
+/* 贯穿伤与虚弱都会压低血量上限：上限一降，当前血量跟着夹住 */
+function recalcMaxHp() {
+  const d = P.deb || {};
+  const red = (d.redHead | 0) + (d.redChest | 0) + (d.redAbdomen | 0);
+  const k = 1 - DEBUFF.redHp * red - DEBUFF.weakHp * (d.weak | 0);
+  P.maxHp = Math.max(20, Math.round(DEBUFF.baseHp * Math.max(0.25, k)));
+  if (P.hp > P.maxHp) P.hp = P.maxHp;
+}
+function painOn() { return P.painT > 0; }
+function redLayers() {
+  return (P.deb.redHead | 0) + (P.deb.redChest | 0) + (P.deb.redAbdomen | 0);
+}
+/* 手臂骨折的负面：止痛期间被压住 */
+function armHurt() { return P.deb.arm > 0 && P.painT <= 0; }
+/* 腿骨折 / 骨裂 是实打实的结构损伤，止痛只能骗过脑子，跑不动还是跑不动 */
+function legBroken() { return P.deb.leg > 0 || P.deb.fissure > 0; }
+
+/* 挂一层创伤。kind: bleed / redHead / redChest / redAbdomen / arm / leg / fissure / weak */
+function addDebuff(kind, n, label) {
+  const d = P.deb;
+  const k = Math.max(1, n | 0);
+  let txt = '';
+  if (kind === 'bleed') {
+    const before = d.bleed;
+    d.bleed = Math.min(DEBUFF.bleedMax, d.bleed + k);
+    if (d.bleed === before) return;
+    txt = '流血 ×' + d.bleed;
+  } else if (kind === 'redHead' || kind === 'redChest' || kind === 'redAbdomen') {
+    const before = d[kind];
+    d[kind] = Math.min(DEBUFF.redMax, d[kind] + k);
+    if (d[kind] === before) return;
+    txt = label || '贯穿伤';
+  } else if (kind === 'arm' || kind === 'leg') {
+    if (d[kind] > 0) return;
+    d[kind] = 1;
+    txt = label || (kind === 'arm' ? '手臂骨折' : '腿部骨折');
+  } else if (kind === 'fissure') {
+    const before = d.fissure;
+    d.fissure = Math.min(2, d.fissure + k);
+    if (d.fissure === before) return;
+    txt = '骨裂 ×' + d.fissure;
+  } else if (kind === 'weak') {
+    if (d.weak > 0) return;
+    d.weak = 1;
+    txt = '虚弱 · 血量上限 -20%';
+  } else return;
+
+  recalcMaxHp();
+  popup(P.x + rand(-8, 8), P.y - 46, txt, kind === 'bleed' ? '#ff5c7a' : '#ff9b6b', 13);
+  Sfx.hurt();
+}
+
+/* 一发伤害打在身上，掷一次创伤：越重越可能挂彩。
+   概率故意压低——一枪同时挂流血 + 贯穿伤 + 骨折会让人弃游。 */
+function rollTrauma(dmg, kind) {
+  if (!P.alive || !(dmg > 0)) return;
+  const d = P.deb;
+
+  if (kind === 'burn') {
+    /* 烧穿皮肤：小概率起一层流血 */
+    if (dmg >= 4 && Math.random() < 0.20) addDebuff('bleed', 1);
+    return;
+  }
+
+  /* 流血：弹片划开皮肉，越重越多 */
+  if (dmg >= 9 && d.bleed < DEBUFF.bleedMax) {
+    const n = dmg >= 30 ? 2 : 1;
+    if (Math.random() < (dmg >= 30 ? 0.72 : 0.55)) addDebuff('bleed', n);
+  }
+
+  /* 贯穿伤：只有重弹才穿得进去，随机头 / 胸 / 腹 */
+  if (dmg >= 24 && Math.random() < 0.30) {
+    const parts = [['redHead', '贯穿伤 · 头部'], ['redChest', '贯穿伤 · 胸部'], ['redAbdomen', '贯穿伤 · 腹部']];
+    const avail = parts.filter(pp => d[pp[0]] < DEBUFF.redMax);
+    if (avail.length) {
+      const pick = avail[Math.floor(Math.random() * avail.length)];
+      addDebuff(pick[0], 1, pick[1]);
+    }
+  }
+
+  /* 骨折：中等以上的伤才可能打断骨头 */
+  if (dmg >= 20 && Math.random() < 0.18) {
+    if (d.arm <= 0) addDebuff('arm', 1, '手臂骨折');
+    else if (d.leg <= 0 && dmg >= 26) addDebuff('leg', 1, '腿部骨折');
+  }
+  if (dmg >= 26 && Math.random() < 0.14 && d.leg <= 0) addDebuff('leg', 1, '腿部骨折');
+}
+
+/* 虚弱：被队友拉起来的人会永久少 20% 血上限。
+   目前没有倒地 / 救起流程，先把入口和结算留在这里，
+   以后加救援时在被拉起的地方调 applyWeak() 就行。 */
+function applyWeak() {
+  addDebuff('weak', 1);
+}
+
+/* 每帧的创伤结算：流血 tick + 止痛倒计时 */
+function updateDebuff(dt) {
+  P.painT = Math.max(0, P.painT - dt);
+  if (!P.alive) return;
+  const d = P.deb;
+  if (d.bleed > 0) {
+    const dps = DEBUFF.bleedDps * d.bleed;
+    /* 锁 1 血：失血只会把你拖到 1 点，不会自己流死 */
+    const can = Math.max(0, P.hp - DEBUFF.bleedLock);
+    const loss = Math.min(dps * dt, can);
+    if (loss > 0) {
+      P.hp -= loss;
+      P.bleedAcc += loss;
+      if (P.bleedAcc >= 3) {
+        popup(P.x + rand(-9, 9), P.y - 30, '-' + Math.round(P.bleedAcc), '#ff5c7a', 11);
+        P.bleedAcc = 0;
+      }
+      if (Math.random() < dt * (2 + d.bleed * 2.2)) {
+        addParticle(P.x + rand(-10, 10), P.y + rand(-6, 10), {
+          vx: rand(-10, 10), vy: rand(20, 60), life: 0.5, r: rand(1.4, 2.8),
+          color: pick(['#ff4060', '#c01030']), drag: 0.94,
+        });
+      }
+    }
+  }
+  /* 腿断着走两步就疼一下，画面外也能感觉到 */
+  if ((d.leg > 0 || d.fissure > 0) && Math.random() < dt * 0.9) {
+    addParticle(P.x + rand(-8, 8), P.y + rand(0, 8), {
+      vx: 0, vy: -8, life: 0.35, r: rand(1.2, 2.2), color: '#ff9b6b', drag: 0.95,
+    });
+  }
+}
+
+/* 手术包这次该处理哪一项：贯穿伤优先，其次腿、手臂，最后骨裂。
+   同一部位要好几次才能缝完，所以一次只减一层。 */
+function surgTarget() {
+  const d = P.deb;
+  const parts = [
+    ['redHead', '贯穿伤 · 头部'],
+    ['redChest', '贯穿伤 · 胸部'],
+    ['redAbdomen', '贯穿伤 · 腹部'],
+  ].filter(pp => d[pp[0]] > 0);
+  if (parts.length) {
+    parts.sort((a, b) => d[b[0]] - d[a[0]]);
+    return { kind: parts[0][0], label: parts[0][1] + ' ×' + d[parts[0][0]] };
+  }
+  if (d.leg > 0) return { kind: 'leg', label: '腿部骨折' };
+  if (d.arm > 0) return { kind: 'arm', label: '手臂骨折' };
+  if (d.fissure > 0) return { kind: 'fissure', label: '骨裂 ×' + d.fissure };
+  return null;
+}
+
+function applySurgery() {
+  const t = surgTarget();
+  if (!t) return false;
+  const d = P.deb;
+  if (t.kind === 'leg' || t.kind === 'arm') d[t.kind] = 0;
+  else if (t.kind === 'fissure') d.fissure = Math.max(0, d.fissure - 1);
+  else d[t.kind] = Math.max(0, d[t.kind] - 1);
+  recalcMaxHp();
+  popup(P.x, P.y - 50, '处理完成 · ' + t.label, '#9fffd0', 14);
+  burst(P.x, P.y, 16, { color: ['#9fffd0', '#e8f4ea'], life: 0.55, r: 3.4, spdMin: 30, spdMax: 150, glow: true });
+  return true;
+}
+
+/* 止血：把 n 层流血压掉 */
+function stopBleeding(layers) {
+  const n = Math.min(P.deb.bleed, Math.max(1, layers | 0));
+  if (n <= 0) return 0;
+  P.deb.bleed -= n;
+  popup(P.x, P.y - 46, '已止血 ×' + n, '#cfe6f2', 13);
+  return n;
 }
 
 /* 这个槽现在能不能掏出来 */
 function slotReady(slot) {
   if (slot === 'melee') return !!(P.melee && MELEES[P.melee]);
-  if (slot === 'medkit') return medTotal() > 0;
+  /* 医疗槽：医疗包、绷带、止痛药、手术包，带着任意一种就能掏出来 */
+  if (slot === 'medkit') return careOwnedKeys().length > 0;
   return !!(P.slots && P.slots[slot] && P.owned[P.slots[slot]]);
 }
 
@@ -2521,11 +2920,11 @@ function stowGun(id) {
 }
 
 /* 按 1~5 / 滚轮：切到对应槽位。
-   切到医疗槽时自动开始包扎上次用的那种包（再按 5 或左键可以打断）。 */
+   切到医疗槽只把上次那种物品拿出来，真正开始用要再按 5 或点左键。 */
 function equipSlot(slot) {
   if (!P.alive) return;
   if (!slotReady(slot)) {
-    if (slot === 'medkit') uiToast('没有医疗包了 · 回大厅补给', 'small warn');
+    if (slot === 'medkit') uiToast('没有治疗物品了 · 回大厅补给', 'small warn');
     else if (slot === 'secondary') uiToast('副武器槽是空的 · 回大厅装配', 'small warn');
     else if (slot === 'primary') uiToast('主武器槽是空的 · 回大厅装配', 'small warn');
     else uiToast('没有可用的近战武器', 'small warn');
@@ -2547,8 +2946,8 @@ function equipSlot(slot) {
   P.fireCd = Math.max(P.fireCd, 0.14);
   Sfx.tone(420, 0.05, 0.06, 'square');
   if (slot === 'medkit') {
-    const id = medPickNow();
-    if (id) startMedHeal(id);
+    const key = carePickNow();
+    if (key) P.carePick = key;      // 掏出来先拿着，短按 5 / 左键才开始
   }
 }
 
@@ -2604,7 +3003,8 @@ function startReload() {
   const a = currentAmmo();
   if (P.reloading > 0 || a.mag >= W.mag || a.reserve <= 0) return;
   P.burstLeft = 0;
-  P.reloading = W.reload;
+  /* 手臂骨折时单手换弹，慢一截；止痛能压住 */
+  P.reloading = W.reload * (armHurt() ? DEBUFF.armReload : 1);
   Sfx.reload_();
 }
 
@@ -2651,7 +3051,7 @@ function playerShoot() {
   const my = P.y + Math.sin(P.aim) * muzzleDist;
 
   for (let i = 0; i < W.count; i++) {
-    const sp0 = W.spread * (1 - P.ads * (1 - adsOf(W).spread));   // 开镜收束散布
+    const sp0 = W.spread * (1 - P.ads * (1 - adsOf(W).spread)) * (armHurt() ? DEBUFF.armSpread : 1);   // 开镜收束散布；手断了端不稳
     const spread = W.count > 1 ? rand(-sp0, sp0) : rand(-sp0, sp0) * 0.6;
     const ang = P.aim + spread;
     const spd = W.bspeed * rand(0.94, 1.06);
@@ -2689,72 +3089,138 @@ function playerShoot() {
 }
 
 /* ══════════════════════════════════════════════════════════
-   医疗包
+   治疗物品的使用
    ──────────────────────────────────────────────────────────
-   用的时候不是"一口回满"，而是掏出包来持续包扎：
-   每秒按 hps 把血灌进去，同时从这支包的耐久里扣掉同样多的血量。
-   血满了就自动停手，剩下的耐久留到下一次——所以一支 800 点的大箱子
-   能撑好几场遭遇战。
+   三种东西共用一套读条：
+     med  医疗包 —— 读条完开始按耐久回血，血满自动停，耐久留到下次
+     stop 止血件 —— 读条完压掉几层流血，一次性消耗
+     surg 手术包 —— 读条完处理一项创伤，扣一次
+   读条期间换槽 / 收手就白读，物品不消耗。
    ══════════════════════════════════════════════════════════ */
+
+/* 读条时长：手臂骨折时拆包、缝合都不利索（止痛可以屏蔽） */
+function careWindSec(base) {
+  return base * (armHurt() ? DEBUFF.armHeal : 1);
+}
+
+function careBusy() { return !!(P.medOn || P.medCd > 0); }
+
+/* 统一的"使用"入口：care key → 对应分支 */
+function startCare(key) {
+  const k = careKindOf(key);
+  if (k === 'stop') return startStopBleed(careIdOf(key));
+  if (k === 'surg') return startSurgery(careIdOf(key));
+  return startMedHeal(careIdOf(key));
+}
 
 /* 开始包扎（不消耗整支，只扣耐久）；返回是否成功 */
 function startMedHeal(id) {
   if (!P.alive) return false;
-  const key = MEDKITS[id] ? id : medPickNow();
-  if (!key) { uiToast('没有医疗包了 · 回大厅补给', 'small warn'); return false; }
+  const key = MEDKITS[id] ? id : careIdOf(carePickNow() || '');
+  if (!key || !MEDKITS[key]) { uiToast('没有医疗包了 · 回大厅补给', 'small warn'); return false; }
   const M = MEDKITS[key];
   const s = medUnit(key);
   if (!s || (s.n <= 0 && s.left <= 0.01)) {
     uiToast(M.name + ' 用完了', 'small warn');
-    P.medPick = medPickNow() || P.medPick;
+    P.carePick = careKeyMake('med', careIdOf(carePickNow() || careKeyMake('med', key)));
     return false;
   }
   if (P.hp >= P.maxHp - 0.01) { uiToast('生命值已满，不用包扎', 'small'); P.medCd = 0.5; return false; }
-  if (P.medOn || P.medCd > 0) return false;
+  if (careBusy()) return false;
 
   if (s.left <= 0.01) { s.n--; s.left = M.dur; }   // 拆一支新的
-  P.medOn = key;
-  P.medPick = key;
+  P.medOn = careKeyMake('med', key);
+  P.medKind = 'med';
+  P.carePick = P.medOn;
   P.healAcc = 0;
   P.medCd = 0.35;
-  P.medWind = M.wind;          // 先走启动读条，读条期间一滴血都不回
-  P.medWindT = M.wind;
+  P.medWind = careWindSec(M.wind);   // 先走启动读条，读条期间一滴血都不回
+  P.medWindT = P.medWind;
 
   popup(P.x, P.y - 34, M.name + ' · 启动 ' + M.wind + 's', M.color, 13);
   Sfx.tone(420, 0.08, 0.05, 'sine', 620);
   return true;
 }
 
-function stopMedHeal(msg) {
+/* 急救消耗品：绷带止一层 / 止血带全压住 / 止痛药只是让你暂时不疼 */
+function startStopBleed(id) {
+  if (!P.alive) return false;
+  const key = STOPS[id] ? id : 'bandage';
+  const S = STOPS[key];
+  if ((P.stops[key] | 0) <= 0) { uiToast(S.name + ' 用完了', 'small warn'); return false; }
+  if (S.pain) {
+    if (P.painT > 0) { uiToast('止痛还在生效 · 剩 ' + Math.ceil(P.painT) + 's', 'small'); P.medCd = 0.4; return false; }
+  } else if (P.deb.bleed <= 0) {
+    uiToast('没有在流血', 'small'); P.medCd = 0.4; return false;
+  }
+  if (careBusy()) return false;
+
+  P.medOn = careKeyMake('stop', key);
+  P.medKind = 'stop';
+  P.carePick = P.medOn;
+  P.medCd = 0.3;
+  P.medWind = careWindSec(S.sec);
+  P.medWindT = P.medWind;
+
+  popup(P.x, P.y - 34, S.name + (S.pain ? ' · 服用' : ' · 止血'), S.color, 13);
+  Sfx.tone(420, 0.08, 0.05, 'sine', 600);
+  return true;
+}
+
+/* 手术包：一次治一项，优先贯穿伤 → 腿 → 手臂 → 骨裂 */
+function startSurgery(id) {
+  if (!P.alive) return false;
+  const key = SURGERIES[id] ? id : SURG_ORDER[0];
+  const S = SURGERIES[key];
+  if (surgUses(key) <= 0) { uiToast(S.name + ' 用完了', 'small warn'); return false; }
+  const t = surgTarget();
+  if (!t) { uiToast('没有需要手术的伤', 'small'); P.medCd = 0.4; return false; }
+  if (careBusy()) return false;
+
+  P.medOn = careKeyMake('surg', key);
+  P.medKind = 'surg';
+  P.carePick = P.medOn;
+  P.medCd = 0.3;
+  P.medWind = careWindSec(S.sec);
+  P.medWindT = P.medWind;
+
+  popup(P.x, P.y - 34, S.name + ' · ' + t.label, S.color, 13);
+  Sfx.tone(380, 0.1, 0.05, 'sine', 560);
+  return true;
+}
+
+function stopCare(msg) {
   if (!P.medOn) return;
   P.medOn = null;
   P.medWind = 0;
   P.medCd = Math.max(P.medCd, 0.25);
   if (msg) uiToast(msg, 'small');
 }
+/* 老名字还留着：外面有几处是按"包扎"来调用的 */
+function stopMedHeal(msg) { stopCare(msg); }
 
-/* 左键 / 再按 5：在"开始包扎"和"停手"之间切换 */
+/* 左键 / 再按 5：在"开始使用"和"收手"之间切换 */
 function toggleMedkit() {
   if (!P.alive) return;
-  if (P.medOn) { stopMedHeal('已停止包扎'); return; }
-  const id = medPickNow();
-  if (!id) { uiToast('没有医疗包了 · 回大厅补给', 'small warn'); return; }
+  if (P.medOn) { stopCare('已停止'); return; }
+  const key = carePickNow();
+  if (!key) { uiToast('没有治疗物品了 · 回大厅补给', 'small warn'); return; }
   if (P.curSlot !== 'medkit') { equipSlot('medkit'); return; }
-  startMedHeal(id);
+  startCare(key);
 }
 
 /* ── 短按 / 长按 5 ──
-   按下只记账，松手时才决定：短按 = 用上次那种包，长按 = 弹出选择盘。 */
+   按下只记账，松手时才决定：短按 = 用上次那种，长按 = 弹出选择盘。 */
 function medPressDown() {
   if (!P.alive) return;
-  const own = medOwnedIds();
-  if (!own.length) { uiToast('没有医疗包了 · 回大厅补给', 'small warn'); return; }
+  const own = careOwnedKeys();
+  if (!own.length) { uiToast('没有治疗物品了 · 回大厅补给', 'small warn'); return; }
   MED_SEL.down = true;
   MED_SEL.hold = 0;
   MED_SEL.open = false;
   MED_SEL.wheel = 0;
   MED_SEL.list = own;
-  MED_SEL.idx = Math.max(0, own.indexOf(medPickNow() || own[0]));
+  MED_SEL.idx = Math.max(0, own.indexOf(carePickNow() || own[0]));
 }
 
 function medPressUp() {
@@ -2763,10 +3229,13 @@ function medPressUp() {
   if (MED_SEL.open) {
     MED_SEL.open = false;
     const id = MED_SEL.list[MED_SEL.idx];
-    if (id && MEDKITS[id]) {
-      P.medPick = id;
+    if (id) {
+      P.carePick = id;
       Sfx.tone(660, 0.06, 0.05, 'square');
-      uiToast('已选择 ' + MEDKITS[id].name + ' ×' + medCount(id) + ' · 短按 5 使用', 'small');
+      const k = careKindOf(id);
+      const tail = k === 'surg' ? (' · 剩 ' + careCount(id) + ' 次')
+        : (k === 'stop' ? (' ×' + careCount(id)) : (' ×' + careCount(id) + ' · 剩余耐久 ' + Math.ceil(medLeftOf(careIdOf(id)))));
+      uiToast('已选择 ' + careName(id) + tail + ' · 短按 5 使用', 'small');
     }
     return;
   }
@@ -2778,10 +3247,10 @@ function updateMedSelect(dt) {
   if (!MED_SEL.down) return;
   MED_SEL.hold += dt;
   if (!MED_SEL.open && MED_SEL.hold >= MED_HOLD_T) {
-    MED_SEL.list = medOwnedIds();
+    MED_SEL.list = careOwnedKeys();
     if (!MED_SEL.list.length) { MED_SEL.down = false; return; }
     MED_SEL.open = true;
-    MED_SEL.idx = Math.max(0, MED_SEL.list.indexOf(medPickNow() || MED_SEL.list[0]));
+    MED_SEL.idx = Math.max(0, MED_SEL.list.indexOf(carePickNow() || MED_SEL.list[0]));
     Sfx.tone(520, 0.07, 0.05, 'square');
   }
   if (MED_SEL.open && MED_SEL.wheel) {
@@ -2792,31 +3261,63 @@ function updateMedSelect(dt) {
   }
 }
 
-/* 包扎结算：先走启动读条，读条走完才按耐久把血一点点灌进去 */
+/* 读条与结算：三种物品共用前半段，医疗包在后面接持续回血 */
 function updateMedHeal(dt) {
-  P.painT = Math.max(0, P.painT - dt);
   if (!P.medOn) return;
   if (!P.alive || P.curSlot !== 'medkit') { P.medOn = null; P.medWind = 0; return; }
 
-  const id = P.medOn;
-  const M = MEDKITS[id] || MEDKITS[STARTER_MEDKIT];
-  const s = medUnit(id);
-  if (!s) { P.medOn = null; return; }
+  const key = P.medOn;
+  const kind = careKindOf(key);
+  const id = careIdOf(key);
 
-  /* ── 启动读条：掏包、拆包装、扎针。这段时间不回血，被打断就白读 ── */
+  /* ── 启动读条：掏包、拆包装、扎针 / 下刀。这段时间不回血，被打断就白读 ── */
   if (P.medWind > 0) {
     P.medWind = Math.max(0, P.medWind - dt);
     if (Math.random() < dt * 7) {
       addParticle(P.x + rand(-14, 14), P.y + rand(-10, 10), {
         vx: rand(-8, 8), vy: rand(-26, -8), life: 0.4, r: rand(1.6, 3),
-        color: '#ffd66b', drag: 0.94, glow: true,
+        color: kind === 'surg' ? '#8ef2ff' : '#ffd66b', drag: 0.94, glow: true,
       });
     }
     if (P.medWind > 0) return;
-    /* 读条完成：医疗箱到这一刻才真正处理伤口 + 止痛（顺带把火扑掉） */
+
+    /* 急救消耗品：读条完直接结算，一次性 */
+    if (kind === 'stop') {
+      const S = STOPS[id] || STOPS.bandage;
+      P.stops[id] = Math.max(0, (P.stops[id] | 0) - 1);
+      if (S.pain) {
+        P.painT = Math.max(P.painT, S.pain);
+        popup(P.x, P.y - 46, '止痛 ' + S.pain + 's', S.color, 14);
+      } else {
+        stopBleeding(S.layers);
+      }
+      Sfx.heal();
+      if ((P.stops[id] | 0) <= 0) uiToast(S.name + ' 用完了', 'small warn');
+      P.medOn = null;
+      P.medCd = Math.max(P.medCd, 0.5);
+      return;
+    }
+
+    /* 手术包：读条完处理一项，扣一次 */
+    if (kind === 'surg') {
+      const S = SURGERIES[id] || SURGERIES.surg_simple;
+      const t = surgTarget();
+      if (!t) { uiToast('没有需要手术的伤', 'small'); P.medOn = null; P.medCd = 0.4; return; }
+      const s = P.surgs[id] || (P.surgs[id] = { uses: 0 });
+      if ((s.uses | 0) <= 0) { uiToast(S.name + ' 用完了', 'small warn'); P.medOn = null; return; }
+      s.uses = Math.max(0, (s.uses | 0) - 1);
+      applySurgery();
+      Sfx.heal();
+      if ((s.uses | 0) <= 0) uiToast(S.name + ' 用完了', 'small warn');
+      P.medOn = null;
+      P.medCd = Math.max(P.medCd, 0.6);
+      return;
+    }
+
+    /* 医疗包：读条完成才真正处理伤口 + 止痛（顺带把火扑掉） */
+    const M = MEDKITS[id] || MEDKITS[STARTER_MEDKIT];
     if (M.perk === 'cure') {
-      const had = P.wound > 0 || P.burnT > 0;
-      P.wound = 0;
+      const had = P.burnT > 0;
       P.burnT = 0;
       P.burnTick = 0;
       P.painT = Math.max(P.painT, M.pain || 20);
@@ -2826,13 +3327,21 @@ function updateMedHeal(dt) {
     popup(P.x, P.y - 44, '开始回血', M.color, 12);
   }
 
+  /* ── 持续回血：只有医疗包走这一段 ── */
+  if (kind !== 'med') { P.medOn = null; return; }
+
+  const M = MEDKITS[id] || MEDKITS[STARTER_MEDKIT];
+  const s = medUnit(id);
+  if (!s) { P.medOn = null; return; }
+
   if (P.hp >= P.maxHp - 0.01) { P.medOn = null; P.medCd = Math.max(P.medCd, 0.3); uiToast('生命值已满', 'small'); return; }
   if (s.left <= 0.01) {
     if (s.n > 0) { s.n--; s.left = M.dur; }               // 上一支用完了，自动接下一支
     else { P.medOn = null; uiToast(M.name + ' 用完了', 'small warn'); return; }
   }
 
-  const eff = (P.wound && P.painT <= 0) ? WOUND_HEAL_K : 1;
+  /* 还在流血的时候包扎效率很低，止血带能先解决这个问题 */
+  const eff = P.deb.bleed > 0 ? WOUND_HEAL_K : 1;
   const heal = Math.min(M.hps * eff * dt, s.left, P.maxHp - P.hp);
   if (heal <= 0) { P.medOn = null; return; }
 
@@ -2880,6 +3389,7 @@ function throwGrenade() {
 
 function updatePlayer(dt) {
   updateMedSelect(dt);          // 长按 5 的计时 / 选择盘滚轮
+  updateDebuff(dt);             // 流血 tick / 止痛倒计时
   updateMedHeal(dt);            // 包扎按耐久持续回血
 
   const wmx = mouse.x + G.cam.x;
@@ -2897,18 +3407,34 @@ function updatePlayer(dt) {
 
   P.dashCd = Math.max(0, P.dashCd - dt);
   if (keys['shift'] && P.dashCd <= 0 && P.stamina >= 34 && il > 0) {
-    P.dashT = 0.17;
-    P.dashCd = 0.75;
-    P.stamina -= 34;
-    P.invuln = Math.max(P.invuln, 0.30);
-    Sfx.dash();
-    burst(P.x, P.y, 16, { spdMin: 60, spdMax: 260, color: ['#43d9f5', '#8ef2ff', '#ffffff'], life: 0.4, r: 4, glow: true, drag: 0.88 });
+    if (legBroken()) {
+      /* 腿已经断了还想冲：只能硬撑一下，而且会把骨裂彻底坐实 */
+      P.dashT = 0.11;
+      P.dashCd = 1.0;
+      P.stamina -= 34;
+      P.invuln = Math.max(P.invuln, 0.10);
+      if (P.deb.fissure < 2) {
+        addDebuff('fissure', 1);
+        shake(5);
+      } else {
+        uiToast('腿已经站不住了', 'small warn');
+      }
+      Sfx.hurt();
+      P.hurtFlash = Math.max(P.hurtFlash, 0.4);
+    } else {
+      P.dashT = 0.17;
+      P.dashCd = 0.75;
+      P.stamina -= 34;
+      P.invuln = Math.max(P.invuln, 0.30);
+      Sfx.dash();
+      burst(P.x, P.y, 16, { spdMin: 60, spdMax: 260, color: ['#43d9f5', '#8ef2ff', '#ffffff'], life: 0.4, r: 4, glow: true, drag: 0.88 });
+    }
   }
   if (P.dashT > 0) {
     P.dashT -= dt;
     addParticle(P.x, P.y, { vx: rand(-20, 20), vy: rand(-20, 20), life: 0.3, r: rand(6, 11), color: '#43d9f5', drag: 0.9, glow: true });
   } else {
-    const regen = (P.wound && P.painT <= 0) ? 17 : 26;   // 带伤口时体力回得也慢
+    const regen = P.deb.bleed > 0 ? 17 : 26;   // 一直在流血，体力也回不利索
     P.stamina = Math.min(100, P.stamina + dt * regen);
   }
 
@@ -2917,7 +3443,9 @@ function updatePlayer(dt) {
   const aCfg = adsOf(wNow);
   const gunOut = P.curSlot !== 'melee' && P.curSlot !== 'medkit';
   const adsOn = mouse.right && gunOut && P.alive && P.reloading <= 0 && P.dashT <= 0;
-  P.ads = clamp(P.ads + (adsOn ? dt / aCfg.time : -dt / (aCfg.time * 0.75)), 0, 1);
+  /* 手臂断了抬枪又慢又抖，止痛之后能压住 */
+  const adsTime = aCfg.time * (armHurt() ? DEBUFF.armAds : 1);
+  P.ads = clamp(P.ads + (adsOn ? dt / adsTime : -dt / (adsTime * 0.75)), 0, 1);
   if (P.ads > 0.02 && P.adsPrev <= 0.02) Sfx.adsIn();
   if (P.ads <= 0.02 && P.adsPrev > 0.02) Sfx.adsOut();
   P.adsPrev = P.ads;
@@ -2925,7 +3453,11 @@ function updatePlayer(dt) {
   let spd = P.speed * (wNow.moveMul || 1);           // 配件带来的负重 / 轻量化
   if (P.curSlot === 'melee') spd *= 1.06;            // 收枪持刀：跑得更利索
   else if (P.curSlot === 'medkit') spd *= 0.92;      // 一边包扎一边走，慢一点
-  if (P.wound && P.painT <= 0) spd *= 0.88;          // 伤口会拖慢脚步，止痛后无视
+  /* 创伤：流血越多越虚；腿断了直接掉一半多；骨裂再叠一层，止痛都救不回来 */
+  if (P.deb.bleed > 0) spd *= 1 - Math.min(0.20, 0.05 * P.deb.bleed);
+  if (P.deb.leg > 0) spd *= DEBUFF.legMove;
+  if (P.deb.fissure > 0) spd *= 1 - DEBUFF.fissureMove * P.deb.fissure;
+  if (armHurt()) spd *= 0.96;                        // 一只手挂着，跑起来也别扭
   if (P.dashT > 0) spd *= 3.3;
   if (P.reloading > 0) spd *= 0.82;
   if (P.fireCd > 0.02) spd *= 0.94;
@@ -3021,7 +3553,7 @@ function damagePlayer(amount, srcX, srcY, inv) {
   if (P.invuln > 0 || !P.alive) return;
   let dmg = amount * (1 - P.armorDR);
   if (P.painT > 0) dmg *= 1 - PAIN_DR;      // 止痛剂压着，挨打没那么疼
-  if (dmg >= 18) P.wound = 1;               // 吃了一记重的：留下伤口，回血与移速都打折
+  rollTrauma(dmg, 'bullet');                // 掷创伤：流血 / 贯穿伤 / 骨折
   P.hp -= dmg;
   P.invuln = inv || (isSecret() ? SECRET.playerInvuln : 0.55);
   P.hurtFlash = 1;
@@ -4276,9 +4808,14 @@ function dropPickup(x, y, kind, value, relicId) {
 
 function collectPickup(p) {
   if (p.kind === 'medkit') {
-    const id = rollMedDropId(false);
-    addMed(id, 1);
-    popup(P.x, P.y - 30, '+1 ' + MEDKITS[id].name, MEDKITS[id].color, 14);
+    if (Math.random() < 0.22) {
+      addStop('bandage', 1);
+      popup(P.x, P.y - 30, '+1 弹力绷带', STOPS.bandage.color, 14);
+    } else {
+      const id = rollMedDropId(false);
+      addMed(id, 1);
+      popup(P.x, P.y - 30, '+1 ' + MEDKITS[id].name, MEDKITS[id].color, 14);
+    }
     Sfx.pickup();
   } else if (p.kind === 'ammo') {
     const a = currentAmmo();
@@ -4611,7 +5148,7 @@ function updateFires(dt) {
 function burnPlayer(dmg, srcX, srcY) {
   if (!P.alive || !P.hp) return;
   P.hp -= dmg * (1 - P.armorDR * 0.6);
-  if (dmg >= 4) P.wound = 1;              // 烧伤也算伤口，医疗箱才能清
+  rollTrauma(dmg, 'burn');                // 烧穿皮肤也会挂流血
   P.hurtFlash = Math.max(P.hurtFlash, 0.6);
   if (srcX !== undefined) {
     const a = Math.atan2(P.y - srcY, P.x - srcX);
@@ -4723,6 +5260,23 @@ function makeMedItem(id, n) {
     note: M.dur + ' 耐久 · ' + M.hps + '/秒',
   };
 }
+function makeStopItem(id) {
+  const S = STOPS[id] || STOPS.bandage;
+  return {
+    kind: 'stop', icon: '带', name: S.name, val: '×1', color: S.color,
+    tier: 'supply', stop: S === STOPS[id] ? id : 'bandage', n: 1,
+    note: S.layers > 1 ? '止全部流血' : '止 1 层流血',
+  };
+}
+function makeSurgItem(id) {
+  const S = SURGERIES[id] || SURGERIES.surg_simple;
+  return {
+    kind: 'surg', icon: '刀', name: S.name, val: '×1 次', color: S.color,
+    tier: id === 'surg_dek' ? 'legend' : (id === 'surg_tactical' ? 'epic' : 'rare'),
+    surg: SURGERIES[id] ? id : 'surg_simple', n: 1,
+    note: S.sec + 's 读条 · 治一项',
+  };
+}
 function makeNadeItem(n) {
   return { kind: 'nade', icon: '雷', name: '手雷', val: '×' + (n || 1), color: '#ffb347', tier: 'supply', n: n || 1 };
 }
@@ -4765,6 +5319,7 @@ function rollContainer(kind) {
       for (let i = 0; i < randInt(C.n[0], C.n[1]); i++) addRelic(0);
       if (Math.random() < 0.35) addRelic(0);
       if (Math.random() < 0.40) items.push(makeMedItem(rollMedDropId(false)));
+      if (Math.random() < 0.14) items.push(makeStopItem('bandage'));
       if (Math.random() < 0.22) items.push(makeNadeItem(1));
       if (Math.random() < (isSecret() ? SECRET.loot.gunChance : 0.20)) items.push(makeWeaponItem(pickGun(false)));
       if (Math.random() < 0.30) addMod(0);
@@ -4783,6 +5338,15 @@ function rollContainer(kind) {
     case 'med': {
       for (let i = 0, r = randInt(2, 3); i < r; i++) items.push(makeMedItem(rollMedDropId(false)));
       if (Math.random() < 0.30) items.push(makeMedItem(rollMedDropId(true)));   // 压箱底的好货
+      /* 医疗箱也是止血件和手术包的主要来源 —— 打崩了就地能找东西处理 */
+      if (Math.random() < 0.50) {
+        const rs = Math.random();
+        items.push(makeStopItem(rs < 0.62 ? 'bandage' : (rs < 0.86 ? 'painkiller' : 'tourniquet')));
+      }
+      if (Math.random() < 0.16) {
+        const r = Math.random();
+        items.push(makeSurgItem(r < 0.74 ? 'surg_simple' : (r < 0.96 ? 'surg_tactical' : 'surg_dek')));
+      }
       if (Math.random() < 0.26) addRelic(-0.35);
       if (Math.random() < 0.10) items.push(makeAmmoItem(1));
       break;
@@ -4918,6 +5482,8 @@ function addAmmo(mags) {
 function applyLootItem(it, c) {
   if (it.kind === 'relic') addRelic(it.id, 1);
   else if (it.kind === 'med') addMed(it.med || STARTER_MEDKIT, it.n || 1);
+  else if (it.kind === 'stop') addStop(it.stop || 'bandage', it.n || 1);
+  else if (it.kind === 'surg') addSurg(it.surg || SURG_ORDER[0], it.n || 1);
   else if (it.kind === 'nade') P.grenades += it.n || 1;
   else if (it.kind === 'ammo') {
     const got = addAmmo(it.mags || 1);
@@ -5810,69 +6376,114 @@ function drawPlayerBlade(rec) {
   ctx.restore();
 }
 
-/* 包扎动作：手上捧着医疗包/注射器，外圈是"这一支还剩多少耐久" */
+/* 医疗槽里的手持物：医疗包 / 绷带 / 手术包，外圈是读条或剩余耐久 */
 function drawPlayerMedkit(rec) {
-  const id = medPickNow();
-  const M = id ? MEDKITS[id] : MEDKITS[STARTER_MEDKIT];
-  const k = M.size || 1;
-  const w = 12 * k, h = 12 * k;
+  const pk = carePickNow() || P.carePick || careKeyMake('med', STARTER_MEDKIT);
+  const kind = careKindOf(pk);
+  const id = careIdOf(pk);
 
   ctx.save();
   ctx.translate(P.r * 0.55 + rec, 0);
   ctx.rotate(-0.22);
 
-  if (k < 0.72) {
-    /* 注射器：细管 + 推杆 + 针头 */
-    const L = 17 + k * 10;
-    ctx.fillStyle = 'rgba(226,246,255,0.94)';
-    drawRoundRect(-L * 0.5, -2.3, L, 4.6, 1.8); ctx.fill();
-    ctx.fillStyle = M.color;
-    drawRoundRect(-L * 0.5 + 1.2, -1.2, L * 0.52, 2.4, 1.1); ctx.fill();
-    ctx.strokeStyle = 'rgba(205,238,255,0.75)';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(L * 0.5, 0); ctx.lineTo(L * 0.5 + 7, 0); ctx.stroke();
-    ctx.fillStyle = 'rgba(232,250,255,0.9)';
-    drawRoundRect(-L * 0.5 - 4.6, -4, 3, 8, 1); ctx.fill();
-  } else if (k < 1.2) {
-    /* 急救包：软包 + 提手 */
-    ctx.fillStyle = 'rgba(232,244,234,0.96)';
-    drawRoundRect(-w * 0.5, -h * 0.5, w, h, 2); ctx.fill();
-    ctx.strokeStyle = 'rgba(10,25,35,0.55)';
-    ctx.lineWidth = 1;
-    drawRoundRect(-w * 0.5, -h * 0.5, w, h, 2); ctx.stroke();
-    ctx.fillStyle = M.color;
-    ctx.fillRect(-1.7, -h * 0.34, 3.4, h * 0.68);
-    ctx.fillRect(-w * 0.34, -1.7, w * 0.68, 3.4);
-    ctx.strokeStyle = 'rgba(175,205,220,0.75)';
-    ctx.beginPath(); ctx.arc(0, -h * 0.5, w * 0.22, Math.PI, 0); ctx.stroke();
+  if (kind === 'stop') {
+    /* 止血件：绷带卷 / 止血带 */
+    if (id === 'tourniquet') {
+      ctx.fillStyle = 'rgba(255,155,107,0.95)';
+      drawRoundRect(-9, -3, 18, 6, 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(40,60,74,0.7)';
+      ctx.lineWidth = 1;
+      drawRoundRect(-9, -3, 18, 6, 2); ctx.stroke();
+      ctx.fillStyle = '#2b3c4a';
+      drawRoundRect(2.5, -5, 4, 10, 1.4); ctx.fill();
+      ctx.fillStyle = 'rgba(200,235,255,0.6)';
+      ctx.fillRect(3.4, -3.6, 1.2, 7.2);
+    } else {
+      ctx.fillStyle = 'rgba(238,246,250,0.97)';
+      drawRoundRect(-7.5, -5, 15, 10, 3); ctx.fill();
+      ctx.strokeStyle = 'rgba(110,145,170,0.75)';
+      ctx.lineWidth = 1;
+      drawRoundRect(-7.5, -5, 15, 10, 3); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-7.5, -1.6); ctx.lineTo(7.5, -1.6); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-7.5, 1.6); ctx.lineTo(7.5, 1.6); ctx.stroke();
+      ctx.fillStyle = 'rgba(160,195,215,0.85)';
+      ctx.beginPath(); ctx.arc(0, 0, 2.2, 0, TAU); ctx.fill();
+    }
+  } else if (kind === 'surg') {
+    /* 手术包：硬盒 + 等级描边 + 手术刀 */
+    const S = SURGERIES[id] || SURGERIES.surg_simple;
+    ctx.fillStyle = 'rgba(228,238,246,0.97)';
+    drawRoundRect(-8.5, -7, 17, 14, 2.4); ctx.fill();
+    ctx.strokeStyle = S.color;
+    ctx.lineWidth = 1.6;
+    drawRoundRect(-8.5, -7, 17, 14, 2.4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-8.5, 0); ctx.lineTo(8.5, 0); ctx.stroke();
+    ctx.strokeStyle = '#8fe3ff';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(-3.4, 3.4); ctx.lineTo(4.2, -4.2); ctx.stroke();
+    ctx.fillStyle = S.color;
+    ctx.fillRect(1.6, -5.4, 2.6, 2.6);
   } else {
-    /* 医疗箱：硬箱 + 中缝 + 锁扣 */
-    ctx.fillStyle = 'rgba(226,240,238,0.97)';
-    drawRoundRect(-w * 0.5, -h * 0.42, w, h * 0.84, 2.6); ctx.fill();
-    ctx.strokeStyle = 'rgba(10,25,35,0.6)';
-    ctx.lineWidth = 1.2;
-    drawRoundRect(-w * 0.5, -h * 0.42, w, h * 0.84, 2.6); ctx.stroke();
-    ctx.fillStyle = M.color;
-    ctx.fillRect(-2, -h * 0.30, 4, h * 0.60);
-    ctx.fillRect(-w * 0.30, -2, w * 0.60, 4);
-    ctx.strokeStyle = 'rgba(90,120,140,0.7)';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(-w * 0.5, 0); ctx.lineTo(w * 0.5, 0); ctx.stroke();
+    /* 医疗包：注射器 / 软包 / 硬箱，按 size 分 */
+    const M = MEDKITS[id] || MEDKITS[STARTER_MEDKIT];
+    const k = M.size || 1;
+    const w = 12 * k, h = 12 * k;
+
+    if (k < 0.72) {
+      const L = 17 + k * 10;
+      ctx.fillStyle = 'rgba(226,246,255,0.94)';
+      drawRoundRect(-L * 0.5, -2.3, L, 4.6, 1.8); ctx.fill();
+      ctx.fillStyle = M.color;
+      drawRoundRect(-L * 0.5 + 1.2, -1.2, L * 0.52, 2.4, 1.1); ctx.fill();
+      ctx.strokeStyle = 'rgba(205,238,255,0.75)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(L * 0.5, 0); ctx.lineTo(L * 0.5 + 7, 0); ctx.stroke();
+      ctx.fillStyle = 'rgba(232,250,255,0.9)';
+      drawRoundRect(-L * 0.5 - 4.6, -4, 3, 8, 1); ctx.fill();
+    } else if (k < 1.2) {
+      ctx.fillStyle = 'rgba(232,244,234,0.96)';
+      drawRoundRect(-w * 0.5, -h * 0.5, w, h, 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(10,25,35,0.55)';
+      ctx.lineWidth = 1;
+      drawRoundRect(-w * 0.5, -h * 0.5, w, h, 2); ctx.stroke();
+      ctx.fillStyle = M.color;
+      ctx.fillRect(-1.7, -h * 0.34, 3.4, h * 0.68);
+      ctx.fillRect(-w * 0.34, -1.7, w * 0.68, 3.4);
+      ctx.strokeStyle = 'rgba(175,205,220,0.75)';
+      ctx.beginPath(); ctx.arc(0, -h * 0.5, w * 0.22, Math.PI, 0); ctx.stroke();
+    } else {
+      ctx.fillStyle = 'rgba(226,240,238,0.97)';
+      drawRoundRect(-w * 0.5, -h * 0.42, w, h * 0.84, 2.6); ctx.fill();
+      ctx.strokeStyle = 'rgba(10,25,35,0.6)';
+      ctx.lineWidth = 1.2;
+      drawRoundRect(-w * 0.5, -h * 0.42, w, h * 0.84, 2.6); ctx.stroke();
+      ctx.fillStyle = M.color;
+      ctx.fillRect(-2, -h * 0.30, 4, h * 0.60);
+      ctx.fillRect(-w * 0.30, -2, w * 0.60, 4);
+      ctx.strokeStyle = 'rgba(90,120,140,0.7)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(-w * 0.5, 0); ctx.lineTo(w * 0.5, 0); ctx.stroke();
+    }
   }
   ctx.restore();
 
+  /* 外圈：读条阶段是琥珀色启动进度，医疗包的回血阶段是剩余耐久 */
   if (P.medOn) {
-    const MM = MEDKITS[P.medOn] || M;
+    const ct = careKindOf(P.medOn), ci = careIdOf(P.medOn);
     const winding = P.medWind > 0;
-    const s = medUnit(P.medOn);
-    /* 读条时画"启动进度"（琥珀色），读条走完才切换成"耐久环"（本色） */
-    const ratio = winding
-      ? clamp(1 - P.medWind / Math.max(0.01, P.medWindT), 0, 1)
-      : (s ? clamp(s.left / MM.dur, 0, 1) : 0);
+    let ratio = 1, col = '#ffd66b';
+    if (winding) {
+      ratio = clamp(1 - P.medWind / Math.max(0.01, P.medWindT), 0, 1);
+    } else if (ct === 'med') {
+      const MM = MEDKITS[ci] || MEDKITS[STARTER_MEDKIT];
+      const s = medUnit(ci);
+      ratio = s ? clamp(s.left / MM.dur, 0, 1) : 0;
+      col = MM.color;
+    }
     ctx.strokeStyle = 'rgba(8,18,26,0.55)';
     ctx.lineWidth = 3.4;
     ctx.beginPath(); ctx.arc(0, 0, P.r + 8, 0, TAU); ctx.stroke();
-    ctx.strokeStyle = winding ? '#ffd66b' : MM.color;
+    ctx.strokeStyle = col;
     ctx.lineWidth = 2.6;
     ctx.lineCap = 'round';
     ctx.beginPath();
@@ -6873,9 +7484,9 @@ function drawMedSelect(mono) {
   if (!MED_SEL.down || !P.alive) return;
 
   if (!MED_SEL.open) {
-    /* 还在蓄力：一根小条告诉玩家"再按住就出选择盘"，松手则是直接包扎 */
+    /* 还在蓄力：一根小条告诉玩家"再按住就出选择盘"，松手则是直接用 */
     const p = clamp(MED_SEL.hold / MED_HOLD_T, 0, 1);
-    const cw = 130, cx = VW / 2 - cw / 2, cy = VH - 104;
+    const cw = 150, cx = VW / 2 - cw / 2, cy = VH - 104;
     ctx.save();
     ctx.fillStyle = 'rgba(8,16,24,0.72)';
     drawRoundRect(cx - 5, cy - 5, cw + 10, 13, 3); ctx.fill();
@@ -6884,55 +7495,151 @@ function drawMedSelect(mono) {
     ctx.fillStyle = 'rgba(160,220,200,0.8)';
     ctx.font = '700 9px ' + mono;
     ctx.textAlign = 'center';
-    ctx.fillText('按住 5 选择医疗包', VW / 2, cy - 12);
+    ctx.fillText('按住 5 选择医疗 / 止血 / 手术', VW / 2, cy - 12);
     ctx.restore();
     ctx.textAlign = 'left';
     return;
   }
 
   const list = MED_SEL.list;
-  const n = list.length;
-  const cw = 100, gap = 6, ch = 78;
-  const totalW = n * cw + (n - 1) * gap;
-  const x0 = VW / 2 - totalW / 2;
-  const y0 = VH - 300;
+  const groups = [
+    { kind: 'med', label: '医疗包', color: '#46e08a' },
+    { kind: 'stop', label: '急救', color: '#cfe6f2' },
+    { kind: 'surg', label: '手术包', color: '#8fe3ff' },
+  ];
+  const rows = [];
+  for (const g of groups) {
+    const items = list.filter(k => careKindOf(k) === g.kind);
+    if (items.length) rows.push({ label: g.label, color: g.color, items: items });
+  }
+  if (!rows.length) return;
+
+  const cw = 104, ch = 58, gap = 6;
+  const rowH = ch + 20;
+  let maxW = 0;
+  for (const r of rows) maxW = Math.max(maxW, r.items.length * cw + (r.items.length - 1) * gap);
+
+  const x0 = VW / 2 - maxW / 2;
+  const totalH = rows.length * rowH;
+  const y0 = Math.max(96, VH - 128 - totalH);
 
   ctx.save();
   ctx.textAlign = 'center';
   ctx.fillStyle = 'rgba(190,230,250,0.85)';
   ctx.font = '700 11px ' + mono;
-  ctx.fillText('医疗包 · 滚轮切换 · 松开 [5] 确认', VW / 2, y0 - 14);
+  ctx.fillText('治疗物品 · 滚轮切换 · 松开 [5] 确认', VW / 2, y0 - 12);
 
-  for (let i = 0; i < n; i++) {
-    const id = list[i];
-    const M = MEDKITS[id];
-    const sel = i === MED_SEL.idx;
-    const x = x0 + i * (cw + gap);
+  let ry = y0;
+  for (const r of rows) {
+    /* 组标题：左边一条同色小竖线，后面跟组名 */
+    ctx.textAlign = 'left';
+    ctx.fillStyle = r.color;
+    ctx.font = '700 9px ' + mono;
+    ctx.fillRect(x0, ry + 2, 2, 9);
+    ctx.globalAlpha = 0.72;
+    ctx.fillText(r.label, x0 + 7, ry + 10);
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'center';
 
-    ctx.fillStyle = sel ? 'rgba(20,48,54,0.95)' : 'rgba(8,16,24,0.84)';
-    drawRoundRect(x, y0, cw, ch, 3); ctx.fill();
-    ctx.strokeStyle = sel ? M.color : 'rgba(80,120,150,0.35)';
-    ctx.lineWidth = sel ? 2 : 1;
-    drawRoundRect(x, y0, cw, ch, 3); ctx.stroke();
+    for (let i = 0; i < r.items.length; i++) {
+      const key = r.items[i];
+      const kind = careKindOf(key), id = careIdOf(key);
+      const sel = MED_SEL.list.indexOf(key) === MED_SEL.idx;
+      const x = x0 + i * (cw + gap);
+      const y = ry + 16;
+      const col = careColor(key);
 
-    ctx.fillStyle = sel ? '#ffffff' : 'rgba(180,215,235,0.82)';
-    ctx.font = '700 11px ' + mono;
-    ctx.fillText(M.name, x + cw / 2, y0 + 17);
+      ctx.fillStyle = sel ? 'rgba(20,48,54,0.96)' : 'rgba(8,16,24,0.86)';
+      drawRoundRect(x, y, cw, ch, 3); ctx.fill();
+      ctx.strokeStyle = sel ? col : 'rgba(80,120,150,0.35)';
+      ctx.lineWidth = sel ? 2 : 1;
+      drawRoundRect(x, y, cw, ch, 3); ctx.stroke();
 
-    ctx.fillStyle = M.color;
-    ctx.font = '800 16px ' + mono;
-    ctx.fillText('×' + medCount(id), x + cw / 2, y0 + 37);
+      ctx.fillStyle = sel ? '#ffffff' : 'rgba(180,215,235,0.85)';
+      ctx.font = '700 11px ' + mono;
+      ctx.fillText(careName(key), x + cw / 2, y + 16);
 
-    ctx.fillStyle = 'rgba(150,190,215,0.72)';
-    ctx.font = '600 9px ' + mono;
-    ctx.fillText('启动 ' + M.wind + 's · ' + M.hps + ' 血/秒', x + cw / 2, y0 + 52);
-    ctx.fillText('耐久 ' + M.dur + (M.perk === 'cure' ? ' · 治伤' : (M.perk === 'stamina' ? ' · 回体力' : '')), x + cw / 2, y0 + 64);
+      ctx.fillStyle = col;
+      ctx.font = '800 15px ' + mono;
+      const cnt = careCount(key);
+      ctx.fillText(kind === 'surg' ? cnt + ' 次' : ('×' + cnt), x + cw / 2, y + 34);
 
-    const ratio = clamp(medLeftOf(id) / M.dur, 0, 1);
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    drawRoundRect(x + 10, y0 + ch - 9, cw - 20, 3, 1.5); ctx.fill();
-    ctx.fillStyle = M.color;
-    drawRoundRect(x + 10, y0 + ch - 9, Math.max(1, (cw - 20) * ratio), 3, 1.5); ctx.fill();
+      ctx.fillStyle = 'rgba(150,190,215,0.72)';
+      ctx.font = '600 9px ' + mono;
+      if (kind === 'med') {
+        const M = MEDKITS[id];
+        ctx.fillText(M.hps + ' 血/秒 · 启动 ' + M.wind + 's', x + cw / 2, y + 47);
+        const ratio = clamp(medLeftOf(id) / M.dur, 0, 1);
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        drawRoundRect(x + 10, y + ch - 8, cw - 20, 3, 1.5); ctx.fill();
+        ctx.fillStyle = col;
+        drawRoundRect(x + 10, y + ch - 8, Math.max(1, (cw - 20) * ratio), 3, 1.5); ctx.fill();
+      } else if (kind === 'stop') {
+        const S = STOPS[id];
+        ctx.fillText(S.pain ? ('止痛 ' + S.pain + 's · ' + S.sec + 's')
+          : (S.layers > 1 ? '止全部流血 · ' + S.sec + 's' : '止 1 层 · ' + S.sec + 's'), x + cw / 2, y + 47);
+      } else {
+        const S = SURGERIES[id];
+        ctx.fillText('读条 ' + S.sec + 's · 治一项', x + cw / 2, y + 47);
+      }
+    }
+    ry += rowH;
+  }
+
+  /* 底部说明：选中的这一件现在能干什么 */
+  const picked = MED_SEL.list[MED_SEL.idx];
+  if (picked) {
+    const k = careKindOf(picked);
+    let hint = '';
+    if (k === 'med') hint = '回血 · ' + careName(picked) + ' 还剩耐久 ' + Math.ceil(medLeftOf(careIdOf(picked)));
+    else if (k === 'stop') {
+      const S = STOPS[careIdOf(picked)];
+      if (S && S.pain) hint = P.painT > 0 ? ('止痛还剩 ' + Math.ceil(P.painT) + 's，先别重复吃') : '45 秒止痛：压臂伤、淡黑边，压不住流血';
+      else hint = P.deb.bleed > 0 ? ('当前流血 ×' + P.deb.bleed + '：用它可以压住') : '现在没有流血，用不上';
+    }
+    else {
+      const t = surgTarget();
+      hint = t ? ('将处理：' + t.label) : '现在没有需要手术的伤';
+    }
+    ctx.fillStyle = 'rgba(170,215,240,0.8)';
+    ctx.font = '700 10px ' + mono;
+    ctx.fillText(hint, VW / 2, ry + 12);
+  }
+
+  ctx.restore();
+  ctx.textAlign = 'left';
+}
+
+/* 创伤状态标签：每个 debuff 一个小色块，层数与剩余时间直接写在里面 */
+function drawStatusTags(mono) {
+  const tags = [];
+  const d = P.deb;
+  if (d.bleed > 0) tags.push(['流血 ×' + d.bleed, '#ff4060']);
+  if (d.redHead > 0) tags.push(['头穿 ×' + d.redHead, '#ff7a5c']);
+  if (d.redChest > 0) tags.push(['胸穿 ×' + d.redChest, '#ff7a5c']);
+  if (d.redAbdomen > 0) tags.push(['腹穿 ×' + d.redAbdomen, '#ff7a5c']);
+  if (d.arm > 0) tags.push(['臂折', armHurt() ? '#ff9b6b' : 'rgba(255,155,107,0.45)']);
+  if (d.leg > 0) tags.push(['腿折', '#ff9b6b']);
+  if (d.fissure > 0) tags.push(['骨裂 ×' + d.fissure, '#ff5c7a']);
+  if (d.weak > 0) tags.push(['虚弱', '#b46bff']);
+  if (P.painT > 0) tags.push(['止痛 ' + Math.ceil(P.painT) + 's', '#82ffcd']);
+  if (!tags.length) return;
+
+  ctx.save();
+  ctx.textAlign = 'left';
+  ctx.font = '700 9px ' + mono;
+  let tx = 22, ty = 138;
+  for (const t of tags) {
+    const w = ctx.measureText(t[0]).width + 12;
+    if (tx + w > 322) { tx = 22; ty += 16; }
+    ctx.fillStyle = 'rgba(8,16,24,0.72)';
+    drawRoundRect(tx, ty - 9, w, 13, 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.lineWidth = 1;
+    drawRoundRect(tx, ty - 9, w, 13, 2); ctx.stroke();
+    ctx.fillStyle = t[1];
+    ctx.fillText(t[0], tx + 6, ty + 1);
+    tx += w + 4;
   }
   ctx.restore();
   ctx.textAlign = 'left';
@@ -7161,20 +7868,20 @@ function drawHUD() {
   ctx.font = '600 9px ' + mono;
   ctx.fillText('DASH', hpX + stW + 10, stY + 6);
 
-  /* 状态：伤口会同时拖慢移速与包扎效率，只有医疗箱能清；止痛能压过去 */
-  let tagX = hpX + stW + 46;
-  if (P.wound && P.painT <= 0) {
-    ctx.fillStyle = 'rgba(255,86,116,0.92)';
+  /* 冲刺状态：腿断了就直说，省得玩家一直按 shift */
+  if (legBroken()) {
+    ctx.fillStyle = 'rgba(255,120,90,0.9)';
     ctx.font = '700 9px ' + mono;
-    ctx.fillText('伤口 -12%', tagX, stY + 6);
-    tagX += 54;
-  }
-  if (P.painT > 0) {
-    ctx.fillStyle = 'rgba(130,255,205,0.92)';
+    ctx.fillText(P.deb.fissure > 0 ? '骨裂 · 不能冲刺' : '腿折 · 不能冲刺', hpX + stW + 46, stY + 6);
+  } else if (P.deb.bleed > 0) {
+    ctx.fillStyle = 'rgba(255,90,120,0.9)';
     ctx.font = '700 9px ' + mono;
-    ctx.fillText('止痛 ' + Math.ceil(P.painT) + 's', tagX, stY + 6);
+    ctx.fillText('流血 ×' + P.deb.bleed, hpX + stW + 46, stY + 6);
   }
   ctx.restore();
+
+  /* 创伤标签：挂在左上行动面板下面，一行放不下就换行 */
+  drawStatusTags(mono);
 
   // ── 补给计数（中下偏左）──
   ctx.save();
@@ -7204,13 +7911,12 @@ function drawHUD() {
   ctx.fillStyle = '#7fb8d6';
   ctx.font = '700 12px ' + mono;
   const slotTag = (SLOT_DEFS.find(d => d.id === P.curSlot) || SLOT_DEFS[0]);
-  const medId = P.curSlot === 'medkit' ? medPickNow() : null;
-  const medM = medId ? MEDKITS[medId] : null;
+  const carePk = P.curSlot === 'medkit' ? carePickNow() : null;
   const headTxt = inHand
     ? (slotTag.cn + ' · ' + weaponName(W))
     : (slotTag.cn + ' · ' + (P.curSlot === 'melee'
         ? (MELEES[P.melee] || MELEES[STARTER_MELEE]).name
-        : (medM ? medM.name : '无医疗包')));
+        : (carePk ? careName(carePk) : '无治疗物品')));
   ctx.fillText(headTxt, wx, wy - 58);
 
   if (inHand) {
@@ -7258,39 +7964,76 @@ function drawHUD() {
     ctx.fillStyle = P.meleeCd > 0 ? 'rgba(120,170,200,0.4)' : 'rgba(150,228,255,0.9)';
     ctx.fillText((1 / M.rate).toFixed(1) + ' 刀/秒 · 静音 · 左键挥刀', wx, wy + 32);
   } else {
-    /* 医疗槽：大号显示支数，下面一根耐久条是"当前这支还剩多少" */
-    const mdId = medPickNow();
-    const MD = mdId ? MEDKITS[mdId] : null;
-    const left = mdId ? medLeftOf(mdId) : 0;
-    const pct = MD ? clamp(left / MD.dur, 0, 1) : 0;
+    /* 医疗槽：按当前选中的物品显示 —— 支数 / 卷数 / 剩余刀数
+       这里比枪械多一行说明，整体上移一点，别顶到屏幕底边 */
+    const wy2 = wy - 24;
+    const pk = carePickNow();
+    const kind = pk ? careKindOf(pk) : 'med';
+    const cid2 = pk ? careIdOf(pk) : '';
+    const col2 = pk ? careColor(pk) : '#3d5a6a';
+    const bigTxt = pk ? (kind === 'surg' ? (careCount(pk) + ' 次') : ('×' + careCount(pk))) : '×0';
 
     ctx.textAlign = 'right';
     ctx.font = '800 28px ' + mono;
-    ctx.fillStyle = MD ? MD.color : '#3d5a6a';
-    ctx.fillText(MD ? '×' + medCount(mdId) : '×0', wx, wy);
+    ctx.fillStyle = col2;
+    ctx.fillText(bigTxt, wx, wy2);
 
+    /* 医疗包是剩余耐久，其它按"还剩多少份"的比例 */
     const bw2 = 132;
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    drawRoundRect(wx - bw2, wy + 7, bw2, 4, 2);
-    ctx.fill();
-    if (MD) {
-      ctx.fillStyle = MD.color;
-      drawRoundRect(wx - bw2, wy + 7, Math.max(1, bw2 * pct), 4, 2);
-      ctx.fill();
+    drawRoundRect(wx - bw2, wy2 + 7, bw2, 4, 2); ctx.fill();
+    let pct2 = 0;
+    if (pk && kind === 'med') pct2 = clamp(medLeftOf(cid2) / MEDKITS[cid2].dur, 0, 1);
+    else if (pk && kind === 'stop') pct2 = clamp(careCount(pk) / 6, 0, 1);
+    else if (pk && kind === 'surg') pct2 = clamp(careCount(pk) / SURGERIES[cid2].uses, 0, 1);
+    if (pk) {
+      ctx.fillStyle = col2;
+      drawRoundRect(wx - bw2, wy2 + 7, Math.max(1, bw2 * pct2), 4, 2); ctx.fill();
     }
 
+    let sub1 = '', sub2 = '', sub2warn = false;
+    if (!pk) {
+      sub1 = '没有治疗物品 · 回大厅补给';
+    } else if (kind === 'med') {
+      const MD = MEDKITS[cid2];
+      sub1 = MD.hps + ' 血/秒 · 启动 ' + MD.wind + 's · 耐久 ' + Math.ceil(medLeftOf(cid2)) + '/' + MD.dur
+        + (P.deb.bleed > 0 ? ' · 流血拖慢 25%' : '');
+    } else if (kind === 'stop') {
+      const S = STOPS[cid2];
+      if (S.pain) {
+        sub1 = '止痛 ' + S.pain + 's · 读条 ' + S.sec + 's · 一次性';
+        sub2 = P.painT > 0 ? ('止痛还剩 ' + Math.ceil(P.painT) + 's') : '受伤 -10% · 屏蔽臂伤与黑边';
+        sub2warn = P.painT > 0;
+      } else {
+        sub1 = (S.layers > 1 ? '止全部流血' : '止 1 层流血') + ' · 读条 ' + S.sec + 's · 一次性';
+        sub2 = P.deb.bleed > 0 ? ('当前流血 ×' + P.deb.bleed) : '现在没有流血';
+        sub2warn = P.deb.bleed <= 0;
+      }
+    } else {
+      const S = SURGERIES[cid2];
+      const t = surgTarget();
+      sub1 = '读条 ' + S.sec + 's · 剩 ' + careCount(pk) + '/' + S.uses + ' 次';
+      sub2 = t ? ('将处理：' + t.label) : '没有需要手术的伤';
+      sub2warn = !t;
+    }
     ctx.font = '700 10px ' + mono;
     ctx.fillStyle = 'rgba(120,170,200,0.65)';
-    ctx.fillText(MD
-      ? (MD.hps + ' 血/秒 · 启动 ' + MD.wind + 's · 耐久 ' + Math.ceil(left) + '/' + MD.dur + (P.wound ? ' · 伤口拖慢 25%' : ''))
-      : '没有医疗包 · 回大厅补给', wx, wy + 22);
+    ctx.fillText(sub1, wx, wy2 + 20);
+    if (sub2) {
+      ctx.fillStyle = sub2warn ? 'rgba(255,120,110,0.85)' : 'rgba(150,228,255,0.85)';
+      ctx.fillText(sub2, wx, wy2 + 31);
+    }
 
     const winding = P.medOn && P.medWind > 0;
+    const stateY = sub2 ? wy2 + 42 : wy2 + 31;
     ctx.fillStyle = winding ? '#ffd66b' : (P.medOn ? '#8fffc4' : 'rgba(150,228,255,0.85)');
     ctx.fillText(
-      winding ? ('启动中 ' + P.medWind.toFixed(1) + 's · 左键 / 5 取消')
-        : (P.medOn ? '回血中 · 左键 / 5 停手' : '短按 5 包扎 · 长按 5 选型号'),
-      wx, wy + 34);
+      winding ? (careKindOf(P.medOn) === 'surg'
+        ? ('手术中 ' + P.medWind.toFixed(1) + 's · 左键 / 5 中止')
+        : ('启动中 ' + P.medWind.toFixed(1) + 's · 左键 / 5 取消'))
+        : (P.medOn ? (careKindOf(P.medOn) === 'med' ? '回血中 · 左键 / 5 停手' : '处理中 · 左键 / 5 停手')
+          : '短按 5 使用 · 长按 5 选择'),
+      wx, stateY);
   }
 
   if (inHand && P.reloading > 0) {
@@ -8100,6 +8843,60 @@ function render() {
   if (G.scene === 'playing' || G.scene === 'paused') {
     drawOffscreenMarkers();
     drawHUD();
+    drawDebuffOverlay();
+  }
+}
+
+/* 贯穿伤的黑边 / 失血的压边。
+   贯穿伤每层压一圈黑，止痛能把它压回去（视觉惩罚被屏蔽）；
+   流血的红色压边止痛压不住——那是真在掉血。 */
+function drawDebuffOverlay() {
+  if (!P.alive) return;
+  const red = redLayers();
+  const bleed = P.deb.bleed;
+  const pain = P.painT > 0;
+  const redA = red * 0.085 * (pain ? 0.22 : 1);
+  const bleedA = Math.min(0.20, bleed * 0.032);
+  if (redA <= 0.001 && bleedA <= 0.001) return;
+
+  const cx = VW / 2, cy = VH / 2;
+  const rIn = Math.min(VW, VH) * 0.30;
+  const rOut = Math.max(VW, VH) * 0.78;
+
+  if (redA > 0.001) {
+    const g = ctx.createRadialGradient(cx, cy, rIn, cx, cy, rOut);
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    g.addColorStop(0.58, 'rgba(0,0,0,' + (redA * 0.42).toFixed(3) + ')');
+    g.addColorStop(1, 'rgba(0,0,0,' + redA.toFixed(3) + ')');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, VW, VH);
+
+    /* 视野发糊：极淡的一层米粒噪点跟着呼吸一样起伏，比真模糊便宜得多 */
+    const pulse = (0.012 + 0.008 * Math.sin(G.time * 2.2)) * Math.min(3, red);
+    ctx.fillStyle = 'rgba(0,0,0,' + pulse.toFixed(3) + ')';
+    ctx.fillRect(0, 0, VW, VH);
+  }
+
+  if (bleedA > 0.001) {
+    const g2 = ctx.createRadialGradient(cx, cy, rIn * 0.88, cx, cy, rOut);
+    g2.addColorStop(0, 'rgba(120,0,16,0)');
+    g2.addColorStop(1, 'rgba(150,0,20,' + bleedA.toFixed(3) + ')');
+    ctx.fillStyle = g2;
+    ctx.fillRect(0, 0, VW, VH);
+  }
+
+  /* 腿伤：画面底部一条晃动的橙光，跟着步伐一瘸一拐。
+     止痛只能把这层光压淡一半 —— 走不动这件事它骗不过去。 */
+  const legLv = P.deb.leg + P.deb.fissure;
+  if (legLv > 0) {
+    const limpH = VH * 0.18;
+    const sway = Math.sin(P.walkPhase * 0.5) * 0.06 + 0.10;
+    const g3 = ctx.createLinearGradient(0, VH - limpH, 0, VH);
+    const a3 = (0.10 + 0.05 * Math.min(2, legLv)) * (pain ? 0.55 : 1);
+    g3.addColorStop(0, 'rgba(255,120,60,0)');
+    g3.addColorStop(1, 'rgba(255,110,50,' + (a3 * (1 + sway)).toFixed(3) + ')');
+    ctx.fillStyle = g3;
+    ctx.fillRect(0, VH - limpH, VW, limpH);
   }
 }
 
@@ -8163,13 +8960,15 @@ function refreshLobby() {
 
   // 补给槽
   const medN = saveMedTotal();
-  const medPickId = saveMedPick();
+  const stopN = saveStopTotal();
+  const surgN = saveSurgTotal();
+  const pickKey = saveCarePick();
   slotList.appendChild(makeSlot({
     ico: '✚',
-    nm: '医疗 ×' + medN + '    手雷 ×' + SAVE.grenades,
-    ds: '首选 ' + MEDKITS[medPickId].name + ' · 弹药包 ×' + SAVE.ammoPacks + ' · 备弹 +' + (SAVE.ammoPacks * 50) + '%',
+    nm: '医疗 ×' + medN + ' · 止血 ×' + stopN + ' · 手术 ' + surgN + ' 次',
+    ds: '首选 ' + careName(pickKey) + ' · 手雷 ×' + SAVE.grenades + ' · 弹药包 ×' + SAVE.ammoPacks + ' · 备弹 +' + (SAVE.ammoPacks * 50) + '%',
     val: '补给',
-    empty: medN + SAVE.grenades === 0,
+    empty: medN + stopN + surgN + SAVE.grenades === 0,
     onClick: () => openShop('supply'),
   }));
 
@@ -9051,6 +9850,59 @@ function refreshShop() {
       grid.appendChild(el);
     }
 
+    /* 止血件：一次性消耗，按卷 / 条算 */
+    for (const id of STOP_ORDER) {
+      const S = STOPS[id];
+      const held = (SAVE.stops && SAVE.stops[id]) | 0;
+      const canAfford = SAVE.credits >= S.price;
+
+      const el = document.createElement('div');
+      el.className = 'item';
+      el.innerHTML =
+        '<div class="top"><span class="nm">' + S.name + '</span>' +
+        '<span class="tag">持有 ×' + held + '</span></div>' +
+        '<div class="code">' + S.code + '</div>' +
+        '<div class="ds">' + S.desc + '</div>' +
+        '<div class="ds" style="color:#6fb0cf">' +
+          (S.pain ? ('止痛 ' + S.pain + 's（受伤 -10% · 屏蔽臂伤与黑边）')
+                  : (S.layers > 1 ? '一次压住全部流血层' : '一次止 1 层流血'))
+          + ' · 读条 ' + S.sec + 's</div>' +
+        '<div class="buyrow">' +
+          '<span class="price"><i>¥</i>' + fmtMoney(S.price) + '</span>' +
+          '<button class="buybtn"' + (canAfford ? '' : ' disabled') + '>' +
+          (canAfford ? '购买' : '资金不足') + '</button>' +
+        '</div>';
+
+      el.querySelector('.buybtn').addEventListener('click', () => buyStop(id));
+      grid.appendChild(el);
+    }
+
+    /* 手术包：按"剩几次刀"算，买一次补满一整包 */
+    for (const id of SURG_ORDER) {
+      const S = SURGERIES[id];
+      const uses = (SAVE.surgs && SAVE.surgs[id] && SAVE.surgs[id].uses) | 0;
+      const full = uses >= S.uses;
+      const canAfford = SAVE.credits >= S.price;
+
+      const el = document.createElement('div');
+      el.className = 'item' + (full ? ' owned' : '');
+      el.innerHTML =
+        '<div class="top"><span class="nm">' + S.name + '</span>' +
+        '<span class="tag' + (full ? ' own' : '') + '">' + (uses > 0 ? '剩 ' + uses + '/' + S.uses + ' 次' : '未持有') + '</span></div>' +
+        '<div class="code">' + S.code + ' · ' + S.grade + '</div>' +
+        '<div class="ds">' + S.desc + '</div>' +
+        '<div class="ds" style="color:#6fb0cf">' + S.uses + ' 次 · 单次读条 ' + S.sec + 's · 治贯穿伤 / 骨折 / 骨裂</div>' +
+        '<div class="bars">' + bar('剩余次数', uses / S.uses) + '</div>' +
+        '<div class="buyrow">' +
+          '<span class="price"><i>¥</i>' + fmtMoney(S.price) + '</span>' +
+          '<button class="buybtn' + (full ? ' owned' : '') + '"' + (full || !canAfford ? ' disabled' : '') + '>' +
+          (full ? '已满' : (canAfford ? (uses > 0 ? '补满' : '购买') : '资金不足')) + '</button>' +
+        '</div>';
+
+      if (!full) el.querySelector('.buybtn').addEventListener('click', () => buySurg(id));
+      grid.appendChild(el);
+    }
+
     for (const key in SUPPLY) {
       const s = SUPPLY[key];
       let count = 0, ownedTag = '';
@@ -9170,11 +10022,39 @@ function buyMedkit(id) {
   if (!SAVE.meds) SAVE.meds = {};
   const s = SAVE.meds[id] || (SAVE.meds[id] = { n: 0, left: 0 });
   s.n = Math.min(99, (s.n | 0) + 1);
-  if (saveMedTotal() === 1) SAVE.medPick = id;
+  if (saveMedTotal() === 1) SAVE.carePick = careKeyMake('med', id);
   saveGame();
   Sfx.init(); Sfx.resume(); Sfx.pickup();
   refreshShop();
   uiToast('已购入 ' + M.name + ' ×1', 'small');
+}
+
+/* 买一卷止血件 */
+function buyStop(id) {
+  const S = STOPS[id];
+  if (!S || SAVE.credits < S.price) return;
+  SAVE.credits -= S.price;
+  if (!SAVE.stops) SAVE.stops = {};
+  SAVE.stops[id] = Math.min(99, (SAVE.stops[id] | 0) + 1);
+  saveGame();
+  Sfx.init(); Sfx.resume(); Sfx.pickup();
+  refreshShop();
+  uiToast('已购入 ' + S.name + ' ×1', 'small');
+}
+
+/* 买手术包：一个整包，直接补满次数（不能囤两包） */
+function buySurg(id) {
+  const S = SURGERIES[id];
+  if (!S || SAVE.credits < S.price) return;
+  if (!SAVE.surgs) SAVE.surgs = {};
+  const s = SAVE.surgs[id] || (SAVE.surgs[id] = { uses: 0 });
+  if ((s.uses | 0) >= S.uses) return;
+  SAVE.credits -= S.price;
+  s.uses = S.uses;
+  saveGame();
+  Sfx.init(); Sfx.resume(); Sfx.pickup();
+  refreshShop();
+  uiToast('已购入 ' + S.name + ' · ' + S.uses + ' 次', 'small');
 }
 
 function buySupply(key) {
@@ -9307,7 +10187,14 @@ function endRaid(success) {
       const s = P.meds[id] || { n: 0, left: 0 };
       SAVE.meds[id] = { n: Math.max(0, s.n | 0), left: Math.max(0, s.left || 0) };
     }
-    SAVE.medPick = MEDKITS[P.medPick] ? P.medPick : STARTER_MEDKIT;
+    /* 止血件与手术包也按"用剩多少"带回去 */
+    SAVE.stops = {};
+    for (const id of STOP_ORDER) SAVE.stops[id] = Math.max(0, P.stops[id] | 0);
+    SAVE.surgs = {};
+    for (const id of SURG_ORDER) {
+      SAVE.surgs[id] = { uses: Math.max(0, Math.min(SURGERIES[id].uses, surgUses(id))) };
+    }
+    SAVE.carePick = normCareKey(P.carePick);
     SAVE.grenades = P.grenades;
 
     // 搜到的配件入库，之后才能在改装台上装
@@ -9350,6 +10237,8 @@ function endRaid(success) {
     SAVE.equippedArmor = 0;
     SAVE.armorMax = 0;
     SAVE.meds = {};                 // 带进去的药全丢，跟手雷一样
+    SAVE.stops = {};                // 绷带、止血带也一起丢
+    SAVE.surgs = {};                // 手术包用得只剩一次也留不下
     SAVE.grenades = 0;
 
     rows.push(['丢失收集品', lostN + ' 件 · 价值 ¥' + fmtMoney(G.lootValue), 'neg']);
