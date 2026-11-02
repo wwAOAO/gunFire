@@ -16,7 +16,7 @@
   /* ══════════ 通用覆盖层 ══════════ */
   .overlay {
     position:fixed; inset:0; z-index:20;
-    display:flex; align-items:center; justify-content:center;
+    display:flex; align-items:flex-start; justify-content:center;
     background:radial-gradient(ellipse at 50% -10%, #0e1e2b 0%, #06090d 55%, #04060a 100%);
     overflow-y:auto; padding:24px 20px;
   }
@@ -33,6 +33,7 @@
 
   .frame {
     position:relative; width:100%; max-width:1080px;
+    margin:auto;                 /* 装得下就居中，装不下就从顶部开始滚 */
     display:flex; flex-direction:column; gap:16px;
     animation:rise .3s cubic-bezier(.2,.8,.3,1) both;
   }
@@ -558,7 +559,7 @@
           <div class="mapsel-note" id="mapselNote"></div>
         </div>
         <button id="deployBtn" class="btn primary">出 击</button>
-        <div class="risk" id="riskLine">手枪永久保底，阵亡后可无成本再战</div>
+        <div class="risk" id="riskLine">匕首永久保底，枪和子弹都要自己买</div>
       </section>
     </div>
 
@@ -919,8 +920,9 @@ const MODS = {
    ══════════════════════════════════════════════════════════ */
 const SAVE_KEY = 'neonpurge_extract_v1';
 
-/* 免费保底枪：永远拥有、备弹无限。破产了也一定能再战一局。 */
-const STARTER_WEAPON = 'g17';
+/* 基准枪：只在「查不到 id」时给数值表兜底，不代表玩家拥有它。
+   G17 现在是一把要花钱买的手枪，不再白送、也不再自动塞进手枪槽。 */
+const BASE_WEAPON = 'g17';
 
 /* ── 近战武器 ──
    刀不占枪的弹药，槽位独立（数字键 3）。判定是"身前一段扇形"，
@@ -1089,10 +1091,11 @@ function normCareKey(v) {
 
 const DEFAULT_SAVE = () => ({
   credits: 3500,
-  owned: { [STARTER_WEAPON]: true },
+  /* 新档一把枪都没有：G17 也要去军火库买，只有匕首是白送的 */
+  owned: {},
   armorMax: 0,
   /* 出击配装：主武器 / 副武器（都只能放长枪）/ 手枪。空槽是 null */
-  loadout: { primary: null, secondary: null, pistol: STARTER_WEAPON },
+  loadout: { primary: null, secondary: null, pistol: null },
   ownedMelee: { [STARTER_MELEE]: true },
   equippedMelee: STARTER_MELEE,
   equippedArmor: 0,
@@ -1105,6 +1108,7 @@ const DEFAULT_SAVE = () => ({
   carePick: 'med:' + STARTER_MEDKIT,   // 上次用的那种 —— 短按 5 直接掏它
   grenades: 1,
   ammoPacks: 0,
+  pistolAmmo: 0,
   stash: {},          // 仓库里的收集品：{ 收集品id: 数量 }
   modBag: {},         // 配件库存：{ 配件id: 数量 }
   mods: {},           // 每把枪装了什么：{ 枪id: { 槽位id: 配件id } }
@@ -1122,7 +1126,9 @@ const KNOWN_WEAPON_IDS = { g17: 1, '93r': 1, g18: 1, bizon: 1, m870: 1, m4a1: 1,
 const PISTOL_IDS = { g17: 1, '93r': 1, g18: 1 };
 
 function migrateWeaponIds(owned) {
-  const out = { [STARTER_WEAPON]: true };
+  /* 老档当年是白送 G17 的，这里保留这份所有权，不凭空没收；
+     新档走 DEFAULT_SAVE（owned 是空的），想用手枪得自己买。 */
+  const out = { [BASE_WEAPON]: true };
   for (const id in owned) {
     if (!owned[id]) continue;
     const to = WEAPON_ID_MIGRATE[id] || id;
@@ -1152,6 +1158,7 @@ function loadSave() {
       carePick: normCareKey(d.carePick || d.medPick),
       grenades: d.grenades | 0,
       ammoPacks: d.ammoPacks | 0,
+      pistolAmmo: d.pistolAmmo | 0,
       stash: cleanStash(d.stash),
       modBag: cleanModBag(d.modBag),
       mods: cleanGunMods(d.mods),
@@ -1163,7 +1170,8 @@ function loadSave() {
 /* 配装清洗：三把枪各自只能放对应类别的枪，而且必须真的拥有。
    旧档没有 loadout 字段，只有 equippedWeapon（唯一一把），按类别塞进对应槽。 */
 function cleanLoadout(d, owned) {
-  const LO = { primary: null, secondary: null, pistol: STARTER_WEAPON };
+  /* 手枪槽可以是空的 —— 没买手枪就空着出击（只能靠刀） */
+  const LO = { primary: null, secondary: null, pistol: null };
   const pick = (rawId, kind) => {
     const to = WEAPON_ID_MIGRATE[rawId] || rawId;
     if (!to || !KNOWN_WEAPON_IDS[to]) return null;
@@ -1178,13 +1186,13 @@ function cleanLoadout(d, owned) {
     LO.primary = pick(src.primary, 'long');
     LO.secondary = pick(src.secondary, 'long');
     if (LO.secondary === LO.primary) LO.secondary = null;
-    LO.pistol = pick(src.pistol, 'pistol') || STARTER_WEAPON;
+    LO.pistol = pick(src.pistol, 'pistol');
   } else {
     /* 老档：只有一把装备，按它是长枪还是手枪归位 */
     const eq = d.equippedWeapon;
     const one = pick(eq, 'long');
     if (one) LO.primary = one;
-    LO.pistol = pick(eq, 'pistol') || STARTER_WEAPON;
+    LO.pistol = pick(eq, 'pistol');
   }
   return LO;
 }
@@ -1315,7 +1323,7 @@ function saveGame() {
    ══════════════════════════════════════════════════════════ */
 /* ── 武器分类：军火库按这个顺序分组，每类先放一把 ── */
 const WEAPON_CATS = [
-  { id: 'pistol',  cn: '手枪',         en: 'PISTOL',  trait: '近身自保 · 免费保底' },
+  { id: 'pistol',  cn: '手枪',         en: 'PISTOL',  trait: '近身自保 · 最便宜的枪' },
   { id: 'smg',     cn: '冲锋枪',       en: 'SMG',     trait: '射速压制 · 大弹容' },
   { id: 'shotgun', cn: '霰弹枪',       en: 'SHOTGUN', trait: '贴脸爆发 · 破盾' },
   { id: 'rifle',   cn: '步枪',         en: 'RIFLE',   trait: '全能主力 · 穿透 1 人' },
@@ -1326,10 +1334,10 @@ const WEAPON_CATS = [
 /* mode：auto 扣住连发 / semi 每发都要重新扣扳机 / burst 一次三连点射 */
 const WEAPONS = {
   g17: {
-    cat: 'pistol', label: '手枪 · G17', short: 'G17', name: 'G17', code: 'GLOCK 17', price: 0,
-    desc: '免费保底手枪。17 发弹匣、单发点射、备弹无限——哪怕破产掉光，手里也总有一把能打响的枪。',
+    cat: 'pistol', label: '手枪 · G17', short: 'G17', name: 'G17', code: 'GLOCK 17', price: 700,
+    desc: '制式手枪，最便宜的入门枪。17 发弹匣、单发点射，备弹只有 4 个弹匣 —— 打空了要么局内捡弹匣，要么自带手枪弹盒。',
     dmg: 25, rate: 0.21, spread: 0.042, count: 1, mode: 'semi',
-    bspeed: 1250, mag: 17, reload: 1.15, recoil: 2.0, size: 3.1, reserveMul: 0,
+    bspeed: 1250, mag: 17, reload: 1.15, recoil: 2.0, size: 3.1, reserveMul: 4,
         ads: { spread: 0.56, move: 0.80, time: 0.12 },
     color: '#ffe08a', range: 900, knock: 55, sound: 'pistol', noise: 620,
     bars: { dmg: .30, rate: .34, mag: .42, acc: .68 },
@@ -1428,8 +1436,8 @@ const GUN_SLOTS = ['primary', 'secondary', 'pistol'];
 const WSTAT_CACHE = {};
 
 function weaponStats(id) {
-  const base = WEAPONS[id] || WEAPONS[STARTER_WEAPON];
-  const wid = WEAPONS[id] ? id : STARTER_WEAPON;
+  const base = WEAPONS[id] || WEAPONS[BASE_WEAPON];
+  const wid = WEAPONS[id] ? id : BASE_WEAPON;
   const eq = (SAVE.mods && SAVE.mods[wid]) || {};
 
   let sig = wid;
@@ -1496,6 +1504,7 @@ const ARMORS = [
 const SUPPLY = {
   grenade: { name: '破片手雷', price: 500, desc: '局内按 G 投掷，范围爆炸伤害。' },
   ammoPack:{ name: '弹药包',  price: 800, desc: '出击时所有武器备弹量 +50%。可叠加。' },
+  pistolAmmo:{ name: '手枪弹盒', price: 260, desc: '出击时给带上的每把手枪多塞 3 个弹匣。出击消耗一盒，没带手枪就不消耗。' },
 };
 
 
@@ -1825,15 +1834,15 @@ const P = {
   dashCd: 0,
   invuln: 0,
   hurtFlash: 0,
-  weapon: STARTER_WEAPON,       // 当前手持的那把枪（切到刀/医疗时保留上次的枪）
-  curSlot: 'pistol',            // primary / secondary / melee / pistol / medkit
-  slots: { primary: null, secondary: null, pistol: STARTER_WEAPON },
+  weapon: null,                 // 当前手持的那把枪（切到刀/医疗时保留上次的枪；一把枪都没有时是 null）
+  curSlot: 'melee',             // primary / secondary / melee / pistol / medkit
+  slots: { primary: null, secondary: null, pistol: null },
   melee: STARTER_MELEE,
   meleeCd: 0,
   swingT: 0,                    // 挥击动画剩余时间
   swingAim: 0,                  // 挥击时的朝向
   swingHit: 0,                  // 本次挥击命中人数（>0 就画命中特效）
-  owned: { [STARTER_WEAPON]: true },
+  owned: {},
   ammo: {},
   walkPhase: 0,
   recoil: 0,
@@ -2496,7 +2505,8 @@ function resetPlayer() {
   P.vy = 0;
   P.ads = 0;
   P.adsPrev = 0;
-  popup(P.x, P.y - 46, P.curSlot === 'pistol' ? '只有手枪 · 1~5 切换装备' : '右键开镜 · 1~5 切换装备', '#8ef2ff', 13);
+  popup(P.x, P.y - 46, P.curSlot === 'melee' ? '只有刀 · 1~5 切换装备'
+    : (P.curSlot === 'pistol' ? '只有手枪 · 1~5 切换装备' : '右键开镜 · 1~5 切换装备'), '#8ef2ff', 13);
   P.fireCd = 0;
   P.burstLeft = 0;
   P.triggerPrev = false;
@@ -2525,7 +2535,7 @@ function resetPlayer() {
   P.hurtDirT = 0;
 
   // 每局按大厅配装携带：主武器 / 副武器 / 手枪，三槽各自独立弹药
-  // 免费保底枪永远带在身上（备弹无限），破产也不至于空手
+  // 三个枪槽都可以是空的 —— 一把枪都没带就只能靠刀，不再白送手枪
   P.owned = {};
   P.slots = { primary: null, secondary: null, pistol: null };
   const LO = SAVE.loadout || {};
@@ -2535,10 +2545,9 @@ function resetPlayer() {
     P.slots[k] = id;
     P.owned[id] = true;
   }
-  if (!P.slots.pistol) P.slots.pistol = STARTER_WEAPON;
-  P.owned[P.slots.pistol] = true;
-  P.curSlot = P.slots.primary ? 'primary' : (P.slots.secondary ? 'secondary' : 'pistol');
-  P.weapon = P.slots[P.curSlot] || STARTER_WEAPON;
+  P.curSlot = P.slots.primary ? 'primary' : (P.slots.secondary ? 'secondary'
+    : (P.slots.pistol ? 'pistol' : 'melee'));
+  P.weapon = P.slots[P.curSlot] || null;
 
   P.melee = (SAVE.ownedMelee && SAVE.ownedMelee[SAVE.equippedMelee]) ? SAVE.equippedMelee : STARTER_MELEE;
   P.meleeCd = 0;
@@ -2553,6 +2562,22 @@ function resetPlayer() {
       mag: WS.mag,
       reserve: WS.reserveMul > 0 ? Math.round(WS.mag * WS.reserveMul * ammoMul) : Infinity,
     };
+  }
+
+  /* 手枪弹盒：出击消耗一盒，给带进来的每把手枪多塞 3 个弹匣。
+     一把手枪都没带就不扣，别白烧钱。 */
+  if ((SAVE.pistolAmmo | 0) > 0) {
+    let guns = 0;
+    for (const id of Object.keys(P.owned)) {
+      if (!PISTOL_IDS[id] || !P.ammo[id]) continue;
+      P.ammo[id].reserve += weaponStats(id).mag * 3;
+      guns++;
+    }
+    if (guns) {
+      SAVE.pistolAmmo = Math.max(0, (SAVE.pistolAmmo | 0) - 1);
+      saveGame();
+      uiToast('手枪弹盒 · ' + guns + ' 把手枪各 +3 匣备弹', 'small');
+    }
   }
 
   P.armorDR = ARMORS[SAVE.equippedArmor] ? ARMORS[SAVE.equippedArmor].dr : 0;
@@ -2577,6 +2602,7 @@ function resetPlayer() {
 }
 
 function currentAmmo() {
+  if (!P.weapon) return { mag: 0, reserve: 0 };     // 空手：没有弹匣可谈
   if (!P.ammo[P.weapon]) {
     const W = weaponStats(P.weapon);
     P.ammo[P.weapon] = { mag: W.mag, reserve: W.reserveMul > 0 ? W.mag * W.reserveMul : Infinity };
@@ -2941,6 +2967,7 @@ function equipSlot(slot) {
     if (slot === 'medkit') uiToast('没有治疗物品了 · 回大厅补给', 'small warn');
     else if (slot === 'secondary') uiToast('副武器槽是空的 · 回大厅装配', 'small warn');
     else if (slot === 'primary') uiToast('主武器槽是空的 · 回大厅装配', 'small warn');
+    else if (slot === 'pistol') uiToast('手枪槽是空的 · 去军火库买一把', 'small warn');
     else uiToast('没有可用的近战武器', 'small warn');
     return;
   }
@@ -3013,6 +3040,7 @@ function swingMelee() {
 }
 
 function startReload() {
+  if (!P.weapon) return;
   const W = weaponStats(P.weapon);
   const a = currentAmmo();
   if (P.reloading > 0 || a.mag >= W.mag || a.reserve <= 0) return;
@@ -3033,6 +3061,7 @@ function finishReload() {
 
 /* 扣扳机：全自动按住就连，半自动每发都要重新按，点射一次打三发 */
 function tryFire(edge) {
+  if (!P.weapon || !P.owned[P.weapon]) return;
   const W = weaponStats(P.weapon);
   const a = currentAmmo();
   if (P.reloading > 0 || a.mag <= 0 || P.fireCd > 0) return;
@@ -3048,6 +3077,7 @@ function tryFire(edge) {
 }
 
 function playerShoot() {
+  if (!P.weapon) return;
   const W = weaponStats(P.weapon);
   const a = currentAmmo();
   if (a.mag <= 0) { startReload(); return; }
@@ -5318,9 +5348,10 @@ function makeWeaponItem(wk) {
     color: '#c9a3ff', weapon: wk, tier: 'rare',
   };
 }
-/* 抽一把枪：优先抽还没有的，让武器箱真的能开图鉴（免费保底枪不进池子） */
+/* 抽一把枪：优先抽还没有的，让武器箱真的能开图鉴。
+   最便宜的入门枪 G17 只在军火库卖，不进空投池，免得开箱开出个便宜货。 */
 function pickGun(preferNew) {
-  const all = WEAPON_ORDER.filter(k => k !== STARTER_WEAPON);
+  const all = WEAPON_ORDER.filter(k => k !== BASE_WEAPON);
   if (preferNew && Math.random() < 0.68) {
     const pool = all.filter(k => !P.owned[k]);
     if (pool.length) return pick(pool);
@@ -5488,7 +5519,7 @@ function relicCount() {
   return n;
 }
 
-/* 给当前武器补备弹；备弹无限的枪（免费保底手枪）就转给背包里别的枪 */
+/* 给当前武器补备弹；备弹无限的枪就转给背包里别的枪 */
 function addAmmo(mags) {
   let w = P.weapon;
   if (!P.ammo[w] || P.ammo[w].reserve === Infinity) {
@@ -7961,8 +7992,9 @@ function drawHUD() {
   ctx.font = '700 12px ' + mono;
   const slotTag = (SLOT_DEFS.find(d => d.id === P.curSlot) || SLOT_DEFS[0]);
   const carePk = P.curSlot === 'medkit' ? carePickNow() : null;
+  /* 手枪槽的槽位名和枪种名都是「手枪」，别写成"手枪 · 手枪 · G17" */
   const headTxt = inHand
-    ? (slotTag.cn + ' · ' + weaponName(W))
+    ? (slotTag.cn === weaponCatOf(W).cn ? (slotTag.cn + ' · ' + W.name) : (slotTag.cn + ' · ' + weaponName(W)))
     : (slotTag.cn + ' · ' + (P.curSlot === 'melee'
         ? (MELEES[P.melee] || MELEES[STARTER_MELEE]).name
         : (carePk ? careName(carePk) : '无治疗物品')));
@@ -8976,7 +9008,7 @@ function refreshLobby() {
   $('creditVal').textContent = fmtMoney(SAVE.credits);
 
   const armor = ARMORS[SAVE.equippedArmor] || ARMORS[0];
-  if (!SAVE.loadout) SAVE.loadout = { primary: null, secondary: null, pistol: STARTER_WEAPON };
+  if (!SAVE.loadout) SAVE.loadout = { primary: null, secondary: null, pistol: null };
 
   const ownedWeapons = WEAPON_ORDER.filter(k => SAVE.owned[k]);
   const ownedLong = ownedWeapons.filter(k => !PISTOL_IDS[k]);
@@ -9015,9 +9047,10 @@ function refreshLobby() {
   slotList.appendChild(makeSlot({
     ico: '✚',
     nm: '医疗 ×' + medN + ' · 急救 ×' + stopN + ' · 手术 ' + surgN + ' 次',
-    ds: '首选 ' + careName(pickKey) + ' · 手雷 ×' + SAVE.grenades + ' · 弹药包 ×' + SAVE.ammoPacks + ' · 备弹 +' + (SAVE.ammoPacks * 50) + '%',
+    ds: '首选 ' + careName(pickKey) + ' · 手雷 ×' + SAVE.grenades + ' · 弹药包 ×' + SAVE.ammoPacks +
+        ' · 手枪弹 ×' + (SAVE.pistolAmmo | 0) + ' 盒 · 备弹 +' + (SAVE.ammoPacks * 50) + '%',
     val: '补给',
-    empty: medN + stopN + surgN + SAVE.grenades === 0,
+    empty: medN + stopN + surgN + SAVE.grenades + (SAVE.pistolAmmo | 0) === 0,
     onClick: () => openShop('supply'),
   }));
 
@@ -9036,14 +9069,16 @@ function refreshLobby() {
     const secretRaid = G.tier === 'secret';
     if (secretRaid) {
       risk.textContent = '机密行动：敌人血量与伤害全面上调，但军械与保险柜更多、品质更高';
+    } else if (!ownedWeapons.length) {
+      risk.textContent = '一把枪都没有 · 现在只能空手带刀出击，先去军火库买把枪（G17 ¥700 起）';
     } else if (!SAVE.loadout.primary) {
-      risk.textContent = '主武器槽是空的 · 现在只能带手枪和刀出击，去军火库买一把长枪';
+      risk.textContent = '主武器槽是空的 · 只能带手枪和刀出击，去军火库买一把长枪';
     } else if (!SAVE.loadout.secondary && ownedWeapons.length < 3) {
       risk.textContent = '副武器槽空着 · 多带一把枪能少跑一趟，但阵亡会一起丢';
     } else if (SAVE.credits < 800) {
       risk.textContent = '资金吃紧：建议只带主武器低成本出击，撤离后再升级装备';
     } else {
-      risk.textContent = 'G17 与匕首永久保底 · 阵亡会丢掉带进去的枪和搜到的战利品';
+      risk.textContent = '匕首永久保底 · 阵亡会丢掉带进去的枪和搜到的战利品，枪和子弹都要自己买';
     }
   }
 
@@ -9074,13 +9109,15 @@ function gunSlot(o) {
   const LO = SAVE.loadout;
   let id = LO[o.slot];
   if (id && (!SAVE.owned[id] || !WEAPONS[id])) { LO[o.slot] = id = null; }
-  if (o.slot === 'pistol' && !id) { LO.pistol = id = STARTER_WEAPON; }
+  /* 手枪槽也可以是空的：没买手枪就空着，不自动兜底 */
 
   if (!id) {
     return makeSlot({
       ico: o.ico,
       nm: o.cn + ' · 空槽',
-      ds: o.pool.length ? '点击装入一把长枪（在已拥有的之间轮换）' : '还没有长枪，去军火库买一把',
+      ds: o.pool.length
+        ? (o.slot === 'pistol' ? '点击装入一把手枪（在已拥有的之间轮换）' : '点击装入一把长枪（在已拥有的之间轮换）')
+        : (o.slot === 'pistol' ? '还没有手枪，去军火库买一把（G17 ¥700 起）' : '还没有长枪，去军火库买一把'),
       val: o.cn,
       empty: true,
       onClick: () => cycleLoadout(o.slot, o.pool, o.allowEmpty),
@@ -9149,7 +9186,7 @@ function closeShop() {
    配件库是「物资」：装上去就从库里扣一件，拆下来再还回去。
    同一件配件不能同时装在两把枪上 —— 想换就拆。
    ══════════════════════════════════════════════════════════ */
-let gsPick = { weapon: STARTER_WEAPON, slot: 'muzzle' };
+let gsPick = { weapon: null, slot: 'muzzle' };
 let gsFrom = 'lobby';           // 从大厅还是军火库进来的
 
 const MOD_LABEL = {
@@ -9185,7 +9222,7 @@ function openGunsmith(wid) {
   const LO = SAVE.loadout || {};
   const fav = (LO.primary && SAVE.owned[LO.primary]) ? LO.primary
     : (LO.pistol && SAVE.owned[LO.pistol] ? LO.pistol : null);
-  gsPick.weapon = (wid && SAVE.owned[wid]) ? wid : (fav || owned[0] || STARTER_WEAPON);
+  gsPick.weapon = (wid && SAVE.owned[wid]) ? wid : (fav || owned[0] || null);
   gsPick.slot = 'muzzle';
   gsFrom = $('shop').classList.contains('hidden') ? 'lobby' : 'shop';
   $('lobby').classList.add('hidden');
@@ -9204,8 +9241,19 @@ function refreshGunsmith() {
   $('gsCredit').textContent = fmtMoney(SAVE.credits);
 
   const owned = WEAPON_ORDER.filter(k => SAVE.owned[k]);
-  if (!SAVE.owned[gsPick.weapon]) gsPick.weapon = owned[0] || STARTER_WEAPON;
+  if (!SAVE.owned[gsPick.weapon]) gsPick.weapon = owned[0] || null;
   $('gsGunCount').textContent = owned.length;
+
+  /* 一把枪都没有：改装台只给一句去买枪，别去碰 WEAPONS[null] */
+  if (!owned.length) {
+    $('gsHead').innerHTML = '<span class="hn">没有可改装的枪</span><span class="hc">去军火库买一把再来</span>';
+    $('gsSlots').innerHTML = '';
+    $('gsModList').innerHTML = '';
+    $('gsSlotName').textContent = '—';
+    const cv0 = $('gsPreview');
+    if (cv0) { const g0 = cv0.getContext('2d'); g0.clearRect(0, 0, cv0.width, cv0.height); }
+    return;
+  }
 
   /* ── 左：已拥有的枪 ── */
   const list = $('gsGunList');
@@ -9958,6 +10006,7 @@ function refreshShop() {
       let count = 0, ownedTag = '';
       if (key === 'grenade') { count = SAVE.grenades; ownedTag = '持有 ×' + count; }
       if (key === 'ammoPack') { count = SAVE.ammoPacks; ownedTag = '持有 ×' + count; }
+      if (key === 'pistolAmmo') { count = SAVE.pistolAmmo | 0; ownedTag = '持有 ×' + count + ' 盒'; }
 
       const canAfford = SAVE.credits >= s.price;
 
@@ -10019,7 +10068,7 @@ function weaponSpecs(w) {
 
 /* 新买的枪往哪放：空槽优先，都满了就替换主武器 */
 function autoAssign(id) {
-  if (!SAVE.loadout) SAVE.loadout = { primary: null, secondary: null, pistol: STARTER_WEAPON };
+  if (!SAVE.loadout) SAVE.loadout = { primary: null, secondary: null, pistol: null };
   const LO = SAVE.loadout;
   if (PISTOL_IDS[id]) { LO.pistol = id; return 'pistol'; }
   if (!LO.primary || !SAVE.owned[LO.primary]) { LO.primary = id; return 'primary'; }
@@ -10114,6 +10163,7 @@ function buySupply(key) {
   SAVE.credits -= s.price;
   if (key === 'grenade') SAVE.grenades++;
   if (key === 'ammoPack') SAVE.ammoPacks++;
+  if (key === 'pistolAmmo') SAVE.pistolAmmo = (SAVE.pistolAmmo | 0) + 1;
   saveGame();
   Sfx.init(); Sfx.resume(); Sfx.pickup();
   refreshShop();
@@ -10192,6 +10242,7 @@ function startRaid() {
 
   lastT = 0;
   uiToast('进入封锁区', '');
+  if (!P.weapon) uiToast('空手出击 · 只有匕首', 'warn');
   setTimeout(() => uiToast('搜刮物资，找到撤离点', 'small'), 1400);
 }
 
@@ -10273,12 +10324,12 @@ function endRaid(success) {
     let lostModN = 0;
     for (const sl of GUN_SLOTS) {
       const id = SAVE.loadout[sl];
-      if (!id || id === STARTER_WEAPON || !SAVE.owned[id]) continue;
+      if (!id || !SAVE.owned[id]) continue;
       lostNames.push(WEAPONS[id].short);
       lostModN += gunModCount(id);
       delete SAVE.owned[id];
       delete SAVE.mods[id];          // 枪没了，装在上面的配件跟着一起没
-      SAVE.loadout[sl] = sl === 'pistol' ? STARTER_WEAPON : null;
+      SAVE.loadout[sl] = null;
     }
     const lostWeapon = lostNames.length ? lostNames.join(' · ') : null;
     const lostArmor = SAVE.equippedArmor > 0 ? ARMORS[SAVE.equippedArmor].name : null;
@@ -10293,7 +10344,7 @@ function endRaid(success) {
     SAVE.grenades = 0;
 
     rows.push(['丢失收集品', lostN + ' 件 · 价值 ¥' + fmtMoney(G.lootValue), 'neg']);
-    rows.push(['损失武器', lostWeapon ? lostWeapon : '无（G17 保底）', lostWeapon ? 'neg' : 'neu']);
+    rows.push(['损失武器', lostWeapon ? lostWeapon : '无', lostWeapon ? 'neg' : 'neu']);
     rows.push(['损失配件', (lostModN + foundN) ? (lostModN + foundN) + ' 件（随枪）' : '无', (lostModN + foundN) ? 'neg' : 'neu']);
     rows.push(['近战武器', '随身带走 · 不丢', 'neu']);
     rows.push(['损失护甲', lostArmor ? lostArmor : '无', lostArmor ? 'neg' : 'neu']);
