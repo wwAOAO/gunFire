@@ -138,6 +138,18 @@
   }
   .mcard.on b { color:#8cf0ff; }
   .mcard.on small { color:#6fb6cf; }
+  /* 机密模式：卡片走危险色，一眼能和普通区分 */
+  .mcard.secret { border-color:rgba(255,92,122,.42); background:rgba(26,10,16,.72); }
+  .mcard.secret b { color:#ffb3c1; }
+  .mcard.secret small { color:#a76b7d; }
+  .mcard.secret:hover { border-color:rgba(255,92,122,.7); background:rgba(38,14,22,.9); }
+  .mcard.secret.on {
+    border-color:rgba(255,92,122,.9);
+    background:linear-gradient(180deg, rgba(96,26,42,.55), rgba(28,10,16,.9));
+    box-shadow:0 0 14px rgba(255,92,122,.18), inset 0 0 18px rgba(255,92,122,.08);
+  }
+  .mcard.secret.on b { color:#ffd0da; }
+  .mcard.secret.on small { color:#d08a9b; }
   .mapsel-note { font-size:10.5px; color:#3f5d72; margin-top:7px; line-height:1.55; letter-spacing:.04em; }
   .mapsel-note b { color:#7fc9e2; font-weight:600; }
 
@@ -1056,7 +1068,7 @@ const WEAPONS = {
     desc: '泵动霰弹枪，一次糊出 8 枚弹丸。一发打碎盾兵的盾，两发送走重甲。远一点就基本打空。',
     dmg: 13, rate: 0.85, spread: 0.215, count: 8, mode: 'semi',
     bspeed: 1000, mag: 7, reload: 2.6, recoil: 10, size: 3.0, reserveMul: 4,
-        ads: { spread: 0.70, move: 0.55, time: 0.22 },
+        ads: { spread: 0.70, move: 0.62, time: 0.22 },
     color: '#ffab5e', range: 520, knock: 170, sound: 'shotgun', noise: 860,
     bars: { dmg: .90, rate: .22, mag: .22, acc: .12 },
   },
@@ -1074,7 +1086,7 @@ const WEAPONS = {
     desc: '半自动精确射手步枪。单发 70 点、后坐极轻，两三发一个点射就能清掉远处探头的人。',
     dmg: 70, rate: 0.33, spread: 0.009, count: 1, mode: 'semi',
     bspeed: 2100, mag: 18, reload: 2.1, recoil: 7, size: 3.8, reserveMul: 5,
-        ads: { spread: 0.30, move: 0.48, time: 0.24 },
+        ads: { spread: 0.30, move: 0.55, time: 0.24 },
     color: '#9ef2c8', range: 1900, knock: 150, sound: 'dmr', pierce: 1, noise: 1080,
     bars: { dmg: .72, rate: .46, mag: .42, acc: .94 },
   },
@@ -1083,7 +1095,7 @@ const WEAPONS = {
     desc: '栓动狙击枪。单发 310 点，一枪一个重甲兵，子弹能穿三名目标；代价是每发都要拉一次栓。',
     dmg: 310, rate: 1.35, spread: 0.003, count: 1, mode: 'semi',
     bspeed: 2800, mag: 5, reload: 2.7, recoil: 16, size: 4.2, reserveMul: 5,
-        ads: { spread: 0.18, move: 0.34, time: 0.30 },
+        ads: { spread: 0.18, move: 0.44, time: 0.30 },
     color: '#9fd4ff', range: 2600, knock: 260, sound: 'sniper', pierce: 3, noise: 1250,
     bars: { dmg: 1.0, rate: .10, mag: .14, acc: 1.0 },
   },
@@ -1180,7 +1192,7 @@ const SUPPLY = {
 
 const ENEMY_TYPES = {
   /* 阿萨拉小兵：全家最小的个头、跑得最快，边冲边短点射，贴脸还有一记近身 */
-  runner:  { hp: 34,  r: 11, speed: 158, dmg: 9,  score: 12,  color: '#ff4d6d', glow: '#ff2d55', shape: 'tri',
+  runner:  { hp: 34,  r: 11, speed: 168, dmg: 9,  score: 12,  color: '#ff4d6d', glow: '#ff2d55', shape: 'tri',
              sight: 320, fov: 1.0,
              burst: { n: 3, gap: 0.11, dmg: 5.2, spd: 560, spread: 0.055, cd: [1.9, 2.7], range: 520 } },
   /* 阿萨拉盾兵：中等身板，正面一块厚盾挡子弹（能被打碎），盾后探头点射 */
@@ -1218,6 +1230,42 @@ const ENEMY_TYPES = {
              flame: { dur: 1.9, tick: 0.3, dmg: 4.5, range: 228, arc: 0.34, cd: [2.4, 3.2],
                       fireR: 44, fireLife: 2.0, fireDmg: 2.0 } },
 };
+
+/* ══════════════════════════════════════════════════════════
+   机密模式数值（「零号大坝·机密」专用）
+   ──────────────────────────────────────────────────────────
+   普通模式保持原表不变；机密模式换一套血量与伤害。
+   dmgMul 是该兵种「全部伤害」的统一倍率 —— 远程弹丸在读取处乘，
+   近战直接用 e.dmg，避免同一发伤害被乘两次。
+   ══════════════════════════════════════════════════════════ */
+const SECRET = {
+  hp: { runner: 68, shooter: 60, sniper: 55, rocket: 105, flamer: 170, brute: 360, boss: 2400 },
+  dmgMul: { runner: 1.35, shooter: 1.23, sniper: 0.84, rocket: 0.83, flamer: 1.33, brute: 1.33, boss: 1.33 },
+  shield: 140,          // 盾兵的盾，普通是 120
+  playerInvuln: 0.30,   // 玩家挨打后的无敌帧，普通是 0.55（围攻才开始有压力）
+  firstWave: 60,        // 首波增援
+  gapBase: 45, gapK: 2, gapMin: 28,
+  bossWave: 4,          // 第 4 波带赤霄
+  loot: {
+    relicCommon: 0.42,  // 普通货权重 ×0.42
+    relicRare: 1.30,
+    relicHigh: 1.90,    // 史诗
+    relicTop: 3.20,     // 传说 / 神话
+    modHigh: 2.00,      // 配件史诗
+    gunChance: 0.34,    // 补给箱出枪（普通 0.20）
+    weaponModChance: 0.70,
+    safeExtraChance: 0.75,
+    safeModChance: 0.55,
+  },
+};
+function isSecret() { return G.tier === 'secret'; }
+/* 增援节奏：普通慢、机密紧 */
+function firstReinforceDelay() { return isSecret() ? SECRET.firstWave : 90; }
+function reinforceGap(wave) {
+  return isSecret() ? Math.max(SECRET.gapMin, SECRET.gapBase - wave * SECRET.gapK)
+                    : Math.max(30, 55 - wave * 2.5);
+}
+function bossWaveNo() { return isSecret() ? SECRET.bossWave : 5; }
 
 /* 近战攻击参数（贴身不再是"合体掉血"，而是在玩家体积之外抬手 → 突进 → 挥一刀）
    reach: 出手距离（加在 玩家半径 + 敌人半径 之上）  wind: 抬手预警时长（可躲窗口）
@@ -1389,6 +1437,7 @@ canvas.addEventListener('wheel', e => {
    ══════════════════════════════════════════════════════════ */
 const G = {
   scene: 'lobby',
+  tier: 'standard',   // 'standard' | 'secret'（机密模式：敌人更硬、战利品更好）
   time: 0,
   raidTime: 0,
   score: 0,
@@ -1399,7 +1448,7 @@ const G = {
   relics: [],      // 局内捡到的收集品：[{ id, n }]
   foundMods: [],   // 局内捡到的配件 id（撤离成功才进配件库）
   extractsFound: 0,
-  reinforceT: 34,
+  reinforceT: 90,
   reinforceWave: 0,
   alarm: 0,        // 全局警戒度 0..1
   callCd: 0,       // 「呼叫增援」冷却
@@ -1442,7 +1491,7 @@ const P = {
   x: 0, y: 0, r: 16,
   vx: 0, vy: 0,                 // 本帧速度，仅供敌方预判瞄准用
   hp: 100, maxHp: 100,
-  speed: 258,
+  speed: 220,
   aim: 0,
   fireCd: 0,
   reloading: 0,
@@ -1659,7 +1708,27 @@ const MAP_VERSION = 1;
    内置地图：零号大坝（水坝工业区）
    —— 与 maps/zero-dam.json 完全一致，可在编辑器里导入后继续改
    ══════════════════════════════════════════════════════════ */
-const BUILTIN_MAPS = {'zero-dam': ({"format":"neonpurge-map","version":1,"name":"零号大坝","w":3400,"h":2400,"spawns":[{"x":600,"y":260},{"x":1200,"y":2250},{"x":250,"y":1430},{"x":3320,"y":1150},{"x":3320,"y":2180},{"x":2560,"y":2340}],"obstacles":[{"x":0,"y":0,"w":3400,"h":140},{"x":380,"y":140,"w":70,"h":95},{"x":980,"y":140,"w":70,"h":95},{"x":2080,"y":140,"w":70,"h":95},{"x":2600,"y":140,"w":70,"h":95},{"x":3180,"y":140,"w":70,"h":95},{"x":1500,"y":150,"w":130,"h":60},{"x":2300,"y":150,"w":90,"h":60},{"x":0,"y":340,"w":780,"h":130},{"x":920,"y":340,"w":660,"h":130},{"x":1740,"y":340,"w":1000,"h":130},{"x":2880,"y":340,"w":520,"h":130},{"x":2380,"y":540,"w":620,"h":120},{"x":3060,"y":560,"w":130,"h":100},{"x":2380,"y":660,"w":40,"h":200},{"x":2960,"y":660,"w":40,"h":200},{"x":2380,"y":940,"w":220,"h":140},{"x":2760,"y":940,"w":240,"h":140},{"x":2620,"y":940,"w":80,"h":60},{"x":3120,"y":660,"w":80,"h":180},{"x":3120,"y":900,"w":130,"h":90},{"x":380,"y":560,"w":300,"h":90},{"x":380,"y":720,"w":300,"h":90},{"x":380,"y":880,"w":300,"h":90},{"x":760,"y":560,"w":230,"h":90},{"x":760,"y":720,"w":230,"h":90},{"x":800,"y":880,"w":40,"h":130},{"x":800,"y":1010,"w":220,"h":40},{"x":1050,"y":880,"w":40,"h":130},{"x":400,"y":1010,"w":280,"h":110},{"x":1400,"y":1120,"w":120,"h":64},{"x":1880,"y":1120,"w":120,"h":64},{"x":1400,"y":1290,"w":120,"h":64},{"x":1640,"y":1290,"w":120,"h":64},{"x":1640,"y":1460,"w":120,"h":64},{"x":1880,"y":1460,"w":120,"h":64},{"x":1400,"y":1600,"w":140,"h":90},{"x":1880,"y":1600,"w":80,"h":80},{"x":1040,"y":500,"w":460,"h":160},{"x":400,"y":1560,"w":380,"h":210},{"x":830,"y":1560,"w":130,"h":130},{"x":980,"y":1560,"w":130,"h":130},{"x":890,"y":1740,"w":60,"h":260},{"x":560,"y":1850,"w":90,"h":90},{"x":670,"y":1850,"w":90,"h":90},{"x":780,"y":1850,"w":90,"h":90},{"x":400,"y":1820,"w":120,"h":80},{"x":1000,"y":1780,"w":180,"h":110},{"x":400,"y":2020,"w":300,"h":80},{"x":2400,"y":1560,"w":280,"h":80},{"x":2440,"y":1690,"w":90,"h":90},{"x":2570,"y":1690,"w":90,"h":90},{"x":2700,"y":1690,"w":90,"h":90},{"x":2830,"y":1690,"w":90,"h":90},{"x":2440,"y":1820,"w":90,"h":90},{"x":2570,"y":1820,"w":90,"h":90},{"x":2700,"y":1820,"w":90,"h":90},{"x":2360,"y":1620,"w":30,"h":200},{"x":3000,"y":1660,"w":30,"h":220},{"x":2880,"y":1560,"w":110,"h":90},{"x":2900,"y":1900,"w":80,"h":80},{"x":2440,"y":1960,"w":70,"h":70},{"x":1240,"y":700,"w":70,"h":280},{"x":1240,"y":1060,"w":70,"h":240},{"x":2160,"y":1120,"w":70,"h":300},{"x":2160,"y":1500,"w":70,"h":260},{"x":1330,"y":880,"w":80,"h":80},{"x":2280,"y":640,"w":90,"h":90},{"x":900,"y":1240,"w":120,"h":56},{"x":1560,"y":2050,"w":120,"h":56},{"x":2200,"y":900,"w":56,"h":120},{"x":800,"y":2060,"w":320,"h":36},{"x":1700,"y":2060,"w":380,"h":36},{"x":1420,"y":1860,"w":240,"h":120},{"x":1180,"y":1300,"w":90,"h":90},{"x":2280,"y":1350,"w":80,"h":80},{"x":1120,"y":1180,"w":100,"h":90},{"x":1200,"y":2050,"w":80,"h":80},{"x":2250,"y":2180,"w":120,"h":60},{"x":2350,"y":1100,"w":60,"h":220},{"x":2480,"y":1250,"w":120,"h":50},{"x":2650,"y":1150,"w":140,"h":60},{"x":1900,"y":1750,"w":60,"h":160},{"x":2050,"y":1800,"w":130,"h":55},{"x":300,"y":1600,"w":70,"h":200},{"x":1280,"y":2200,"w":140,"h":55},{"x":2380,"y":2150,"w":120,"h":55}],"crates":[{"x":520,"y":685},{"x":900,"y":685},{"x":720,"y":950},{"x":960,"y":960},{"x":2470,"y":710},{"x":2900,"y":810},{"x":2780,"y":700},{"x":1580,"y":1152},{"x":1580,"y":1440},{"x":1580,"y":1492},{"x":2060,"y":1300},{"x":760,"y":2000},{"x":1000,"y":1940},{"x":1180,"y":1960},{"x":2750,"y":1950},{"x":2600,"y":2030},{"x":1500,"y":260},{"x":2900,"y":270},{"x":1300,"y":1450},{"x":2040,"y":1250}],"extracts":[{"x":2130,"y":650,"name":"A"},{"x":1720,"y":2260,"name":"B"}],"nests":[{"x":1090,"y":800},{"x":760,"y":1990},{"x":2920,"y":1845},{"x":1580,"y":1300},{"x":2700,"y":820},{"x":1150,"y":250},{"x":2200,"y":640},{"x":2250,"y":1950}],"units":[{"x":700,"y":685,"type":"runner"},{"x":720,"y":600,"type":"shooter"},{"x":940,"y":945,"type":"brute"},{"x":500,"y":1180,"type":"runner"},{"x":600,"y":1795,"type":"runner"},{"x":1200,"y":1700,"type":"shooter"},{"x":1130,"y":1950,"type":"brute"},{"x":740,"y":2120,"type":"runner"},{"x":2620,"y":1666,"type":"runner"},{"x":2760,"y":1960,"type":"shooter"},{"x":2560,"y":2020,"type":"brute"},{"x":2950,"y":1680,"type":"runner"},{"x":1340,"y":1200,"type":"runner"},{"x":2030,"y":1180,"type":"runner"},{"x":1580,"y":1220,"type":"shooter"},{"x":1580,"y":1400,"type":"shooter"},{"x":1640,"y":1660,"type":"brute"},{"x":1960,"y":1340,"type":"runner"},{"x":2520,"y":880,"type":"runner"},{"x":2900,"y":700,"type":"runner"},{"x":2740,"y":900,"type":"shooter"},{"x":2450,"y":890,"type":"shooter"},{"x":2860,"y":890,"type":"brute"},{"x":2680,"y":800,"type":"boss"},{"x":1200,"y":270,"type":"runner"},{"x":2350,"y":270,"type":"runner"},{"x":2100,"y":950,"type":"runner"},{"x":2560,"y":300,"type":"sniper"},{"x":1151,"y":691,"type":"sniper"},{"x":1980,"y":1080,"type":"rocket"},{"x":813,"y":1819,"type":"rocket"},{"x":2330,"y":1900,"type":"flamer"},{"x":1566,"y":1330,"type":"flamer"}],"squad":["runner","shooter","brute","runner","runner","shooter","brute","runner","runner","shooter","brute","runner","runner","runner","shooter","shooter","brute","runner","runner","runner","shooter","shooter","brute","boss","runner","runner","runner","sniper","sniper","rocket","rocket","flamer","flamer"]}) };
+const BUILTIN_MAPS = {'zero-dam': ({"format":"neonpurge-map","version":1,"name":"零号大坝·普通","w":3400,"h":2400,"spawns":[{"x":600,"y":260},{"x":1200,"y":2250},{"x":250,"y":1430},{"x":3320,"y":1150},{"x":3320,"y":2180},{"x":2560,"y":2340}],"obstacles":[{"x":0,"y":0,"w":3400,"h":140},{"x":380,"y":140,"w":70,"h":95},{"x":980,"y":140,"w":70,"h":95},{"x":2080,"y":140,"w":70,"h":95},{"x":2600,"y":140,"w":70,"h":95},{"x":3180,"y":140,"w":70,"h":95},{"x":1500,"y":150,"w":130,"h":60},{"x":2300,"y":150,"w":90,"h":60},{"x":0,"y":340,"w":780,"h":130},{"x":920,"y":340,"w":660,"h":130},{"x":1740,"y":340,"w":1000,"h":130},{"x":2880,"y":340,"w":520,"h":130},{"x":2380,"y":540,"w":620,"h":120},{"x":3060,"y":560,"w":130,"h":100},{"x":2380,"y":660,"w":40,"h":200},{"x":2960,"y":660,"w":40,"h":200},{"x":2380,"y":940,"w":220,"h":140},{"x":2760,"y":940,"w":240,"h":140},{"x":2620,"y":940,"w":80,"h":60},{"x":3120,"y":660,"w":80,"h":180},{"x":3120,"y":900,"w":130,"h":90},{"x":380,"y":560,"w":300,"h":90},{"x":380,"y":720,"w":300,"h":90},{"x":380,"y":880,"w":300,"h":90},{"x":760,"y":560,"w":230,"h":90},{"x":760,"y":720,"w":230,"h":90},{"x":800,"y":880,"w":40,"h":130},{"x":800,"y":1010,"w":220,"h":40},{"x":1050,"y":880,"w":40,"h":130},{"x":400,"y":1010,"w":280,"h":110},{"x":1400,"y":1120,"w":120,"h":64},{"x":1880,"y":1120,"w":120,"h":64},{"x":1400,"y":1290,"w":120,"h":64},{"x":1640,"y":1290,"w":120,"h":64},{"x":1640,"y":1460,"w":120,"h":64},{"x":1880,"y":1460,"w":120,"h":64},{"x":1400,"y":1600,"w":140,"h":90},{"x":1880,"y":1600,"w":80,"h":80},{"x":1040,"y":500,"w":460,"h":160},{"x":400,"y":1560,"w":380,"h":210},{"x":830,"y":1560,"w":130,"h":130},{"x":980,"y":1560,"w":130,"h":130},{"x":890,"y":1740,"w":60,"h":260},{"x":560,"y":1850,"w":90,"h":90},{"x":670,"y":1850,"w":90,"h":90},{"x":780,"y":1850,"w":90,"h":90},{"x":400,"y":1820,"w":120,"h":80},{"x":1000,"y":1780,"w":180,"h":110},{"x":400,"y":2020,"w":300,"h":80},{"x":2400,"y":1560,"w":280,"h":80},{"x":2440,"y":1690,"w":90,"h":90},{"x":2570,"y":1690,"w":90,"h":90},{"x":2700,"y":1690,"w":90,"h":90},{"x":2830,"y":1690,"w":90,"h":90},{"x":2440,"y":1820,"w":90,"h":90},{"x":2570,"y":1820,"w":90,"h":90},{"x":2700,"y":1820,"w":90,"h":90},{"x":2360,"y":1620,"w":30,"h":200},{"x":3000,"y":1660,"w":30,"h":220},{"x":2880,"y":1560,"w":110,"h":90},{"x":2900,"y":1900,"w":80,"h":80},{"x":2440,"y":1960,"w":70,"h":70},{"x":1240,"y":700,"w":70,"h":280},{"x":1240,"y":1060,"w":70,"h":240},{"x":2160,"y":1120,"w":70,"h":300},{"x":2160,"y":1500,"w":70,"h":260},{"x":1330,"y":880,"w":80,"h":80},{"x":2280,"y":640,"w":90,"h":90},{"x":900,"y":1240,"w":120,"h":56},{"x":1560,"y":2050,"w":120,"h":56},{"x":2200,"y":900,"w":56,"h":120},{"x":800,"y":2060,"w":320,"h":36},{"x":1700,"y":2060,"w":380,"h":36},{"x":1420,"y":1860,"w":240,"h":120},{"x":1180,"y":1300,"w":90,"h":90},{"x":2280,"y":1350,"w":80,"h":80},{"x":1120,"y":1180,"w":100,"h":90},{"x":1200,"y":2050,"w":80,"h":80},{"x":2250,"y":2180,"w":120,"h":60},{"x":2350,"y":1100,"w":60,"h":220},{"x":2480,"y":1250,"w":120,"h":50},{"x":2650,"y":1150,"w":140,"h":60},{"x":1900,"y":1750,"w":60,"h":160},{"x":2050,"y":1800,"w":130,"h":55},{"x":300,"y":1600,"w":70,"h":200},{"x":1280,"y":2200,"w":140,"h":55},{"x":2380,"y":2150,"w":120,"h":55}],"crates":[{"x":520,"y":685},{"x":900,"y":685},{"x":720,"y":950},{"x":960,"y":960},{"x":2470,"y":710},{"x":2900,"y":810},{"x":2780,"y":700},{"x":1580,"y":1152},{"x":1580,"y":1440},{"x":1580,"y":1492},{"x":2060,"y":1300},{"x":760,"y":2000},{"x":1000,"y":1940},{"x":1180,"y":1960},{"x":2750,"y":1950},{"x":2600,"y":2030},{"x":1500,"y":260},{"x":2900,"y":270},{"x":1300,"y":1450},{"x":2040,"y":1250}],"extracts":[{"x":2130,"y":650,"name":"A"},{"x":1720,"y":2260,"name":"B"}],"nests":[{"x":1090,"y":800},{"x":760,"y":1990},{"x":2920,"y":1845},{"x":1580,"y":1300},{"x":2700,"y":820},{"x":1150,"y":250},{"x":2200,"y":640},{"x":2250,"y":1950}],"units":[{"x":700,"y":685,"type":"runner"},{"x":720,"y":600,"type":"shooter"},{"x":940,"y":945,"type":"brute"},{"x":500,"y":1180,"type":"runner"},{"x":600,"y":1795,"type":"runner"},{"x":1200,"y":1700,"type":"shooter"},{"x":1130,"y":1950,"type":"brute"},{"x":740,"y":2120,"type":"runner"},{"x":2620,"y":1666,"type":"runner"},{"x":2760,"y":1960,"type":"shooter"},{"x":2560,"y":2020,"type":"brute"},{"x":2950,"y":1680,"type":"runner"},{"x":1340,"y":1200,"type":"runner"},{"x":2030,"y":1180,"type":"runner"},{"x":1580,"y":1220,"type":"shooter"},{"x":1580,"y":1400,"type":"shooter"},{"x":1640,"y":1660,"type":"brute"},{"x":1960,"y":1340,"type":"runner"},{"x":2520,"y":880,"type":"runner"},{"x":2900,"y":700,"type":"runner"},{"x":2740,"y":900,"type":"shooter"},{"x":2450,"y":890,"type":"shooter"},{"x":2860,"y":890,"type":"brute"},{"x":2680,"y":800,"type":"boss"},{"x":1200,"y":270,"type":"runner"},{"x":2350,"y":270,"type":"runner"},{"x":2100,"y":950,"type":"runner"},{"x":2560,"y":300,"type":"sniper"},{"x":1151,"y":691,"type":"sniper"},{"x":1980,"y":1080,"type":"rocket"},{"x":813,"y":1819,"type":"rocket"},{"x":2330,"y":1900,"type":"flamer"},{"x":1566,"y":1330,"type":"flamer"}],"squad":["runner","shooter","brute","runner","runner","shooter","brute","runner","runner","shooter","brute","runner","runner","runner","shooter","shooter","brute","runner","runner","runner","shooter","shooter","brute","boss","runner","runner","runner","sniper","sniper","rocket","rocket","flamer","flamer"]}) };
+/* ── 机密变体：同一张零号大坝，敌人换一套数值、战利品整体加码 ──
+   容器构成也重排：军械箱与保险柜占一半，便宜好搜的补给箱只剩三个。
+   代价是翻找时间与动静都变长，收益是枪、配件与高品质货明显变多。 */
+(function buildSecretMap() {
+  const base = JSON.parse(JSON.stringify(BUILTIN_MAPS['zero-dam']));
+  base.name = '零号大坝·机密';
+  base.tier = 'secret';
+  const kinds = [
+    'weapon', 'crate', 'tool', 'safe',
+    'weapon', 'safe', 'tool',
+    'weapon', 'crate', 'safe',
+    'tool', 'med', 'ammo', 'crate',
+    'weapon', 'safe',
+    'ammo', 'weapon',
+    'med', 'safe',
+  ];
+  base.crates = (base.crates || []).map((c, i) => ({ x: c.x, y: c.y, t: kinds[i % kinds.length] }));
+  BUILTIN_MAPS['zero-dam-secret'] = base;
+})();
+
 const WORLD_DEFAULT = { w: 3000, h: 2200 };
 /* 默认守军：小兵多、盾兵少、机枪兵更少（机枪兵太耐打，排多了会拖节奏） */
 /* 单出生点 / 随机地图的默认守军：14 人，四种新兵各放一两个，别一上来就满编 */
@@ -1720,6 +1789,7 @@ function normalizeMap(raw) {
   const map = {
     format: MAP_FORMAT, version: MAP_VERSION,
     name: (typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim() : '导入地图').slice(0, 24),
+    tier: raw.tier === 'secret' ? 'secret' : 'standard',
     w, h,
     spawns: [],
     obstacles: [], crates: [], extracts: [], nests: [],
@@ -1863,6 +1933,7 @@ function applyMapData(m) {
   G.units = (m.units || []).map(u => ({ x: u.x, y: u.y, type: u.type }));
   G.squad = (m.squad && m.squad.length ? m.squad : DEFAULT_SQUAD).slice();
   G.mapName = m.name || '自定义地图';
+  G.tier = m.tier === 'secret' ? 'secret' : 'standard';
 }
 
 /* 每局开场准备世界：有自定义地图就载入，否则现场随机生成 */
@@ -1882,6 +1953,7 @@ function prepareWorldForRaid() {
   G.units = [];
   G.squad = DEFAULT_SQUAD.slice();
   G.mapName = '随机生成（每局不同）';
+  G.tier = 'standard';
 }
 
 /* 把当前世界导出成一份地图数据 */
@@ -2386,7 +2458,7 @@ function damagePlayer(amount, srcX, srcY, inv) {
   if (P.invuln > 0 || !P.alive) return;
   const dmg = amount * (1 - P.armorDR);
   P.hp -= dmg;
-  P.invuln = inv || 0.55;
+  P.invuln = inv || (isSecret() ? SECRET.playerInvuln : 0.55);
   P.hurtFlash = 1;
   // 背后看不见，至少让人知道子弹从哪来
   if (typeof srcX === 'number' && typeof srcY === 'number') {
@@ -2525,6 +2597,11 @@ function callBackup(sx, sy) {
 function spawnEnemy(type, atX, atY) {
   const T = ENEMY_TYPES[type];
   const scale = 1 + G.reinforceWave * 0.16;
+  /* 机密模式：血量换表、伤害走倍率（远程在读取处乘，近战直接用 e.dmg） */
+  const sec = isSecret();
+  const hpBase = (sec && SECRET.hp[type]) ? SECRET.hp[type] : T.hp;
+  const dmgMul = sec ? (SECRET.dmgMul[type] || 1) : 1;
+  const shieldBase = (sec && type === 'shooter') ? SECRET.shield : (T.shield || 0);
   let x = atX, y = atY, nest = null;
 
   if (atX === undefined) {
@@ -2549,9 +2626,9 @@ function spawnEnemy(type, atX, atY) {
 
   const e = {
     type, x, y, r: T.r,
-    hp: T.hp * scale, maxHp: T.hp * scale,
+    hp: hpBase * scale, maxHp: hpBase * scale,
     speed: T.speed * rand(0.92, 1.08),
-    dmg: T.dmg, score: T.score,
+    dmg: T.dmg * dmgMul, dmgMul, score: T.score,
     color: T.color, glow: T.glow, shape: T.shape,
 
     sight: T.sight, fov: T.fov,
@@ -2582,7 +2659,7 @@ function spawnEnemy(type, atX, atY) {
     /* 点射（小兵 / 盾兵共用）：ptN 剩余发数，ptT 下一发倒计时 */
     ptN: 0, ptT: 0, ptInt: 0.1, ptDmg: 0, ptSpd: 0, ptSpr: 0,
     /* 盾牌：正面吃子弹，打完就碎；shieldAim 是盾面朝向，转身比眼睛慢半拍 */
-    shield: T.shield || 0, maxShield: T.shield || 0, shieldAim: 0, shieldFlash: 0,
+    shield: shieldBase, maxShield: shieldBase, shieldAim: 0, shieldFlash: 0,
     /* 加特林：spin 预热 / burst 剩余弹数 / fire 连发间隔 / heat 枪管热度 / bloom 弹道扩散 */
     gatCd: rand(0.7, 1.6), gatSpin: 0, gatBurst: 0, gatFire: 0, gatHeat: 0, gatBloom: 0, gatPhase: 0,
 
@@ -2634,7 +2711,7 @@ function spawnReinforce() {
       e.lastSeenX = sx; e.lastSeenY = sy;
     }
   }
-  if (G.reinforceWave % 4 === 0 && !G.bossSpawned) {
+  if (G.reinforceWave === bossWaveNo() && !G.bossSpawned) {
     G.bossSpawned = true;
     const b = spawnEnemy('boss');
     if (b && alarmed) {
@@ -2668,7 +2745,7 @@ function startPointBurst(e, B) {
   e.ptN = B.n;
   e.ptT = 0;
   e.ptInt = B.gap;
-  e.ptDmg = B.dmg;
+  e.ptDmg = B.dmg * (e.dmgMul || 1);
   e.ptSpd = B.spd;
   e.ptSpr = B.spread;
   e.aim = Math.atan2(P.y - e.y, P.x - e.x);
@@ -2705,7 +2782,7 @@ function enemyGatFire(e, sees) {
     x: mx, y: my, px: mx, py: my,
     vx: Math.cos(a) * GAT.spd,
     vy: Math.sin(a) * GAT.spd,
-    r: 4.6, dmg: GAT.dmg, color: '#ffb03a',
+    r: 4.6, dmg: GAT.dmg * (e.dmgMul || 1), color: '#ffb03a',
     life: 1.8, hostile: true, pierce: 0, knock: 0,
   });
 
@@ -2732,7 +2809,7 @@ function sniperFire(e) {
   G.bullets.push({
     x: mx, y: my, px: mx, py: my,
     vx: Math.cos(a) * SN.spd, vy: Math.sin(a) * SN.spd,
-    r: 3.2, dmg: SN.dmg, color: '#8ff6ff',
+    r: 3.2, dmg: SN.dmg * (e.dmgMul || 1), color: '#8ff6ff',
     life: 1.3, hostile: true, pierce: 0, knock: 0, tracer: 74,
   });
 
@@ -2764,7 +2841,7 @@ function fireRocket(e) {
   G.rockets.push({
     x: mx, y: my, px: mx, py: my,
     vx: Math.cos(a) * RK.spd, vy: Math.sin(a) * RK.spd,
-    a, r: 7, life: RK.life, smokeT: 0, travel: 0,
+    a, r: 7, life: RK.life, smokeT: 0, travel: 0, mul: e.dmgMul || 1,
   });
 
   // 尾焰 + 发射烟
@@ -2823,7 +2900,7 @@ function updateRockets(dt) {
 }
 
 /* 敌方火箭爆炸：只伤玩家，不吃无敌帧以外的额外豁免 */
-function rocketBlast(x, y) {
+function rocketBlast(x, y, mul) {
   const RK = ENEMY_TYPES.rocket.rkt;
   blastFX(x, y, RK.radius);
   Sfx.explode();
@@ -2833,7 +2910,7 @@ function rocketBlast(x, y) {
   const d = dist(x, y, P.x, P.y);
   if (P.alive && d < RK.radius + P.r * 0.7) {
     const falloff = 1 - clamp(d / RK.radius, 0, 1);
-    damagePlayer(RK.dmg * (0.42 + falloff * 0.58), x, y, 0.6);
+    damagePlayer(RK.dmg * (mul || 1) * (0.42 + falloff * 0.58), x, y, 0.6);
     if (P.alive) {
       const a = Math.atan2(P.y - y, P.x - x);
       P.x += Math.cos(a) * 30 * falloff;
@@ -2940,7 +3017,7 @@ function flameBurn(e, F) {
   if (d > F.range + P.r) return;
   if (Math.abs(angleDiff(Math.atan2(dy, dx), e.aim)) > F.arc) return;
   if (!losClear(e.x, e.y, P.x, P.y)) return;     // 躲在墙后火舌烧不到
-  burnPlayer(F.dmg, e.x, e.y);
+  burnPlayer(F.dmg * (e.dmgMul || 1), e.x, e.y);
   P.burnT = Math.max(P.burnT, 1.1);
 }
 
@@ -3266,7 +3343,7 @@ function updateEnemies(dt) {
             if (!pointInObstacle(fx, fy) && !stacked) {
               G.fires.push({
                 x: fx, y: fy, r: F.fireR, life: F.fireLife, max: F.fireLife,
-                tick: 0.12, dmg: F.fireDmg, breed: 0.5, warm: 0.9,
+                tick: 0.12, dmg: F.fireDmg * (e.dmgMul || 1), breed: 0.5, warm: 0.9,
               });
             }
           }
@@ -3423,8 +3500,10 @@ function updateEnemies(dt) {
       }
     }
 
+    /* 只有超长向量才归一化：方向系数 <1 的「慢走 / 侧移 / 后撤」必须保留，
+       否则盾兵的 0.7、机枪兵的 0.5、狙击兵的 0.38 全被拉回全速 */
     const ml = Math.hypot(mvx, mvy);
-    if (ml > 0.001) { mvx /= ml; mvy /= ml; }
+    if (ml > 1) { mvx /= ml; mvy /= ml; }
 
     if (faceAim !== null) e.facing += angleDiff(faceAim, e.facing) * Math.min(1, dt * 9);
 
@@ -3691,7 +3770,7 @@ function updateBullets(dt) {
           if (dist2(b.x, b.y, rk.x, rk.y) < rk2) {
             popup(rk.x, rk.y - 20, '火 箭 拦 截', '#8ad34a', 13);
             G.rockets.splice(k, 1);
-            rocketBlast(rk.x, rk.y);
+            rocketBlast(rk.x, rk.y, rk.mul);
             G.bullets.splice(i, 1); removed = true;
             break;
           }
@@ -3837,7 +3916,7 @@ function bossHmgFire(e, sees) {
     x: mx, y: my, px: mx, py: my,
     vx: Math.cos(a) * H.spd,
     vy: Math.sin(a) * H.spd,
-    r: 5.2, dmg: H.dmg, color: '#ffab4a',
+    r: 5.2, dmg: H.dmg * (e.dmgMul || 1), color: '#ffab4a',
     life: 1.5, hostile: true, pierce: 0, knock: 0, heavy: true,
   });
 
@@ -3896,7 +3975,8 @@ function throwMolotov(e, tx, ty) {
 function ignite(x, y) {
   x = clamp(x, 20, WORLD.w - 20);
   y = clamp(y, 20, WORLD.h - 20);
-  G.fires.push({ x, y, r: BOSS_FIRE.r, life: BOSS_FIRE.life, max: BOSS_FIRE.life, tick: 0.1 });
+  G.fires.push({ x, y, r: BOSS_FIRE.r, life: BOSS_FIRE.life, max: BOSS_FIRE.life, tick: 0.1,
+                 dmg: BOSS_FIRE.dmg * (isSecret() ? SECRET.dmgMul.boss : 1) });
   addDecal(x, y, BOSS_FIRE.r * 0.55, '#180a04', 0.42);
   Sfx.noiseBurst(0.45, 900, 0.7, 0.22);
   Sfx.tone(150, 0.3, 0.1, 'sawtooth', 70);
@@ -4037,21 +4117,23 @@ function updateSearch(dt) {
 function relicWeights(bob) {
   const wave = G.reinforceWave || 0;
   const b = bob || 0;
+  const L = isSecret() ? SECRET.loot : null;
   return [
-    ['common', Math.max(10, 64 - wave * 12 - b * 26)],
-    ['rare',   26 + wave * 4],
-    ['epic',   8 + wave * 5 + b * 9],
-    ['legend', 2 + wave * 1.6 + b * 4.5],
-    ['myth',   0.45 + wave * 0.42 + b * 1.4],
+    ['common', Math.max(10, 64 - wave * 12 - b * 26) * (L ? L.relicCommon : 1)],
+    ['rare',   (26 + wave * 4) * (L ? L.relicRare : 1)],
+    ['epic',   (8 + wave * 5 + b * 9) * (L ? L.relicHigh : 1)],
+    ['legend', (2 + wave * 1.6 + b * 4.5) * (L ? L.relicTop : 1)],
+    ['myth',   (0.45 + wave * 0.42 + b * 1.4) * (L ? L.relicTop : 1)],
   ];
 }
 function modWeights(bob) {
   const wave = G.reinforceWave || 0;
   const b = bob || 0;
+  const L = isSecret() ? SECRET.loot : null;
   return [
-    ['common', Math.max(18, 58 - wave * 8 - b * 18)],
-    ['rare',   28 + wave * 3],
-    ['epic',   10 + wave * 4 + b * 7],
+    ['common', Math.max(18, 58 - wave * 8 - b * 18) * (L ? 0.50 : 1)],
+    ['rare',   (28 + wave * 3) * (L ? 1.40 : 1)],
+    ['epic',   (10 + wave * 4 + b * 7) * (L ? L.modHigh : 1)],
   ];
 }
 
@@ -4101,7 +4183,7 @@ function rollContainer(kind) {
       if (Math.random() < 0.35) addRelic(0);
       if (Math.random() < 0.40) items.push(makeMedItem(1));
       if (Math.random() < 0.22) items.push(makeNadeItem(1));
-      if (Math.random() < 0.20) items.push(makeWeaponItem(pickGun(false)));
+      if (Math.random() < (isSecret() ? SECRET.loot.gunChance : 0.20)) items.push(makeWeaponItem(pickGun(false)));
       if (Math.random() < 0.30) addMod(0);
       if (Math.random() < 0.08 + wave * 0.04) addMod(0.4);
       break;
@@ -4124,7 +4206,8 @@ function rollContainer(kind) {
     }
     /* 工具箱：改枪配件的家 */
     case 'tool': {
-      for (let i = 0; i < randInt(C.n[0], C.n[1]); i++) addMod(0.55);
+      const extra = isSecret() ? 1 : 0;
+      for (let i = 0; i < randInt(C.n[0], C.n[1]) + extra; i++) addMod(0.55);
       if (Math.random() < 0.42) addMod(0.9);
       if (Math.random() < 0.28) addRelic(-0.5);
       break;
@@ -4132,7 +4215,7 @@ function rollContainer(kind) {
     /* 武器箱：必出一把枪，配件的可能性也高 */
     case 'weapon': {
       items.push(makeWeaponItem(pickGun(true)));
-      if (Math.random() < 0.45) addMod(0.7);
+      if (Math.random() < (isSecret() ? SECRET.loot.weaponModChance : 0.45)) addMod(0.7);
       if (Math.random() < 0.30) items.push(makeAmmoItem(2));
       if (Math.random() < 0.15) items.push(makeMedItem(1));
       break;
@@ -4140,8 +4223,8 @@ function rollContainer(kind) {
     /* 保险柜：慢得离谱，但品质卷得最高 */
     case 'safe': {
       for (let i = 0; i < randInt(C.n[0], C.n[1]); i++) addRelic(1.4);
-      if (Math.random() < 0.50) addRelic(1.4);
-      if (Math.random() < 0.30) addMod(1.2);
+      if (Math.random() < (isSecret() ? SECRET.loot.safeExtraChance : 0.50)) addRelic(1.4);
+      if (Math.random() < (isSecret() ? SECRET.loot.safeModChance : 0.30)) addMod(1.2);
       if (Math.random() < 0.10) items.push(makeAmmoItem(2));
       break;
     }
@@ -6767,7 +6850,7 @@ function update(dt) {
   G.reinforceT -= dt;
   if (G.reinforceT <= 0 && G.enemies.length < 42) {
     spawnReinforce();
-    G.reinforceT = Math.max(20, 40 - G.reinforceWave * 2.5);
+    G.reinforceT = reinforceGap(G.reinforceWave);
   }
 
   if (G.decals.length > 170) G.decals.splice(0, G.decals.length - 170);
@@ -7221,7 +7304,10 @@ function refreshLobby() {
 
   const risk = $('riskLine');
   if (risk) {
-    if (ownedWeapons.length < 2) {
+    const secretRaid = G.tier === 'secret';
+    if (secretRaid) {
+      risk.textContent = '机密行动：敌人血量与伤害全面上调，但军械与保险柜更多、品质更高';
+    } else if (ownedWeapons.length < 2) {
       risk.textContent = '只有手枪时仍可免费出击，先去军火库补一把主武器';
     } else if (SAVE.credits < 800) {
       risk.textContent = '资金吃紧：建议用手枪低成本出击，撤离后再升级装备';
@@ -7725,7 +7811,8 @@ function mapMessage(text, cls) {
 
 /* ══════════ 大厅：出击前的快速选图 ══════════ */
 const BUILTIN_MAP_META = {
-  'zero-dam': { name: '零号大坝', sub: '水坝工业区 · 3400×2400 · 守军 33' },
+  'zero-dam': { name: '零号大坝·普通', sub: '水坝工业区 · 3400×2400 · 守军 33' },
+  'zero-dam-secret': { name: '零号大坝·机密', sub: '高难 · 敌人更硬 · 战利品加码', secret: true },
 };
 
 function currentMapId() {
@@ -7752,6 +7839,7 @@ function refreshMapSelect() {
       id,
       name: meta ? meta.name : m.name,
       sub: meta ? meta.sub : (m.w + '×' + m.h),
+      secret: !!(meta && meta.secret) || m.tier === 'secret',
     });
   }
   if (curId === 'custom') {
@@ -7766,7 +7854,7 @@ function refreshMapSelect() {
   for (const it of list) {
     const b = document.createElement('button');
     b.type = 'button';
-    b.className = 'mcard' + (it.id === curId ? ' on' : '');
+    b.className = 'mcard' + (it.id === curId ? ' on' : '') + (it.secret ? ' secret' : '');
     b.dataset.mapId = it.id;
     b.innerHTML = '<b>' + it.name + '</b><small>' + it.sub + '</small>';
     b.addEventListener('click', () => chooseMap(it.id));
@@ -7786,7 +7874,10 @@ function refreshMapSelect() {
       '撤离点 ' + cm.extracts.length,
       '守军 ' + cm.units.length,
     ];
-    note.innerHTML = '当前：<b>' + cm.name + '</b> — ' + parts.join(' · ');
+    const tag = cm.tier === 'secret'
+      ? '<b style="color:#ff8fa3">机密 · 敌人更硬 · 战利品加码</b> · '
+      : '';
+    note.innerHTML = '当前：<b>' + cm.name + '</b> — ' + tag + parts.join(' · ');
   }
 }
 
@@ -8056,7 +8147,6 @@ function startRaid() {
   G.lootValue = 0;
   G.relics = [];
   G.foundMods = [];
-  G.reinforceT = 34;
   G.reinforceWave = 0;
   G.shake = 0;
   G.searchTarget = null;
@@ -8082,8 +8172,10 @@ function startRaid() {
   prepareWorldForRaid();
   resetPlayer();
   initFog();
+  G.reinforceT = firstReinforceDelay();   // 必须在 prepareWorldForRaid 之后：机密图的首波更早
   G.bossSpawned = (G.units || []).some(u => u.type === 'boss');
   G.bossBarBottom = false;
+  if (G.tier === 'secret') uiToast('机 密 行 动 · 敌人更强 · 物资更好', 'warn');
 
   G.cam.x = clamp(P.x - VW / 2, 0, Math.max(0, WORLD.w - VW));
   G.cam.y = clamp(P.y - VH / 2, 0, Math.max(0, WORLD.h - VH));

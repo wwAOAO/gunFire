@@ -185,6 +185,10 @@
   <section>
     <h5>地图</h5>
     <label>名称<input type="text" id="inName" maxlength="24" value="未命名地图"></label>
+    <label>难度<select id="inTier">
+      <option value="standard">普通 · 原始数值</option>
+      <option value="secret">机密 · 敌人更硬、战利品加码</option>
+    </select></label>
     <div class="row2">
       <label>宽<input type="number" id="inW" min="1600" max="6000" step="100" value="3000"></label>
       <label>高<input type="number" id="inH" min="1200" max="6000" step="100" value="2200"></label>
@@ -1124,6 +1128,7 @@ function syncInputs() {
   document.getElementById('inName').value = map.name;
   document.getElementById('inW').value = map.w;
   document.getElementById('inH').value = map.h;
+  document.getElementById('inTier').value = map.tier === 'secret' ? 'secret' : 'standard';
   document.getElementById('mapTitle').textContent = map.name + '  ·  ' + map.w + '×' + map.h;
   document.title = map.name + ' · 地图编辑器';
 }
@@ -1269,6 +1274,13 @@ function refresh() {
 document.getElementById('inName').addEventListener('input', e => {
   map.name = e.target.value.slice(0, 24) || '未命名地图';
   refresh();
+});
+
+document.getElementById('inTier').addEventListener('change', e => {
+  pushUndo();
+  map.tier = e.target.value === 'secret' ? 'secret' : 'standard';
+  refresh();
+  toast(map.tier === 'secret' ? '已设为机密难度：敌人更硬、战利品更好' : '已设为普通难度');
 });
 
 function applySize() {
@@ -1556,6 +1568,7 @@ function payload() {
   return {
     format: MAP_FORMAT, version: MAP_VERSION,
     name: map.name.slice(0, 24), w: map.w, h: map.h,
+    tier: map.tier === 'secret' ? 'secret' : undefined,
     spawns: map.spawns.map(s => ({ x: Math.round(s.x), y: Math.round(s.y) })),
     obstacles: map.obstacles.map(o => ({ x: Math.round(o.x), y: Math.round(o.y), w: Math.round(o.w), h: Math.round(o.h) })),
     crates: map.crates.map(c => ({ x: Math.round(c.x), y: Math.round(c.y), t: c.t || undefined })),
@@ -1614,6 +1627,8 @@ function importText(text, fname) {
   const next = emptyMap(w, h);
   next.name = (typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim()
               : (fname ? fname.replace(/\.json$/i, '') : '导入地图')).slice(0, 24);
+  /* 机密地图的标记要跟着走，否则改完存回去就降级成普通难度了 */
+  next.tier = raw.tier === 'secret' ? 'secret' : 'standard';
 
   const push = (arr, item) => { if (arr.length < 320) arr.push(item); };
 
