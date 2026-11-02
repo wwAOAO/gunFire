@@ -1,0 +1,1808 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEON PURGE · 地图编辑器</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body {
+    width:100%; height:100%; overflow:hidden; background:#05080c;
+    font-family:"Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    color:#cfe4f5; user-select:none; -webkit-user-select:none;
+  }
+  canvas#cv { position:fixed; inset:0; display:block; cursor:crosshair; }
+
+  /* ── 顶栏 ── */
+  #topbar {
+    position:fixed; left:0; right:0; top:0; height:52px; z-index:5;
+    display:flex; align-items:center; gap:14px; padding:0 18px;
+    background:linear-gradient(180deg, rgba(8,14,20,.96), rgba(8,14,20,.82));
+    border-bottom:1px solid rgba(80,140,185,.22);
+  }
+  #topbar .logo { font-size:15px; font-weight:800; letter-spacing:.18em; color:#eaf7ff; }
+  #topbar .logo span { color:#43d9f5; }
+  #mapTitle {
+    font-size:12px; color:#7fb8d6; letter-spacing:.08em;
+    padding:5px 12px; border:1px solid rgba(80,140,185,.3); border-radius:3px;
+    background:rgba(12,26,38,.7); max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .spacer { flex:1; }
+  #coord {
+    font-size:11px; color:#4f7d99; letter-spacing:.1em; font-variant-numeric:tabular-nums;
+    min-width:130px; text-align:right;
+  }
+
+  /* ── 工具条 ── */
+  #tools {
+    position:fixed; left:16px; top:50%; transform:translateY(-50%); z-index:5;
+    display:flex; flex-direction:column; gap:6px;
+    padding:8px; border:1px solid rgba(80,140,185,.22); border-radius:6px;
+    background:rgba(9,16,24,.92); backdrop-filter:blur(6px);
+  }
+  #tools button {
+    position:relative; display:flex; align-items:center; gap:9px;
+    width:118px; padding:9px 11px; cursor:pointer;
+    font-family:inherit; font-size:12px; letter-spacing:.08em;
+    color:#8fb8d0; background:transparent; border:1px solid transparent; border-radius:4px;
+    transition:all .13s;
+  }
+  #tools button b {
+    font-size:10px; font-weight:700; color:#4f7d99;
+    width:16px; height:16px; line-height:15px; text-align:center;
+    border:1px solid rgba(80,140,185,.35); border-radius:2px;
+  }
+  #tools button:hover { color:#dff6ff; background:rgba(24,50,70,.7); }
+  #tools button.on {
+    color:#03121a; background:linear-gradient(180deg,#63e8ff,#28b4de);
+    border-color:#43d9f5; font-weight:700;
+  }
+  #tools button.on b { color:#03121a; border-color:rgba(0,0,0,.3); }
+
+  /* ── 右侧属性面板 ── */
+  #panel {
+    position:fixed; right:14px; top:64px; bottom:52px; width:268px; z-index:5;
+    overflow-y:auto; display:flex; flex-direction:column; gap:9px;
+    padding:14px; border:1px solid rgba(80,140,185,.22); border-radius:6px;
+    background:rgba(9,16,24,.94); backdrop-filter:blur(6px);
+  }
+  #panel::-webkit-scrollbar { width:6px; }
+  #panel::-webkit-scrollbar-thumb { background:rgba(80,140,185,.3); border-radius:3px; }
+  section { display:flex; flex-direction:column; gap:6px; }
+  section h5 {
+    font-size:10px; letter-spacing:.28em; color:#4f7d99; font-weight:600;
+    display:flex; align-items:center; gap:8px;
+  }
+  section h5::after { content:''; flex:1; height:1px; background:linear-gradient(90deg, rgba(80,140,185,.3), transparent); }
+  label { display:flex; align-items:center; gap:8px; font-size:11px; color:#7fa6bf; letter-spacing:.06em; }
+  label input[type=text], label input[type=number] {
+    flex:1; min-width:0; padding:7px 9px; font-family:inherit; font-size:12px;
+    color:#dff6ff; background:rgba(6,12,18,.9); border:1px solid rgba(80,140,185,.28);
+    border-radius:3px; outline:none;
+  }
+  label input:focus { border-color:rgba(67,217,245,.65); }
+  label select {
+    flex:1; min-width:0; padding:7px 9px; font-family:inherit; font-size:12px;
+    color:#dff6ff; background:rgba(6,12,18,.9); border:1px solid rgba(80,140,185,.28);
+    border-radius:3px; outline:none;
+  }
+  label select:focus { border-color:rgba(67,217,245,.65); }
+  .mini {
+    padding:7px 6px; cursor:pointer; font-family:inherit; font-size:11px; font-weight:700;
+    letter-spacing:.06em; border-radius:3px; color:#8fb8d0;
+    background:rgba(20,38,52,.7); border:1px solid rgba(80,140,185,.3);
+  }
+  .mini:hover { color:#dff6ff; border-color:rgba(67,217,245,.6); background:rgba(24,50,70,.85); }
+  .row2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  #unitSummary { font-size:11px; color:#8fb8d0; letter-spacing:.04em; }
+  .chk { cursor:pointer; }
+  .chk input { accent-color:#43d9f5; }
+
+  #selInfo { font-size:11px; color:#5e87a0; line-height:1.65; }
+  #selInfo b { color:#dff6ff; font-weight:700; }
+  #selBox { display:none; flex-direction:column; gap:8px; }
+  #selBox.on { display:flex; }
+
+  #stats { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  .stat {
+    padding:7px 9px; border:1px solid rgba(80,140,185,.16); border-radius:3px;
+    background:rgba(6,12,18,.7); font-size:11px; color:#5e87a0; letter-spacing:.04em;
+    display:flex; justify-content:space-between; gap:6px;
+  }
+  .stat b { color:#dff6ff; font-variant-numeric:tabular-nums; }
+
+  .actions { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
+  .actions button {
+    padding:10px 6px; cursor:pointer; font-family:inherit; font-size:11px;
+    font-weight:700; letter-spacing:.1em; border-radius:3px; transition:all .13s;
+    color:#8fb8d0; background:rgba(20,38,52,.7); border:1px solid rgba(80,140,185,.3);
+  }
+  .actions button:hover { color:#dff6ff; border-color:rgba(67,217,245,.6); background:rgba(24,50,70,.85); }
+  .actions button.primary {
+    grid-column:span 2; color:#03121a; border-color:#43d9f5;
+    background:linear-gradient(180deg,#63e8ff,#28b4de);
+  }
+  .actions button.primary:hover { filter:brightness(1.1); }
+  .actions button.danger:hover { color:#ff8fa3; border-color:rgba(255,64,96,.6); }
+
+  #checks { font-size:11px; line-height:1.7; color:#5e87a0; display:flex; flex-direction:column; gap:3px; }
+  #checks .bad { color:#ff8095; }
+  #checks .warn { color:#ffb347; }
+  #checks .ok { color:#46e08a; }
+
+  #msg {
+    font-size:11px; line-height:1.6; color:#4f7d99; min-height:30px;
+    padding:8px 10px; border-radius:3px; background:rgba(6,12,18,.6);
+    border:1px solid rgba(80,140,185,.12); letter-spacing:.02em;
+  }
+  #msg.ok { color:#46e08a; border-color:rgba(70,224,138,.35); }
+  #msg.warn { color:#ffb347; border-color:rgba(255,179,71,.35); }
+
+  /* ── 底部快捷键提示 ── */
+  #hint {
+    position:fixed; left:0; right:0; bottom:0; height:40px; z-index:5;
+    display:flex; align-items:center; justify-content:center; gap:18px;
+    font-size:11px; color:#3f5d72; letter-spacing:.08em;
+    background:linear-gradient(0deg, rgba(8,14,20,.96), rgba(8,14,20,.5));
+    border-top:1px solid rgba(80,140,185,.16);
+  }
+  #hint b { color:#7fb8d6; font-weight:700; }
+  #hint .sep { color:rgba(80,140,185,.35); }
+
+  #toast {
+    position:fixed; left:50%; top:76px; transform:translateX(-50%); z-index:8;
+    padding:9px 20px; font-size:12px; letter-spacing:.1em; border-radius:3px;
+    background:rgba(9,20,28,.95); border:1px solid rgba(67,217,245,.4); color:#dff6ff;
+    opacity:0; transition:opacity .2s, transform .2s; pointer-events:none;
+  }
+  #toast.on { opacity:1; transform:translateX(-50%) translateY(4px); }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+
+<div id="topbar">
+  <div class="logo">MAP <span>EDITOR</span></div>
+  <div id="mapTitle">未命名地图</div>
+  <div class="spacer"></div>
+  <div id="coord">0, 0</div>
+  <button class="actions-x" id="btnUndo" style="font:inherit;font-size:11px;padding:7px 14px;cursor:pointer;color:#8fb8d0;background:rgba(20,38,52,.7);border:1px solid rgba(80,140,185,.3);border-radius:3px">撤销</button>
+  <button id="btnRedo" style="font:inherit;font-size:11px;padding:7px 14px;cursor:pointer;color:#8fb8d0;background:rgba(20,38,52,.7);border:1px solid rgba(80,140,185,.3);border-radius:3px">重做</button>
+</div>
+
+<div id="tools">
+  <button data-tool="select" class="on"><b>V</b>选择 / 移动</button>
+  <button data-tool="wall"><b>B</b>墙体</button>
+  <button data-tool="crate"><b>C</b>物资容器</button>
+  <button data-tool="extract"><b>X</b>撤离点</button>
+  <button data-tool="nest"><b>N</b>敌人据点</button>
+  <button data-tool="enemy" title="按兵种在地图上摆敌人，赤霄也会守在放的位置"><b>M</b>敌人兵种</button>
+  <button data-tool="spawn" title="可以放多个，每局出击时随机选一个"><b>P</b>出生点</button>
+  <button data-tool="erase"><b>E</b>擦除</button>
+</div>
+
+<div id="panel">
+  <section>
+    <h5>地图</h5>
+    <label>名称<input type="text" id="inName" maxlength="24" value="未命名地图"></label>
+    <div class="row2">
+      <label>宽<input type="number" id="inW" min="1600" max="6000" step="100" value="3000"></label>
+      <label>高<input type="number" id="inH" min="1200" max="6000" step="100" value="2200"></label>
+    </div>
+    <label>兵种<select id="inType">
+      <option value="runner">阿萨拉小兵 · 小而快、点射</option>
+      <option value="shooter">阿萨拉盾兵 · 正面盾、点射</option>
+      <option value="brute">阿萨拉机枪兵 · 加特林、慢</option>
+      <option value="sniper">阿萨拉狙击兵 · 激光锁定、一枪见血</option>
+      <option value="rocket">阿萨拉火箭筒兵 · 范围爆炸</option>
+      <option value="flamer">阿萨拉喷火兵 · 近身火舌</option>
+      <option value="boss">赤霄 · 重机枪（守点）</option>
+    </select></label>
+    <div id="unitSummary">0 人</div>
+    <div class="row2">
+      <button class="mini" id="btnScatter">按据点铺开</button>
+      <button class="mini" id="btnClearUnits">清空守军</button>
+    </div>
+    <label class="chk"><input type="checkbox" id="inSnap" checked> 吸附 10px（按住 Alt 临时关闭）</label>
+    <label class="chk"><input type="checkbox" id="inFog" checked> 显示玩家视野 430</label>
+    <label class="chk"><input type="checkbox" id="inGrid" checked> 显示网格</label>
+  </section>
+
+  <section>
+    <h5>物资容器</h5>
+    <label>放置种类<select id="inCrateKind">
+      <option value="crate">补给箱 · 杂项，什么都有一点</option>
+      <option value="ammo">弹药箱 · 备弹与手雷，翻得最快</option>
+      <option value="med">医疗箱 · 一整箱医疗包</option>
+      <option value="tool">工具箱 · 改枪配件</option>
+      <option value="weapon">武器箱 · 必出一把枪</option>
+      <option value="safe">保险柜 · 最慢最肥</option>
+      <option value="">随机 · 每局按权重抽</option>
+    </select></label>
+    <div id="crateMix" style="font-size:11px;line-height:1.95;color:#8fb7d0;letter-spacing:.02em">—</div>
+    <div id="crateMixHint" style="font-size:11px;color:#4f7d99;line-height:1.8;margin-top:6px">
+      老地图没有 t 字段的容器，游戏里会按权重随机。
+    </div>
+  </section>
+
+  <section>
+    <h5>选中对象</h5>
+    <div id="selInfo">未选中。用「选择」工具点击画布上的对象。</div>
+    <div id="selBox">
+      <div class="row2">
+        <label>X<input type="number" id="selX" step="1"></label>
+        <label>Y<input type="number" id="selY" step="1"></label>
+      </div>
+      <div class="row2" id="selSize">
+        <label>宽<input type="number" id="selW" step="1"></label>
+        <label>高<input type="number" id="selH" step="1"></label>
+      </div>
+      <label id="selTypeRow" style="display:none">兵种<select id="selType">
+        <option value="runner">阿萨拉小兵</option>
+        <option value="shooter">阿萨拉盾兵</option>
+        <option value="brute">阿萨拉机枪兵</option>
+        <option value="sniper">阿萨拉狙击兵</option>
+        <option value="rocket">阿萨拉火箭筒兵</option>
+        <option value="flamer">阿萨拉喷火兵</option>
+        <option value="boss">赤霄 · 重机枪</option>
+      </select></label>
+      <label id="selCrateRow" style="display:none">容器种类<select id="selCrateKind">
+        <option value="crate">补给箱</option>
+        <option value="ammo">弹药箱</option>
+        <option value="med">医疗箱</option>
+        <option value="tool">工具箱</option>
+        <option value="weapon">武器箱</option>
+        <option value="safe">保险柜</option>
+        <option value="">随机（每局按权重抽）</option>
+      </select></label>
+    </div>
+  </section>
+
+  <section>
+    <h5>统计</h5>
+    <div id="stats"></div>
+  </section>
+
+  <section>
+    <h5>检查</h5>
+    <div id="checks"></div>
+  </section>
+
+  <section>
+    <h5>操作</h5>
+    <div class="actions">
+      <button id="btnRandom">随机生成</button>
+      <button id="btnClear" class="danger">清空</button>
+      <button id="btnImport">导入 JSON</button>
+      <button id="btnExport" class="primary">导出 JSON</button>
+      <button id="btnToGame" class="primary">写入本机游戏</button>
+      <button id="btnPlay" style="grid-column:span 2">在游戏中试玩</button>
+    </div>
+  </section>
+
+  <div id="msg">改动即时生效于预览，导出成 JSON 后可在游戏的大厅「地图」面板导入。出生点可以放多个，每局出击时随机选一个。</div>
+</div>
+
+<div id="hint">
+  <span><b>滚轮</b> 缩放</span><span class="sep">·</span>
+  <span><b>右键 / 空格</b> 平移</span><span class="sep">·</span>
+  <span><b>Delete</b> 删除</span><span class="sep">·</span>
+  <span><b>方向键</b> 微调</span><span class="sep">·</span>
+  <span><b>Ctrl+Z</b> 撤销</span><span class="sep">·</span>
+  <span><b>Ctrl+S</b> 导出</span>
+</div>
+
+<div id="toast"></div>
+<input type="file" id="file" accept=".json,application/json" hidden>
+
+<script>
+"use strict";
+
+/* ══════════════════════════════════════════════════════════
+   0. 常量与工具（与游戏保持同一套地图字段）
+   ══════════════════════════════════════════════════════════ */
+const MAP_KEY = 'neonpurge_map_v1';
+const MAP_FORMAT = 'neonpurge-map';
+const MAP_VERSION = 1;
+const DEFAULT_SQUAD = ['runner', 'runner', 'shooter', 'runner', 'brute', 'runner',
+                       'shooter', 'sniper', 'runner', 'rocket', 'brute', 'flamer',
+                       'shooter', 'runner'];
+const SNAP = 10;
+
+/* 与游戏 ENEMY_TYPES 保持一致的兵种表（只取编辑需要的字段） */
+const ENEMY_TYPES = {
+  runner:  { r: 11, color: '#ff4d6d', glow: '#ff2d55', label: '阿萨拉小兵', short: '小兵' },
+  shooter: { r: 17, color: '#ffa23a', glow: '#ff8a1f', label: '阿萨拉盾兵', short: '盾兵', shield: true },
+  brute:   { r: 29, color: '#b46bff', glow: '#a040ff', label: '阿萨拉机枪兵', short: '机枪兵' },
+  sniper:  { r: 13, color: '#5ce1e6', glow: '#18a8bd', label: '阿萨拉狙击兵', short: '狙击兵' },
+  rocket:  { r: 19, color: '#8ad34a', glow: '#4d9a1a', label: '阿萨拉火箭筒兵', short: '火箭兵' },
+  flamer:  { r: 20, color: '#ffd24a', glow: '#ff8a1f', label: '阿萨拉喷火兵', short: '喷火兵' },
+  boss:    { r: 44, color: '#ff2d55', glow: '#ff0040', label: '赤霄', short: '赤霄' },
+};
+const ENEMY_ORDER = ['runner', 'shooter', 'brute', 'sniper', 'rocket', 'flamer', 'boss'];
+
+const TAU = Math.PI * 2;
+const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+const rand = (a, b) => a + Math.random() * (b - a);
+const randInt = (a, b) => Math.floor(rand(a, b + 1));
+const dist = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by);
+
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+let VW = 0, VH = 0, DPR = 1;
+
+/* ── 物资容器种类（与 index.html 的 CONTAINERS 保持一致）──
+   导出时写进 crates[].t；不认识的 t 游戏里会退回补给箱。 */
+const CONTAINERS = {
+  crate:  { id: 'crate',  name: '补给箱', tag: '补给', color: '#ffd08a', dim: 'rgba(255,208,138,', body: '#2a2118', w: 32, h: 26 },
+  ammo:   { id: 'ammo',   name: '弹药箱', tag: '弹药', color: '#ff9a3c', dim: 'rgba(255,154,60,',  body: '#2b2317', w: 28, h: 22 },
+  med:    { id: 'med',    name: '医疗箱', tag: '医疗', color: '#4ee39a', dim: 'rgba(78,227,154,',  body: '#17261f', w: 28, h: 24 },
+  tool:   { id: 'tool',   name: '工具箱', tag: '工具', color: '#6ec6ff', dim: 'rgba(110,198,255,', body: '#182530', w: 30, h: 22 },
+  weapon: { id: 'weapon', name: '武器箱', tag: '军械', color: '#c9a3ff', dim: 'rgba(201,163,255,', body: '#231a2e', w: 48, h: 18 },
+  safe:   { id: 'safe',   name: '保险柜', tag: '金库', color: '#ff5c7a', dim: 'rgba(255,92,122,',  body: '#2a1820', w: 26, h: 28 },
+};
+const CONTAINER_IDS = Object.keys(CONTAINERS);
+const containerOf = id => CONTAINERS[id] || CONTAINERS.crate;
+/* 没写 t 的容器：游戏里每局按权重随机，编辑器里用灰调表示「未定」 */
+const RAND_CONTAINER = { id: 'rand', name: '随机容器', tag: '随机', color: '#9db2c4', dim: 'rgba(157,178,196,', body: '#1e262e', w: 32, h: 26 };
+const styleOfCrate = c => (c.t && CONTAINERS[c.t]) ? CONTAINERS[c.t] : RAND_CONTAINER;
+let crateKind = 'crate';        // 放置容器时用哪种
+
+/* ══════════════════════════════════════════════════════════
+   1. 地图数据
+   ══════════════════════════════════════════════════════════ */
+function emptyMap(w, h) {
+  const W = w || 3000, H = h || 2200;
+  return {
+    format: MAP_FORMAT, version: MAP_VERSION, name: '未命名地图',
+    w: W, h: H,
+    spawns: [{ x: Math.round(W / 2), y: Math.round(H / 2) }],
+    units: [],
+    obstacles: [], crates: [], extracts: [], nests: [],
+    squad: DEFAULT_SQUAD.slice(),
+  };
+}
+
+let map = emptyMap();
+let sel = null;                 // { kind, i }
+let tool = 'select';
+let cam = { x: 0, y: 0, z: 0.4 };
+let drag = null;                // 拖拽状态
+let panning = null;             // 平移状态
+let mouseWorld = { x: 0, y: 0 };
+let spaceDown = false;
+
+const undoStack = [], redoStack = [];
+
+function snapshot() { return JSON.stringify(map); }
+function pushUndo() {
+  undoStack.push(snapshot());
+  if (undoStack.length > 80) undoStack.shift();
+  redoStack.length = 0;
+}
+function applySnapshot(str) {
+  map = JSON.parse(str);
+  if (!Array.isArray(map.units)) map.units = [];
+  if (!Array.isArray(map.spawns)) map.spawns = [{ x: map.w / 2, y: map.h / 2 }];
+  sel = null;
+  syncInputs();
+  refresh();
+}
+function undo() {
+  if (!undoStack.length) { toast('没有可撤销的操作'); return; }
+  redoStack.push(snapshot());
+  applySnapshot(undoStack.pop());
+  toast('已撤销');
+}
+function redo() {
+  if (!redoStack.length) { toast('没有可重做的操作'); return; }
+  undoStack.push(snapshot());
+  applySnapshot(redoStack.pop());
+  toast('已重做');
+}
+
+/* ══════════════════════════════════════════════════════════
+   2. 几何
+   ══════════════════════════════════════════════════════════ */
+function inRect(x, y, o) {
+  return x > o.x && x < o.x + o.w && y > o.y && y < o.y + o.h;
+}
+function pointBlocked(x, y) {
+  for (const o of map.obstacles) if (inRect(x, y, o)) return true;
+  return false;
+}
+function circleFree(x, y, r) {
+  if (x < r || y < r || x > map.w - r || y > map.h - r) return false;
+  for (const o of map.obstacles) {
+    const nx = clamp(x, o.x, o.x + o.w), ny = clamp(y, o.y, o.y + o.h);
+    if ((x - nx) * (x - nx) + (y - ny) * (y - ny) < r * r) return false;
+  }
+  return true;
+}
+function snapVal(v) {
+  return snapOn() ? Math.round(v / SNAP) * SNAP : Math.round(v);
+}
+function snapOn() {
+  return document.getElementById('inSnap').checked && !altDown;
+}
+let altDown = false;
+
+/* ══════════════════════════════════════════════════════════
+   3. 视图
+   ══════════════════════════════════════════════════════════ */
+function resize() {
+  DPR = window.devicePixelRatio || 1;
+  VW = window.innerWidth;
+  VH = window.innerHeight;
+  cv.width = Math.round(VW * DPR);
+  cv.height = Math.round(VH * DPR);
+  cv.style.width = VW + 'px';
+  cv.style.height = VH + 'px';
+}
+window.addEventListener('resize', resize);
+
+function screenToWorld(sx, sy) {
+  return { x: sx / cam.z + cam.x, y: sy / cam.z + cam.y };
+}
+
+function fitView() {
+  const pad = 220;
+  const zx = VW / (map.w + pad * 2);
+  const zy = VH / (map.h + pad * 2);
+  cam.z = clamp(Math.min(zx, zy), 0.12, 2);
+  cam.x = map.w / 2 - VW / cam.z / 2;
+  cam.y = map.h / 2 - VH / cam.z / 2;
+}
+
+/* ══════════════════════════════════════════════════════════
+   4. 绘制
+   ══════════════════════════════════════════════════════════ */
+function draw() {
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.fillStyle = '#05080c';
+  ctx.fillRect(0, 0, VW, VH);
+
+  ctx.save();
+  ctx.translate(-cam.x * cam.z, -cam.y * cam.z);
+  ctx.scale(cam.z, cam.z);
+
+  const z = cam.z;
+  const hair = 1 / z;
+
+  // 世界底
+  ctx.fillStyle = '#0a1119';
+  ctx.fillRect(0, 0, map.w, map.h);
+
+  // 网格
+  if (document.getElementById('inGrid').checked) {
+    const x0 = Math.max(0, Math.floor(cam.x / 100) * 100);
+    const x1 = Math.min(map.w, cam.x + VW / z);
+    const y0 = Math.max(0, Math.floor(cam.y / 100) * 100);
+    const y1 = Math.min(map.h, cam.y + VH / z);
+
+    ctx.strokeStyle = 'rgba(45,72,100,.5)';
+    ctx.lineWidth = hair;
+    ctx.beginPath();
+    for (let x = x0; x <= x1; x += 100) { ctx.moveTo(x, y0); ctx.lineTo(x, y1); }
+    for (let y = y0; y <= y1; y += 100) { ctx.moveTo(x0, y); ctx.lineTo(x1, y); }
+    ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(58,100,138,.55)';
+    ctx.beginPath();
+    for (let x = Math.floor(x0 / 500) * 500; x <= x1; x += 500) { ctx.moveTo(x, y0); ctx.lineTo(x, y1); }
+    for (let y = Math.floor(y0 / 500) * 500; y <= y1; y += 500) { ctx.moveTo(x0, y); ctx.lineTo(x1, y); }
+    ctx.stroke();
+  }
+
+  // 边界
+  ctx.strokeStyle = 'rgba(67,217,245,.55)';
+  ctx.lineWidth = 2 * hair;
+  ctx.strokeRect(0, 0, map.w, map.h);
+
+  drawObstacles(hair);
+  drawExtracts(hair);
+  drawCrates(hair);
+  drawNests(hair);
+  drawUnits(hair);
+  drawSpawn(hair);
+
+  // 视野预览（每个出生点各一个圈，选中的更明显）
+  if (document.getElementById('inFog').checked) {
+    for (let i = 0; i < map.spawns.length; i++) {
+      const s = map.spawns[i];
+      const picked = sel && sel.kind === 'spawn' && sel.i === i;
+      ctx.strokeStyle = picked ? 'rgba(67,217,245,.55)' : 'rgba(67,217,245,.18)';
+      ctx.lineWidth = 1.5 * hair;
+      ctx.setLineDash([8 * hair, 10 * hair]);
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, 430, 0, TAU);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+  }
+
+  // 框选预览
+  if (drag && drag.mode === 'wallDraw' && drag.rect) {
+    const r = drag.rect;
+    ctx.fillStyle = 'rgba(67,217,245,.14)';
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+    ctx.strokeStyle = '#43d9f5';
+    ctx.lineWidth = 1.5 * hair;
+    ctx.setLineDash([6 * hair, 5 * hair]);
+    ctx.strokeRect(r.x, r.y, r.w, r.h);
+    ctx.setLineDash([]);
+  }
+
+  // 光标
+  ctx.strokeStyle = 'rgba(67,217,245,.5)';
+  ctx.lineWidth = hair;
+  const mx = snapVal(mouseWorld.x), my = snapVal(mouseWorld.y);
+  ctx.beginPath();
+  ctx.moveTo(mx - 12, my); ctx.lineTo(mx + 12, my);
+  ctx.moveTo(mx, my - 12); ctx.lineTo(mx, my + 12);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawObstacles(hair) {
+  for (let i = 0; i < map.obstacles.length; i++) {
+    const o = map.obstacles[i];
+    const picked = sel && sel.kind === 'wall' && sel.i === i;
+    ctx.fillStyle = picked ? 'rgba(67,217,245,.22)' : 'rgba(38,62,86,.92)';
+    ctx.fillRect(o.x, o.y, o.w, o.h);
+    ctx.strokeStyle = picked ? '#43d9f5' : 'rgba(120,180,225,.5)';
+    ctx.lineWidth = (picked ? 2 : 1) * hair;
+    ctx.strokeRect(o.x, o.y, o.w, o.h);
+    if (cam.z > 0.28) {
+      ctx.fillStyle = 'rgba(67,217,245,.35)';
+      ctx.fillRect(o.x + 4, o.y + 4, Math.min(16, o.w - 8), 2);
+    }
+  }
+}
+
+function drawExtracts(hair) {
+  for (let i = 0; i < map.extracts.length; i++) {
+    const e = map.extracts[i];
+    const picked = sel && sel.kind === 'extract' && sel.i === i;
+    ctx.fillStyle = 'rgba(70,224,138,.10)';
+    ctx.beginPath(); ctx.arc(e.x, e.y, 108, 0, TAU); ctx.fill();
+    ctx.strokeStyle = picked ? '#5effb0' : 'rgba(70,224,138,.75)';
+    ctx.lineWidth = (picked ? 2.5 : 1.5) * hair;
+    ctx.stroke();
+    ctx.setLineDash([12 * hair, 10 * hair]);
+    ctx.strokeStyle = 'rgba(70,224,138,.45)';
+    ctx.beginPath(); ctx.arc(e.x, e.y, 92, 0, TAU); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#9effcc';
+    ctx.font = '700 ' + (13 * hair) + 'px ui-monospace, Consolas, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('撤离 ' + (e.name || 'A'), e.x, e.y + 4 * hair);
+    ctx.textAlign = 'left';
+  }
+}
+
+function drawCrates(hair) {
+  // 缩得很小时也保证看得见，图标不小于约 18px
+  const k = Math.max(1, 9 / (16 * cam.z));
+  for (let i = 0; i < map.crates.length; i++) {
+    const c = map.crates[i];
+    const C = styleOfCrate(c);
+    const picked = sel && sel.kind === 'crate' && sel.i === i;
+    const hw = (C.w / 2) * k, hh = (C.h / 2) * k;
+
+    ctx.fillStyle = picked ? C.dim + '.38)' : C.body;
+    ctx.fillRect(c.x - hw, c.y - hh, hw * 2, hh * 2);
+    ctx.strokeStyle = picked ? '#ffe9a8' : C.dim + '.82)';
+    ctx.lineWidth = (picked ? 2 : 1.2) * hair;
+    ctx.strokeRect(c.x - hw, c.y - hh, hw * 2, hh * 2);
+
+    // 每种容器一个辨识记号：十字 / 转盘 / 枪管 / 弹线 / 提手 / 捆扎带
+    ctx.strokeStyle = C.dim + '.45)';
+    ctx.lineWidth = hair;
+    ctx.beginPath();
+    if (C.id === 'med') {
+      ctx.moveTo(c.x - hw * 0.5, c.y); ctx.lineTo(c.x + hw * 0.5, c.y);
+      ctx.moveTo(c.x, c.y - hh * 0.55); ctx.lineTo(c.x, c.y + hh * 0.55);
+    } else if (C.id === 'safe') {
+      ctx.arc(c.x + hw * 0.15, c.y, Math.min(hw, hh) * 0.34, 0, TAU);
+    } else if (C.id === 'weapon') {
+      ctx.moveTo(c.x - hw * 0.82, c.y); ctx.lineTo(c.x + hw * 0.82, c.y);
+      ctx.moveTo(c.x - hw * 0.42, c.y - hh); ctx.lineTo(c.x - hw * 0.42, c.y + hh);
+      ctx.moveTo(c.x + hw * 0.42, c.y - hh); ctx.lineTo(c.x + hw * 0.42, c.y + hh);
+    } else if (C.id === 'ammo') {
+      ctx.moveTo(c.x - hw * 0.8, c.y - hh * 0.28); ctx.lineTo(c.x + hw * 0.8, c.y - hh * 0.28);
+      ctx.moveTo(c.x - hw * 0.35, c.y + hh * 0.15); ctx.lineTo(c.x - hw * 0.12, c.y + hh * 0.15);
+      ctx.moveTo(c.x + hw * 0.12, c.y + hh * 0.15); ctx.lineTo(c.x + hw * 0.35, c.y + hh * 0.15);
+    } else if (C.id === 'tool') {
+      ctx.arc(c.x, c.y - hh * 0.92, hw * 0.28, Math.PI, 0);
+      ctx.moveTo(c.x - hw * 0.85, c.y - hh * 0.05); ctx.lineTo(c.x + hw * 0.85, c.y - hh * 0.05);
+    } else {
+      ctx.moveTo(c.x - hw, c.y - hh * 0.3); ctx.lineTo(c.x + hw, c.y - hh * 0.3);
+      ctx.moveTo(c.x, c.y - hh); ctx.lineTo(c.x, c.y + hh);
+    }
+    ctx.stroke();
+  }
+}
+
+function drawNests(hair) {
+  for (let i = 0; i < map.nests.length; i++) {
+    const n = map.nests[i];
+    const picked = sel && sel.kind === 'nest' && sel.i === i;
+    ctx.fillStyle = 'rgba(255,77,109,.08)';
+    ctx.beginPath(); ctx.arc(n.x, n.y, 90, 0, TAU); ctx.fill();
+    ctx.strokeStyle = picked ? '#ff8fa3' : 'rgba(255,77,109,.45)';
+    ctx.lineWidth = (picked ? 2 : 1) * hair;
+    ctx.setLineDash([6 * hair, 8 * hair]);
+    ctx.beginPath(); ctx.arc(n.x, n.y, 90, 0, TAU); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(255,120,140,.9)';
+    ctx.beginPath(); ctx.arc(n.x, n.y, 7 * hair, 0, TAU); ctx.fill();
+    ctx.font = '600 ' + (11 * hair) + 'px ui-monospace, Consolas, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('#' + (i + 1), n.x, n.y - 13 * hair);
+    ctx.textAlign = 'left';
+  }
+}
+
+/* 敌人：形状与颜色和局内一致，BOSS 额外带一圈光环 */
+function drawUnits(hair) {
+  for (let i = 0; i < map.units.length; i++) {
+    const u = map.units[i];
+    const T = ENEMY_TYPES[u.type] || ENEMY_TYPES.runner;
+    const picked = sel && sel.kind === 'enemy' && sel.i === i;
+    const rr = Math.max(T.r, 9 / cam.z);
+
+    ctx.save();
+    ctx.translate(u.x, u.y);
+
+    const g = ctx.createRadialGradient(0, 0, rr * 0.4, 0, 0, rr * 1.9);
+    g.addColorStop(0, T.glow + (picked ? '77' : '44'));
+    g.addColorStop(1, T.glow + '00');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(0, 0, rr * 1.9, 0, TAU); ctx.fill();
+
+    ctx.fillStyle = picked ? '#ffffff' : T.color;
+    ctx.strokeStyle = picked ? '#43d9f5' : T.glow;
+    ctx.lineWidth = (picked ? 2.4 : 1.5) * hair;
+    ctx.beginPath();
+
+    if (u.type === 'runner') {
+      ctx.moveTo(rr * 1.25, 0);
+      ctx.lineTo(-rr * 0.85, -rr * 0.9);
+      ctx.lineTo(-rr * 0.35, 0);
+      ctx.lineTo(-rr * 0.85, rr * 0.9);
+      ctx.closePath();
+    } else if (u.type === 'shooter') {
+      const s = rr * 0.88;
+      ctx.rect(-s, -s, s * 2, s * 2);
+    } else if (u.type === 'brute') {
+      for (let k = 0; k < 6; k++) {
+        const a = k * TAU / 6;
+        const px = Math.cos(a) * rr, py = Math.sin(a) * rr;
+        k ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+      }
+      ctx.closePath();
+    } else if (u.type === 'sniper') {
+      ctx.moveTo(rr * 1.2, 0);
+      ctx.lineTo(0, -rr * 0.78);
+      ctx.lineTo(-rr * 0.95, 0);
+      ctx.lineTo(0, rr * 0.78);
+      ctx.closePath();
+    } else if (u.type === 'rocket') {
+      ctx.arc(0, 0, rr * 0.95, 0, TAU);
+      ctx.closePath();
+    } else if (u.type === 'flamer') {
+      for (let k = 0; k < 8; k++) {
+        const a = k * TAU / 8;
+        const px = Math.cos(a) * rr * 0.95, py = Math.sin(a) * rr * 0.95;
+        k ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+      }
+      ctx.closePath();
+    } else {
+      for (let k = 0; k < 8; k++) {
+        const a = k * TAU / 8;
+        const rad = rr * (k % 2 === 0 ? 1 : 0.62);
+        const px = Math.cos(a) * rad, py = Math.sin(a) * rad;
+        k ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+      }
+      ctx.closePath();
+    }
+    ctx.fill();
+    ctx.stroke();
+
+    // 盾兵的正面盾牌（编辑器里默认朝右）；机枪兵挂一截加特林枪管
+    if (u.type === 'shooter') {
+      ctx.beginPath();
+      ctx.arc(0, 0, rr + 6.5, -0.78, 0.78);
+      ctx.lineWidth = Math.max(4.5, 5 * hair);
+      ctx.strokeStyle = picked ? '#ffe9b0' : 'rgba(201,163,94,0.92)';
+      ctx.stroke();
+      ctx.lineWidth = (picked ? 2.4 : 1.5) * hair;
+      ctx.strokeStyle = picked ? '#43d9f5' : T.glow;
+    } else if (u.type === 'brute') {
+      ctx.fillStyle = picked ? '#f0e0ff' : '#5b3f72';
+      ctx.fillRect(rr * 0.5, -3.4 * hair, rr * 1.1, 3.4 * hair);
+      ctx.fillRect(rr * 0.5, 0, rr * 1.1, 3.4 * hair);
+      ctx.fillStyle = picked ? '#ffffff' : T.color;
+    } else if (u.type === 'sniper') {
+      // 细长枪管 + 瞄准镜
+      ctx.fillStyle = picked ? '#dffbff' : '#123038';
+      ctx.fillRect(rr * 0.3, -2 * hair, rr * 2.4, 4 * hair);
+      ctx.fillStyle = picked ? '#ffffff' : '#8ff6ff';
+      ctx.fillRect(rr * 0.5, -7 * hair, rr * 0.8, 3 * hair);
+      ctx.fillStyle = picked ? '#ffffff' : T.color;
+    } else if (u.type === 'rocket') {
+      // 肩上的粗筒 + 探出的弹头
+      ctx.fillStyle = picked ? '#e8ffd6' : '#1c2a12';
+      ctx.fillRect(-rr * 0.55, -rr * 0.42 - 3, rr * 2.05, rr * 0.84 + 6);
+      ctx.fillStyle = picked ? '#ffffff' : '#8ad34a';
+      ctx.beginPath();
+      ctx.moveTo(rr * 1.6 + 9, 0);
+      ctx.lineTo(rr * 1.5, -4.8);
+      ctx.lineTo(rr * 1.5, 4.8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = picked ? '#ffffff' : T.color;
+    } else if (u.type === 'flamer') {
+      // 短喷管 + 长明火
+      ctx.fillStyle = picked ? '#fff3c4' : '#2b2410';
+      ctx.fillRect(rr * 0.45, -2.8 * hair, rr * 0.95, 5.6 * hair);
+      ctx.fillStyle = picked ? '#ffffff' : 'rgba(255,170,60,0.9)';
+      ctx.beginPath(); ctx.arc(rr * 1.55, 0, 5, 0, TAU); ctx.fill();
+      ctx.fillStyle = picked ? '#ffffff' : T.color;
+    }
+
+    if (u.type === 'boss') {
+      ctx.strokeStyle = 'rgba(255,255,255,.45)';
+      ctx.lineWidth = 1.2 * hair;
+      ctx.beginPath(); ctx.arc(0, 0, rr * 0.55, 0, TAU); ctx.stroke();
+    }
+
+    if (cam.z > 0.26) {
+      ctx.fillStyle = picked ? '#e6fbff' : 'rgba(255,205,215,.9)';
+      ctx.font = '700 ' + (10 * hair) + 'px ui-monospace, Consolas, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(T.short || T.label, 0, -rr - 7 * hair);
+      ctx.textAlign = 'left';
+    }
+    ctx.restore();
+  }
+}
+
+function drawSpawn(hair) {
+  const many = map.spawns.length > 1;
+  for (let i = 0; i < map.spawns.length; i++) {
+    const s = map.spawns[i];
+    const picked = sel && sel.kind === 'spawn' && sel.i === i;
+    ctx.save();
+    ctx.translate(s.x, s.y);
+    ctx.fillStyle = picked ? 'rgba(67,217,245,.35)' : 'rgba(67,217,245,.16)';
+    ctx.strokeStyle = picked ? '#43d9f5' : 'rgba(67,217,245,.7)';
+    ctx.lineWidth = (picked ? 2.5 : 1.6) * hair;
+    ctx.beginPath();
+    ctx.moveTo(0, -18 * hair); ctx.lineTo(18 * hair, 0);
+    ctx.lineTo(0, 18 * hair); ctx.lineTo(-18 * hair, 0);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = picked ? '#e6fbff' : '#bff2ff';
+    ctx.font = '700 ' + (11 * hair) + 'px ui-monospace, Consolas, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(many ? '出生 ' + (i + 1) : '出生点', 0, -28 * hair);
+    ctx.textAlign = 'left';
+    ctx.restore();
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
+   5. 命中测试
+   ══════════════════════════════════════════════════════════ */
+function hitTest(wx, wy) {
+  const t = 8 / cam.z;
+  for (let i = map.units.length - 1; i >= 0; i--) {
+    const u = map.units[i];
+    const T = ENEMY_TYPES[u.type] || ENEMY_TYPES.runner;
+    if (dist(wx, wy, u.x, u.y) < Math.max(T.r, 11 / cam.z) + t) return { kind: 'enemy', i };
+  }
+  for (let i = map.spawns.length - 1; i >= 0; i--) {
+    if (dist(wx, wy, map.spawns[i].x, map.spawns[i].y) < 22 / cam.z + t) return { kind: 'spawn', i };
+  }
+  for (let i = map.crates.length - 1; i >= 0; i--) {
+    const c = map.crates[i];
+    const C = styleOfCrate(c);
+    if (Math.abs(wx - c.x) < C.w / 2 + t && Math.abs(wy - c.y) < C.h / 2 + t) return { kind: 'crate', i };
+  }
+  for (let i = map.nests.length - 1; i >= 0; i--) {
+    if (dist(wx, wy, map.nests[i].x, map.nests[i].y) < 26 / cam.z + t) return { kind: 'nest', i };
+  }
+  for (let i = map.extracts.length - 1; i >= 0; i--) {
+    if (dist(wx, wy, map.extracts[i].x, map.extracts[i].y) < 40 / cam.z + t) return { kind: 'extract', i };
+  }
+  for (let i = map.obstacles.length - 1; i >= 0; i--) {
+    const o = map.obstacles[i];
+    if (wx > o.x - t && wx < o.x + o.w + t && wy > o.y - t && wy < o.y + o.h + t) return { kind: 'wall', i };
+  }
+  return null;
+}
+
+function objOf(s) {
+  if (!s) return null;
+  if (s.kind === 'spawn') return map.spawns[s.i];
+  if (s.kind === 'enemy') return map.units[s.i];
+  if (s.kind === 'wall') return map.obstacles[s.i];
+  if (s.kind === 'crate') return map.crates[s.i];
+  if (s.kind === 'extract') return map.extracts[s.i];
+  if (s.kind === 'nest') return map.nests[s.i];
+  return null;
+}
+
+function removeSel() {
+  if (!sel) return;
+  if (sel.kind === 'spawn' && map.spawns.length <= 1) {
+    toast('至少要留一个出生点');
+    return;
+  }
+  pushUndo();
+  const list = sel.kind === 'wall' ? map.obstacles
+             : sel.kind === 'crate' ? map.crates
+             : sel.kind === 'extract' ? map.extracts
+             : sel.kind === 'spawn' ? map.spawns
+             : sel.kind === 'enemy' ? map.units
+             : map.nests;
+  list.splice(sel.i, 1);
+  sel = null;
+  refresh();
+}
+
+/* ══════════════════════════════════════════════════════════
+   6. 鼠标交互
+   ══════════════════════════════════════════════════════════ */
+cv.addEventListener('contextmenu', e => e.preventDefault());
+
+cv.addEventListener('wheel', e => {
+  e.preventDefault();
+  const before = screenToWorld(e.clientX, e.clientY);
+  const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+  cam.z = clamp(cam.z * factor, 0.1, 2.5);
+  const after = screenToWorld(e.clientX, e.clientY);
+  cam.x += before.x - after.x;
+  cam.y += before.y - after.y;
+}, { passive: false });
+
+cv.addEventListener('mousedown', e => {
+  const w = screenToWorld(e.clientX, e.clientY);
+  mouseWorld = w;
+
+  if (e.button === 2 || e.button === 1 || spaceDown) {
+    panning = { sx: e.clientX, sy: e.clientY, cx: cam.x, cy: cam.y };
+    cv.style.cursor = 'grabbing';
+    return;
+  }
+  if (e.button !== 0) return;
+
+  const hit = hitTest(w.x, w.y);
+
+  if (tool === 'select') {
+    sel = hit;
+    if (sel) {
+      const o = objOf(sel);
+      drag = { mode: 'move', offX: w.x - o.x, offY: w.y - o.y, moved: false };
+      pushUndo();
+    }
+    syncSel();
+    return;
+  }
+
+  if (tool === 'wall') {
+    drag = { mode: 'wallDraw', sx: snapVal(w.x), sy: snapVal(w.y), rect: null };
+    return;
+  }
+
+  if (tool === 'erase') {
+    if (!hit) return;
+    sel = hit;
+    removeSel();
+    return;
+  }
+
+  if (tool === 'spawn') {
+    if (map.spawns.length >= 12) { toast('出生点最多 12 个', true); return; }
+    if (pointBlocked(w.x, w.y)) { toast('不能在墙体里放出生点', true); return; }
+    pushUndo();
+    map.spawns.push({
+      x: Math.round(clamp(snapVal(w.x), 40, map.w - 40)),
+      y: Math.round(clamp(snapVal(w.y), 40, map.h - 40)),
+    });
+    sel = { kind: 'spawn', i: map.spawns.length - 1 };
+    if (map.spawns.length > 1) toast('第 ' + map.spawns.length + ' 个出生点：每局出击随机选一个');
+    refresh();
+    return;
+  }
+
+  if (tool === 'crate') {
+    if (pointBlocked(w.x, w.y)) { toast('不能在墙体里放容器', true); return; }
+    pushUndo();
+    map.crates.push({
+      x: Math.round(clamp(snapVal(w.x), 30, map.w - 30)),
+      y: Math.round(clamp(snapVal(w.y), 30, map.h - 30)),
+      t: crateKind || '',
+    });
+    sel = { kind: 'crate', i: map.crates.length - 1 };
+    refresh();
+    return;
+  }
+
+  if (tool === 'nest') {
+    if (pointBlocked(w.x, w.y)) { toast('不能在墙体里放据点', true); return; }
+    pushUndo();
+    map.nests.push({ x: Math.round(clamp(snapVal(w.x), 50, map.w - 50)), y: Math.round(clamp(snapVal(w.y), 50, map.h - 50)) });
+    sel = { kind: 'nest', i: map.nests.length - 1 };
+    refresh();
+    return;
+  }
+
+  if (tool === 'enemy') {
+    const type = document.getElementById('inType').value;
+    const T = ENEMY_TYPES[type] || ENEMY_TYPES.runner;
+    if (map.units.length >= 60) { toast('守军最多 60 个', true); return; }
+    if (!circleFree(w.x, w.y, T.r + 4)) {
+      toast('这里放不下' + T.label + '，需要 ' + Math.round(T.r + 4) + 'px 空地', true);
+      return;
+    }
+    pushUndo();
+    map.units.push({
+      x: Math.round(clamp(snapVal(w.x), T.r + 6, map.w - T.r - 6)),
+      y: Math.round(clamp(snapVal(w.y), T.r + 6, map.h - T.r - 6)),
+      type,
+    });
+    sel = { kind: 'enemy', i: map.units.length - 1 };
+    if (type === 'boss') toast('赤霄 已就位：守着这个点，用重机枪压制');
+    refresh();
+    return;
+  }
+
+  if (tool === 'extract') {
+    if (!circleFree(w.x, w.y, 110)) { toast('撤离点需要 110px 空地', true); return; }
+    pushUndo();
+    const names = ['A', 'B', 'C', 'D'];
+    map.extracts.push({
+      x: Math.round(clamp(snapVal(w.x), 140, map.w - 140)),
+      y: Math.round(clamp(snapVal(w.y), 140, map.h - 140)),
+      name: names[map.extracts.length % names.length],
+    });
+    sel = { kind: 'extract', i: map.extracts.length - 1 };
+    refresh();
+  }
+});
+
+window.addEventListener('mousemove', e => {
+  const w = screenToWorld(e.clientX, e.clientY);
+  mouseWorld = w;
+  document.getElementById('coord').textContent = Math.round(w.x) + ', ' + Math.round(w.y);
+
+  if (panning) {
+    cam.x = panning.cx - (e.clientX - panning.sx) / cam.z;
+    cam.y = panning.cy - (e.clientY - panning.sy) / cam.z;
+    return;
+  }
+  if (!drag) return;
+
+  if (drag.mode === 'move' && sel) {
+    const o = objOf(sel);
+    if (!o) return;
+    let nx = snapVal(w.x - drag.offX);
+    let ny = snapVal(w.y - drag.offY);
+    if (sel.kind === 'wall') {
+      nx = clamp(nx, 0, map.w - o.w);
+      ny = clamp(ny, 0, map.h - o.h);
+    } else if (sel.kind === 'spawn') {
+      nx = clamp(nx, 40, map.w - 40);
+      ny = clamp(ny, 40, map.h - 40);
+    } else if (sel.kind === 'enemy') {
+      const T = ENEMY_TYPES[o.type] || ENEMY_TYPES.runner;
+      nx = clamp(nx, T.r + 6, map.w - T.r - 6);
+      ny = clamp(ny, T.r + 6, map.h - T.r - 6);
+    } else {
+      nx = clamp(nx, 20, map.w - 20);
+      ny = clamp(ny, 20, map.h - 20);
+    }
+    o.x = Math.round(nx);
+    o.y = Math.round(ny);
+    drag.moved = true;
+    syncSel();
+    return;
+  }
+
+  if (drag.mode === 'wallDraw') {
+    const ex = clamp(snapVal(w.x), 0, map.w);
+    const ey = clamp(snapVal(w.y), 0, map.h);
+    drag.rect = {
+      x: Math.min(drag.sx, ex),
+      y: Math.min(drag.sy, ey),
+      w: Math.abs(ex - drag.sx),
+      h: Math.abs(ey - drag.sy),
+    };
+  }
+});
+
+window.addEventListener('mouseup', e => {
+  if (panning) { panning = null; cv.style.cursor = ''; return; }
+
+  if (drag && drag.mode === 'wallDraw') {
+    const r = drag.rect;
+    if (r && r.w >= 20 && r.h >= 20) {
+      pushUndo();
+      map.obstacles.push({ x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h) });
+      sel = { kind: 'wall', i: map.obstacles.length - 1 };
+    } else if (r) {
+      toast('墙体太小，已忽略（最小 20 × 20）', true);
+    }
+    drag = null;
+    refresh();
+    return;
+  }
+
+  if (drag && drag.mode === 'move' && !drag.moved) {
+    // 只是点了一下，撤销掉这次空快照
+    undoStack.pop();
+  }
+  drag = null;
+  refresh();
+});
+
+/* ══════════════════════════════════════════════════════════
+   7. 键盘
+   ══════════════════════════════════════════════════════════ */
+const TOOL_KEYS = { v: 'select', b: 'wall', c: 'crate', x: 'extract', n: 'nest', m: 'enemy', p: 'spawn', e: 'erase' };
+
+window.addEventListener('keydown', e => {
+  const tag = (e.target.tagName || '').toLowerCase();
+  const typing = tag === 'input' || tag === 'textarea';
+  const k = e.key.toLowerCase();
+
+  if (k === 'alt') altDown = true;
+
+  if ((e.ctrlKey || e.metaKey) && k === 'z') {
+    e.preventDefault();
+    if (e.shiftKey) redo(); else undo();
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && k === 'y') { e.preventDefault(); redo(); return; }
+  if ((e.ctrlKey || e.metaKey) && k === 's') { e.preventDefault(); exportJSON(); return; }
+
+  if (typing) {
+    if (k === 'escape') e.target.blur();
+    return;
+  }
+
+  if (k === ' ') { spaceDown = true; cv.style.cursor = 'grab'; e.preventDefault(); return; }
+  if (k === 'delete' || k === 'backspace') { e.preventDefault(); removeSel(); return; }
+  if (TOOL_KEYS[k]) { setTool(TOOL_KEYS[k]); return; }
+
+  if (k.startsWith('arrow')) {
+    e.preventDefault();
+    if (!sel) return;
+    const o = objOf(sel);
+    if (!o) return;
+    const step = e.shiftKey ? 10 : 1;
+    if (k === 'arrowleft') o.x -= step;
+    if (k === 'arrowright') o.x += step;
+    if (k === 'arrowup') o.y -= step;
+    if (k === 'arrowdown') o.y += step;
+    if (sel.kind === 'spawn') {
+      o.x = clamp(o.x, 40, map.w - 40);
+      o.y = clamp(o.y, 40, map.h - 40);
+    } else if (sel.kind === 'enemy') {
+      const T = ENEMY_TYPES[o.type] || ENEMY_TYPES.runner;
+      o.x = clamp(o.x, T.r + 6, map.w - T.r - 6);
+      o.y = clamp(o.y, T.r + 6, map.h - T.r - 6);
+    } else {
+      o.x = clamp(o.x, 0, map.w - (o.w || 0));
+      o.y = clamp(o.y, 0, map.h - (o.h || 0));
+    }
+    pushUndo();
+    syncSel();
+    refresh();
+  }
+});
+
+window.addEventListener('keyup', e => {
+  if (e.key.toLowerCase() === 'alt') altDown = false;
+  if (e.key === ' ') { spaceDown = false; if (!panning) cv.style.cursor = ''; }
+});
+
+/* ══════════════════════════════════════════════════════════
+   8. 界面同步
+   ══════════════════════════════════════════════════════════ */
+function setTool(t) {
+  tool = t;
+  document.querySelectorAll('#tools button').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
+  cv.style.cursor = t === 'select' ? 'default' : (t === 'erase' ? 'not-allowed' : 'crosshair');
+}
+
+function syncInputs() {
+  document.getElementById('inName').value = map.name;
+  document.getElementById('inW').value = map.w;
+  document.getElementById('inH').value = map.h;
+  document.getElementById('mapTitle').textContent = map.name + '  ·  ' + map.w + '×' + map.h;
+  document.title = map.name + ' · 地图编辑器';
+}
+
+/* 守军构成摘要 */
+function unitSummary() {
+  const c = { runner: 0, shooter: 0, brute: 0, sniper: 0, rocket: 0, flamer: 0, boss: 0 };
+  for (const u of map.units) if (c[u.type] !== undefined) c[u.type]++;
+  const parts = [];
+  if (c.runner) parts.push('小兵 ' + c.runner);
+  if (c.shooter) parts.push('盾兵 ' + c.shooter);
+  if (c.brute) parts.push('机枪 ' + c.brute);
+  if (c.sniper) parts.push('狙击 ' + c.sniper);
+  if (c.rocket) parts.push('火箭 ' + c.rocket);
+  if (c.flamer) parts.push('喷火 ' + c.flamer);
+  if (c.boss) parts.push('赤霄 ' + c.boss);
+  return map.units.length + ' 人' + (parts.length ? ' · ' + parts.join(' · ') : '');
+}
+
+function syncSel() {
+  const box = document.getElementById('selBox');
+  const info = document.getElementById('selInfo');
+  const size = document.getElementById('selSize');
+  const typeRow = document.getElementById('selTypeRow');
+  const crateRow = document.getElementById('selCrateRow');
+
+  if (!sel) {
+    box.classList.remove('on');
+    info.innerHTML = '未选中。用「选择」工具点击画布上的对象。';
+    return;
+  }
+
+  const o = objOf(sel);
+  if (!o) { sel = null; syncSel(); return; }
+
+  const label = { wall: '墙体', crate: (o.t ? containerOf(o.t).name : '随机容器'), extract: '撤离点', nest: '敌人据点', spawn: '玩家出生点', enemy: '敌人' }[sel.kind];
+  const suffix = sel.kind === 'spawn'
+    ? ' ' + (sel.i + 1) + ' / ' + map.spawns.length + (map.spawns.length > 1 ? '（每局随机选一个）' : '')
+    : (sel.kind === 'enemy' ? ' · ' + ((ENEMY_TYPES[o.type] || {}).label || '') : '');
+  const hint = sel.kind === 'enemy'
+    ? (o.type === 'boss' ? '<br>赤霄只守这个点，用重机枪扫射，近身会翻滚'
+      : o.type === 'shooter' ? '<br>盾兵正面的盾能挡子弹，绕到侧面或用雷'
+      : o.type === 'brute' ? '<br>机枪兵架加特林扫射，走得慢但很耐打'
+      : o.type === 'sniper' ? '<br>狙击兵开火前有一道激光，看到红线就躲墙'
+      : o.type === 'rocket' ? '<br>火箭兵装填后打一发直飞火箭，半空能打爆'
+      : o.type === 'flamer' ? '<br>喷火兵会贴到近处喷火，火舌穿不过墙'
+      : '<br>小兵个头小、跑得快，边冲边点射')
+    : '';
+  info.innerHTML = '<b>' + label + '</b>' + suffix + (sel.kind === 'extract' ? ' ' + (o.name || '') : '') +
+                   ' · 拖动可移动，方向键微调' + hint;
+
+  box.classList.add('on');
+  document.getElementById('selX').value = Math.round(o.x);
+  document.getElementById('selY').value = Math.round(o.y);
+  size.style.display = sel.kind === 'wall' ? 'grid' : 'none';
+  if (sel.kind === 'wall') {
+    document.getElementById('selW').value = Math.round(o.w);
+    document.getElementById('selH').value = Math.round(o.h);
+  }
+  typeRow.style.display = sel.kind === 'enemy' ? 'flex' : 'none';
+  if (sel.kind === 'enemy') document.getElementById('selType').value = o.type;
+
+  crateRow.style.display = sel.kind === 'crate' ? 'flex' : 'none';
+  if (sel.kind === 'crate') document.getElementById('selCrateKind').value = CONTAINERS[o.t] ? o.t : '';
+}
+
+function updateStats() {
+  const items = [
+    ['墙体', map.obstacles.length],
+    ['物资容器', map.crates.length],
+    ['撤离点', map.extracts.length],
+    ['据点', map.nests.length],
+    ['出生点', map.spawns.length],
+    ['守军', map.units.length],
+    ['尺寸', map.w + '×' + map.h],
+  ];
+  document.getElementById('stats').innerHTML = items.map(i =>
+    '<div class="stat"><span>' + i[0] + '</span><b>' + i[1] + '</b></div>').join('');
+  document.getElementById('unitSummary').textContent = unitSummary();
+
+  // 容器种类分布
+  const mix = {};
+  for (const c of map.crates) { const id = c.t && CONTAINERS[c.t] ? c.t : 'rand'; mix[id] = (mix[id] || 0) + 1; }
+  const parts = CONTAINER_IDS.filter(k => mix[k]).map(k =>
+    '<span style="color:' + CONTAINERS[k].color + '">' + CONTAINERS[k].tag + '</span> ' + mix[k]);
+  if (mix.rand) parts.push('<span style="color:#6b8fa8">随机</span> ' + mix.rand);
+  document.getElementById('crateMix').innerHTML = parts.join(' · ') || '还没有放容器';
+}
+
+function updateChecks() {
+  const rows = [];
+
+  if (map.extracts.length === 0) rows.push(['bad', '没有撤离点：玩家无法撤离，不能导出']);
+  else rows.push(['ok', '撤离点 ' + map.extracts.length + ' 个']);
+
+  const badSpawns = map.spawns.filter(s => pointBlocked(s.x, s.y)).length;
+  if (badSpawns) rows.push(['bad', badSpawns + ' 个出生点落在墙体里']);
+  else rows.push(['ok', '出生点 ' + map.spawns.length + ' 个' +
+    (map.spawns.length > 1 ? '（每局随机选一个）' : '')]);
+
+  // 出生点落在据点视野里：一落地就可能被发现
+  const riskySpawns = map.spawns.filter(s => map.nests.some(n => dist(s.x, s.y, n.x, n.y) < 430)).length;
+  if (riskySpawns) rows.push(['warn', riskySpawns + ' 个出生点在据点视野内（430px），开局可能立刻被发现']);
+
+  const inWallCrates = map.crates.filter(c => pointBlocked(c.x, c.y)).length;
+  if (inWallCrates) rows.push(['warn', inWallCrates + ' 个容器压在墙上，会被游戏自动挪开']);
+  const inWallNests = map.nests.filter(n => pointBlocked(n.x, n.y)).length;
+  if (inWallNests) rows.push(['warn', inWallNests + ' 个据点压在墙上，会被游戏自动挪开']);
+
+  const tightExtracts = map.extracts.filter(e => !circleFree(e.x, e.y, 110)).length;
+  if (tightExtracts) rows.push(['warn', tightExtracts + ' 个撤离点周围空地不足']);
+
+  if (map.nests.length === 0) rows.push(['warn', '没有据点：增援会挤在地图中心出现']);
+
+  if (map.units.length === 0) {
+    rows.push(['warn', '守军为 0，开局地图是空的']);
+  } else {
+    const bossN = map.units.filter(u => u.type === 'boss').length;
+    rows.push(['ok', '守军 ' + map.units.length + ' 人' + (bossN ? ' · 赤霄 ' + bossN : '')]);
+    const crowding = map.spawns.filter(s => map.units.some(u => dist(s.x, s.y, u.x, u.y) < 300)).length;
+    if (crowding) rows.push(['warn', crowding + ' 个出生点 300px 内就有敌人，落地可能直接交火']);
+    if (bossN > 2) rows.push(['warn', '赤霄有 ' + bossN + ' 个，打起来会非常硬']);
+  }
+
+  if (map.extracts.length && !badSpawns && !rows.some(r => r[0] !== 'ok')) {
+    rows.push(['ok', '地图可以正常使用']);
+  }
+
+  document.getElementById('checks').innerHTML = rows.map(r =>
+    '<div class="' + r[0] + '">' + (r[0] === 'ok' ? '· ' : '· ') + r[1] + '</div>').join('');
+}
+
+function refresh() {
+  updateStats();
+  updateChecks();
+  syncSel();
+  document.getElementById('mapTitle').textContent = map.name + '  ·  ' + map.w + '×' + map.h;
+}
+
+/* ══════════════════════════════════════════════════════════
+   9. 属性面板输入
+   ══════════════════════════════════════════════════════════ */
+document.getElementById('inName').addEventListener('input', e => {
+  map.name = e.target.value.slice(0, 24) || '未命名地图';
+  refresh();
+});
+
+function applySize() {
+  const w = clamp(parseInt(document.getElementById('inW').value, 10) || 3000, 1600, 6000);
+  const h = clamp(parseInt(document.getElementById('inH').value, 10) || 2200, 1200, 6000);
+  pushUndo();
+  map.w = w;
+  map.h = h;
+
+  for (const s of map.spawns) { s.x = clamp(s.x, 40, w - 40); s.y = clamp(s.y, 40, h - 40); }
+  for (const o of map.obstacles) {
+    o.w = Math.min(o.w, w);
+    o.h = Math.min(o.h, h);
+    o.x = clamp(o.x, 0, w - o.w);
+    o.y = clamp(o.y, 0, h - o.h);
+  }
+  for (const c of map.crates) { c.x = clamp(c.x, 30, w - 30); c.y = clamp(c.y, 30, h - 30); }
+  for (const n of map.nests) { n.x = clamp(n.x, 50, w - 50); n.y = clamp(n.y, 50, h - 50); }
+  for (const e of map.extracts) { e.x = clamp(e.x, 140, w - 140); e.y = clamp(e.y, 140, h - 140); }
+  for (const u of map.units) {
+    const R = (ENEMY_TYPES[u.type] || ENEMY_TYPES.runner).r + 6;
+    u.x = clamp(u.x, R, w - R);
+    u.y = clamp(u.y, R, h - R);
+  }
+
+  document.getElementById('inW').value = w;
+  document.getElementById('inH').value = h;
+  refresh();
+  fitView();
+}
+document.getElementById('inW').addEventListener('change', applySize);
+document.getElementById('inH').addEventListener('change', applySize);
+
+/* 守军批量操作：按据点铺开 / 清空 */
+function scatterUnits(n) {
+  const count = n || 14;
+  const nestList = map.nests.length ? map.nests : [{ x: map.w / 2, y: map.h / 2 }];
+  const pattern = ['runner', 'runner', 'shooter', 'brute'];
+  pushUndo();
+  map.units = [];
+  for (let i = 0; i < count; i++) {
+    const type = pattern[i % pattern.length];
+    const T = ENEMY_TYPES[type];
+    const home = nestList[i % nestList.length];
+    let placed = false;
+    for (let t = 0; t < 40; t++) {
+      const x = clamp(home.x + rand(-140, 140), T.r + 10, map.w - T.r - 10);
+      const y = clamp(home.y + rand(-140, 140), T.r + 10, map.h - T.r - 10);
+      if (!circleFree(x, y, T.r + 4)) continue;
+      map.units.push({ x: Math.round(x), y: Math.round(y), type });
+      placed = true;
+      break;
+    }
+    if (!placed) map.units.push({ x: Math.round(home.x), y: Math.round(home.y), type });
+  }
+  sel = null;
+  refresh();
+  toast('已按据点铺开 ' + map.units.length + ' 名守军');
+}
+
+document.getElementById('btnScatter').addEventListener('click', () => scatterUnits(14));
+document.getElementById('btnClearUnits').addEventListener('click', () => {
+  if (!map.units.length) { toast('守军已经是空的'); return; }
+  pushUndo();
+  map.units = [];
+  sel = null;
+  refresh();
+  toast('已清空守军');
+});
+
+function buildSquad(n) {
+  const pattern = ['runner', 'runner', 'shooter', 'brute'];
+  const out = [];
+  for (let i = 0; i < n; i++) out.push(pattern[i % pattern.length]);
+  return out;
+}
+
+function bindSelNum(id, key) {
+  document.getElementById(id).addEventListener('change', e => {
+    if (!sel) return;
+    const o = objOf(sel);
+    if (!o) return;
+    let v = parseInt(e.target.value, 10);
+    if (!isFinite(v)) return;
+    pushUndo();
+    if (key === 'x') o.x = sel.kind === 'wall' ? clamp(v, 0, map.w - o.w) : clamp(v, 0, map.w);
+    if (key === 'y') o.y = sel.kind === 'wall' ? clamp(v, 0, map.h - o.h) : clamp(v, 0, map.h);
+    if (key === 'w') o.w = clamp(v, 20, map.w - o.x);
+    if (key === 'h') o.h = clamp(v, 20, map.h - o.y);
+    syncSel();
+    refresh();
+  });
+}
+bindSelNum('selX', 'x');
+bindSelNum('selY', 'y');
+bindSelNum('selW', 'w');
+bindSelNum('selH', 'h');
+
+document.getElementById('selType').addEventListener('change', e => {
+  if (!sel || sel.kind !== 'enemy') return;
+  const o = map.units[sel.i];
+  if (!o) return;
+  pushUndo();
+  o.type = e.target.value;
+  refresh();
+});
+
+/* 放置容器时用哪种：改了之后接着放的都是这一种 */
+document.getElementById('inCrateKind').addEventListener('change', e => {
+  crateKind = CONTAINERS[e.target.value] ? e.target.value : '';
+  setTool('crate');
+  toast(crateKind ? '放置 ' + containerOf(crateKind).name : '放置随机容器（每局按权重抽）');
+});
+
+/* 改已选中容器的种类 */
+document.getElementById('selCrateKind').addEventListener('change', e => {
+  if (!sel || sel.kind !== 'crate') return;
+  const o = map.crates[sel.i];
+  if (!o) return;
+  pushUndo();
+  o.t = CONTAINERS[e.target.value] ? e.target.value : '';
+  refresh();
+  toast(o.t ? '改为 ' + containerOf(o.t).name : '改为随机容器');
+});
+
+document.querySelectorAll('#tools button').forEach(b => {
+  b.addEventListener('click', () => setTool(b.dataset.tool));
+});
+
+/* ══════════════════════════════════════════════════════════
+   10. 随机生成（与游戏同一套规则，方便从一张能玩的图开始改）
+   ══════════════════════════════════════════════════════════ */
+function randomize(silent) {
+  const w = map.w, h = map.h;
+  const cx = w / 2, cy = h / 2;
+  const next = emptyMap(w, h);
+  next.name = map.name === '未命名地图' ? '随机地图' : map.name;
+
+  // 墙体
+  let tries = 0;
+  while (next.obstacles.length < 34 && tries < 900) {
+    tries++;
+    const ow = rand(70, 300), oh = rand(70, 300);
+    const x = rand(120, w - 120 - ow), y = rand(120, h - 120 - oh);
+    const nx = clamp(cx, x, x + ow), ny = clamp(cy, y, y + oh);
+    if (dist(nx, ny, cx, cy) < 300) continue;
+    if (x < 60 || y < 60 || x + ow > w - 60 || y + oh > h - 60) continue;
+    let ok = true;
+    for (const o of next.obstacles) {
+      if (x < o.x + o.w + 110 && x + ow + 110 > o.x && y < o.y + o.h + 110 && y + oh + 110 > o.y) { ok = false; break; }
+    }
+    if (!ok) continue;
+    next.obstacles.push({ x: Math.round(x), y: Math.round(y), w: Math.round(ow), h: Math.round(oh) });
+  }
+
+  const blocked = (x, y, r) => {
+    if (x < r || y < r || x > w - r || y > h - r) return true;
+    for (const o of next.obstacles) {
+      const nx = clamp(x, o.x, o.x + o.w), ny = clamp(y, o.y, o.y + o.h);
+      if (dist(x, y, nx, ny) < r) return true;
+    }
+    return false;
+  };
+
+  // 物资容器：六种各来一个，剩下的按权重抽
+  tries = 0;
+  while (next.crates.length < 18 && tries < 2400) {
+    tries++;
+    const x = rand(140, w - 140), y = rand(140, h - 140);
+    if (blocked(x, y, 34)) continue;
+    if (dist(x, y, cx, cy) < 260) continue;
+    if (next.crates.some(c => dist(c.x, c.y, x, y) < 240)) continue;
+    const t = next.crates.length < CONTAINER_IDS.length
+      ? CONTAINER_IDS[next.crates.length]
+      : CONTAINER_IDS[Math.floor(Math.random() * CONTAINER_IDS.length)];
+    next.crates.push({ x: Math.round(x), y: Math.round(y), t });
+  }
+
+  // 撤离点：贴四条边
+  for (let i = 0; i < 2; i++) {
+    for (let t = 0; t < 120; t++) {
+      const side = randInt(0, 3);
+      let x, y;
+      if (side === 0) { x = rand(300, w - 300); y = 260; }
+      else if (side === 1) { x = rand(300, w - 300); y = h - 260; }
+      else if (side === 2) { x = 300; y = rand(260, h - 260); }
+      else { x = w - 300; y = rand(260, h - 260); }
+      if (blocked(x, y, 130)) continue;
+      if (dist(x, y, cx, cy) < 800) continue;
+      if (next.extracts.some(e => dist(e.x, e.y, x, y) < 1200)) continue;
+      next.extracts.push({ x: Math.round(x), y: Math.round(y), name: i === 0 ? 'A' : 'B' });
+      break;
+    }
+  }
+  // 兜底：按离中心从远到近扫格，保证撤离点真的有空地
+  if (next.extracts.length < 2) {
+    const spots = [];
+    for (let y = 300; y <= h - 300; y += 100) {
+      for (let x = 300; x <= w - 300; x += 100) {
+        if (blocked(x, y, 130)) continue;
+        if (next.extracts.some(e => dist(e.x, e.y, x, y) < 900)) continue;
+        spots.push({ x, y });
+      }
+    }
+    spots.sort((a, b) => dist(b.x, b.y, cx, cy) - dist(a.x, a.y, cx, cy));
+    while (next.extracts.length < 2 && spots.length) {
+      const sp = spots.shift();
+      next.extracts.push({ x: sp.x, y: sp.y, name: next.extracts.length === 0 ? 'A' : 'B' });
+    }
+  }
+  if (next.extracts.length === 0) {
+    next.extracts = [
+      { x: 300, y: 260, name: 'A' },
+      { x: w - 300, y: h - 260, name: 'B' },
+    ];
+  }
+
+  // 据点 4×3
+  const cols = 4, rows = 3;
+  for (let gy = 0; gy < rows; gy++) {
+    for (let gx = 0; gx < cols; gx++) {
+      const bx = 300 + (w - 600) * (gx / (cols - 1));
+      const by = 300 + (h - 600) * (gy / (rows - 1));
+      let px = bx, py = by, found = false;
+      for (let t = 0; t < 60; t++) {
+        px = clamp(bx + rand(-190, 190), 160, w - 160);
+        py = clamp(by + rand(-160, 160), 160, h - 160);
+        if (blocked(px, py, 46)) continue;
+        if (dist(px, py, cx, cy) < 780) continue;
+        found = true;
+        break;
+      }
+      if (found) next.nests.push({ x: Math.round(px), y: Math.round(py) });
+    }
+  }
+  if (next.nests.length < 4) {
+    next.nests = [
+      { x: 340, y: 340 }, { x: w - 340, y: 340 },
+      { x: 340, y: h - 340 }, { x: w - 340, y: h - 340 },
+    ];
+  }
+
+  // 出生点：找一个空着的中心位置
+  let sx = cx, sy = cy;
+  if (blocked(sx, sy, 24)) {
+    outer:
+    for (let rad = 40; rad <= 900; rad += 40) {
+      for (let i = 0; i < 24; i++) {
+        const a = i / 24 * TAU;
+        const tx = cx + Math.cos(a) * rad, ty = cy + Math.sin(a) * rad;
+        if (!blocked(tx, ty, 24)) { sx = tx; sy = ty; break outer; }
+      }
+    }
+  }
+  next.spawns = [{ x: Math.round(sx), y: Math.round(sy) }];
+
+  // 守军：按据点铺开，混合兵种（默认不放 BOSS，需要时用 M 工具手动放）
+  const plan = DEFAULT_SQUAD.slice();
+  const nestList = next.nests.length ? next.nests : [{ x: cx, y: cy }];
+  plan.forEach((type, i) => {
+    const T = ENEMY_TYPES[type];
+    const home = nestList[i % nestList.length];
+    for (let t = 0; t < 40; t++) {
+      const x = clamp(home.x + rand(-150, 150), T.r + 10, w - T.r - 10);
+      const y = clamp(home.y + rand(-150, 150), T.r + 10, h - T.r - 10);
+      if (blocked(x, y, T.r + 4)) continue;
+      next.units.push({ x: Math.round(x), y: Math.round(y), type });
+      break;
+    }
+  });
+
+  pushUndo();
+  map = next;
+  sel = null;
+  syncInputs();
+  refresh();
+  fitView();
+  if (!silent) toast('已随机生成一张地图');
+}
+
+/* ══════════════════════════════════════════════════════════
+   11. 导入 / 导出 / 写入游戏
+   ══════════════════════════════════════════════════════════ */
+function payload() {
+  return {
+    format: MAP_FORMAT, version: MAP_VERSION,
+    name: map.name.slice(0, 24), w: map.w, h: map.h,
+    spawns: map.spawns.map(s => ({ x: Math.round(s.x), y: Math.round(s.y) })),
+    obstacles: map.obstacles.map(o => ({ x: Math.round(o.x), y: Math.round(o.y), w: Math.round(o.w), h: Math.round(o.h) })),
+    crates: map.crates.map(c => ({ x: Math.round(c.x), y: Math.round(c.y), t: c.t || undefined })),
+    extracts: map.extracts.map(e => ({ x: Math.round(e.x), y: Math.round(e.y), name: e.name || 'A' })),
+    nests: map.nests.map(n => ({ x: Math.round(n.x), y: Math.round(n.y) })),
+    units: map.units.map(u => ({ x: Math.round(u.x), y: Math.round(u.y), type: u.type })),
+    squad: (map.units.length ? map.units.map(u => u.type) : buildSquad(14)).slice(0, 32),
+  };
+}
+
+function validate() {
+  if (map.extracts.length === 0) { msg('导出失败：地图里至少要有一个撤离点', 'warn'); toast('缺少撤离点', true); return false; }
+  if (!map.spawns.length) { msg('导出失败：至少要有一个出生点', 'warn'); toast('缺少出生点', true); return false; }
+  const bad = map.spawns.filter(s => pointBlocked(s.x, s.y)).length;
+  if (bad) { msg('导出失败：有 ' + bad + ' 个出生点落在墙体里，先挪出来', 'warn'); toast('出生点在墙里', true); return false; }
+  return true;
+}
+
+function exportJSON() {
+  if (!validate()) return;
+  const data = payload();
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = (map.name || 'map').replace(/[\\/:*?"<>|]/g, '_') + '.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  msg('已导出 ' + data.name + '.json（墙 ' + data.obstacles.length + ' · 箱 ' + data.crates.length +
+      ' · 撤离 ' + data.extracts.length + ' · 据点 ' + data.nests.length + '）', 'ok');
+  toast('已导出 JSON');
+}
+
+function toGame() {
+  if (!validate()) return;
+  try {
+    localStorage.setItem(MAP_KEY, JSON.stringify(payload()));
+    msg('已写入本机浏览器。打开 index.html，进大厅点「地图」即可看到这张图（游戏已开着的话刷新一次）。', 'ok');
+    toast('已写入本机游戏');
+  } catch (e) {
+    msg('写入失败（浏览器禁用了本地存储），请改用「导出 JSON」再在游戏里导入。', 'warn');
+    toast('写入失败', true);
+  }
+}
+
+function importText(text, fname) {
+  let raw;
+  try { raw = JSON.parse(text); }
+  catch (e) { msg('JSON 解析失败，请检查文件内容', 'warn'); toast('解析失败', true); return; }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) { msg('文件内容不是地图对象', 'warn'); return; }
+
+  const w = clamp(Math.round(raw.w || 3000), 1600, 6000);
+  const h = clamp(Math.round(raw.h || 2200), 1200, 6000);
+  const next = emptyMap(w, h);
+  next.name = (typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim()
+              : (fname ? fname.replace(/\.json$/i, '') : '导入地图')).slice(0, 24);
+
+  const push = (arr, item) => { if (arr.length < 320) arr.push(item); };
+
+  for (const o of (Array.isArray(raw.obstacles) ? raw.obstacles : [])) {
+    if (!o) continue;
+    const ow = clamp(Math.round(o.w || 100), 20, w);
+    const oh = clamp(Math.round(o.h || 100), 20, h);
+    push(next.obstacles, {
+      x: clamp(Math.round(o.x || 0), 0, w - ow), y: clamp(Math.round(o.y || 0), 0, h - oh),
+      w: ow, h: oh,
+    });
+  }
+  for (const c of (Array.isArray(raw.crates) ? raw.crates : [])) {
+    if (!c) continue;
+    push(next.crates, {
+      x: clamp(Math.round(c.x || 0), 30, w - 30),
+      y: clamp(Math.round(c.y || 0), 30, h - 30),
+      t: CONTAINERS[c.t] ? c.t : '',
+    });
+  }
+  for (const e of (Array.isArray(raw.extracts) ? raw.extracts : [])) {
+    if (!e) continue;
+    push(next.extracts, {
+      x: clamp(Math.round(e.x || 0), 140, w - 140),
+      y: clamp(Math.round(e.y || 0), 140, h - 140),
+      name: String(e.name || 'A').slice(0, 2),
+    });
+  }
+  for (const n of (Array.isArray(raw.nests) ? raw.nests : [])) {
+    if (!n) continue;
+    push(next.nests, { x: clamp(Math.round(n.x || 0), 50, w - 50), y: clamp(Math.round(n.y || 0), 50, h - 50) });
+  }
+  // 出生点：spawns 数组（N 个）优先，旧文件的单点 spawn 也能读
+  const rawSpawns = Array.isArray(raw.spawns) ? raw.spawns : (raw.spawn ? [raw.spawn] : []);
+  const spawnList = [];
+  for (const s of rawSpawns) {
+    if (!s || !isFinite(s.x) || !isFinite(s.y)) continue;
+    const x = clamp(Math.round(s.x), 40, w - 40);
+    const y = clamp(Math.round(s.y), 40, h - 40);
+    if (spawnList.some(q => dist(q.x, q.y, x, y) < 20)) continue;
+    spawnList.push({ x, y });
+    if (spawnList.length >= 12) break;
+  }
+  next.spawns = spawnList.length ? spawnList : [{ x: Math.round(w / 2), y: Math.round(h / 2) }];
+  const squad = Array.isArray(raw.squad)
+    ? raw.squad.filter(t => ENEMY_TYPES[t]).slice(0, 32)
+    : [];
+  next.squad = squad.length ? squad : buildSquad(14);
+
+  const freeAt = (x, y, r) => {
+    if (x < r || y < r || x > w - r || y > h - r) return false;
+    for (const o of next.obstacles) {
+      const nx = clamp(x, o.x, o.x + o.w), ny = clamp(y, o.y, o.y + o.h);
+      if ((x - nx) * (x - nx) + (y - ny) * (y - ny) < r * r) return false;
+    }
+    return true;
+  };
+
+  // 兵种布点：units 优先；旧地图只有 squad 时按据点铺开
+  for (const u of (Array.isArray(raw.units) ? raw.units : [])) {
+    if (!u || !ENEMY_TYPES[u.type]) continue;
+    const T = ENEMY_TYPES[u.type];
+    next.units.push({
+      x: clamp(Math.round(u.x || 0), T.r + 6, w - T.r - 6),
+      y: clamp(Math.round(u.y || 0), T.r + 6, h - T.r - 6),
+      type: u.type,
+    });
+    if (next.units.length >= 60) break;
+  }
+  if (!next.units.length) {
+    const nestList = next.nests.length ? next.nests : [{ x: w / 2, y: h / 2 }];
+    next.squad.forEach((type, i) => {
+      const T = ENEMY_TYPES[type];
+      const home = nestList[i % nestList.length];
+      for (let t = 0; t < 40; t++) {
+        const x = clamp(home.x + rand(-140, 140), T.r + 10, w - T.r - 10);
+        const y = clamp(home.y + rand(-140, 140), T.r + 10, h - T.r - 10);
+        if (!freeAt(x, y, T.r + 4)) continue;
+        next.units.push({ x: Math.round(x), y: Math.round(y), type });
+        break;
+      }
+    });
+  }
+
+  pushUndo();
+  map = next;
+  sel = null;
+  syncInputs();
+  refresh();
+  fitView();
+  msg('已导入「' + map.name + '」：墙 ' + map.obstacles.length + ' · 箱 ' + map.crates.length +
+      ' · 撤离 ' + map.extracts.length + ' · 据点 ' + map.nests.length +
+      ' · 出生点 ' + map.spawns.length + ' · 守军 ' + map.units.length, 'ok');
+  toast('已导入地图');
+}
+
+document.getElementById('file').addEventListener('change', e => {
+  const f = e.target.files && e.target.files[0];
+  if (f) {
+    const rd = new FileReader();
+    rd.onload = () => importText(String(rd.result), f.name);
+    rd.readAsText(f);
+  }
+  e.target.value = '';
+});
+
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => {
+  e.preventDefault();
+  const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => importText(String(rd.result), f.name);
+  rd.readAsText(f);
+});
+
+document.getElementById('btnImport').addEventListener('click', () => document.getElementById('file').click());
+document.getElementById('btnExport').addEventListener('click', exportJSON);
+document.getElementById('btnToGame').addEventListener('click', toGame);
+document.getElementById('btnRandom').addEventListener('click', () => randomize());
+document.getElementById('btnUndo').addEventListener('click', undo);
+document.getElementById('btnRedo').addEventListener('click', redo);
+document.getElementById('btnClear').addEventListener('click', () => {
+  if (!confirm('清空当前地图的全部内容？可以用 Ctrl+Z 撤销。')) return;
+  pushUndo();
+  map = emptyMap(map.w, map.h);
+  map.name = document.getElementById('inName').value || '未命名地图';
+  sel = null;
+  syncInputs();
+  refresh();
+  toast('已清空');
+});
+document.getElementById('btnPlay').addEventListener('click', () => {
+  window.open('index.html', '_blank');
+  msg('已尝试打开游戏。若新标签页没反应，直接双击同目录的 index.html；记得先前先「写入本机游戏」。', 'ok');
+});
+
+/* ══════════════════════════════════════════════════════════
+   12. 提示条
+   ══════════════════════════════════════════════════════════ */
+let toastTimer = null;
+function toast(text, warn) {
+  const el = document.getElementById('toast');
+  el.textContent = text;
+  el.style.borderColor = warn ? 'rgba(255,179,71,.6)' : 'rgba(67,217,245,.4)';
+  el.style.color = warn ? '#ffb347' : '#dff6ff';
+  el.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('on'), 1500);
+}
+function msg(text, cls) {
+  const el = document.getElementById('msg');
+  el.textContent = text;
+  el.className = cls || '';
+}
+
+/* ══════════════════════════════════════════════════════════
+   13. 启动
+   ══════════════════════════════════════════════════════════ */
+function boot() {
+  resize();
+
+  // 优先读取游戏里上次保存的地图，方便接着改
+  try {
+    const raw = localStorage.getItem(MAP_KEY);
+    if (raw) {
+      importText(raw, '已保存的地图.json');
+      msg('已读取游戏里保存的地图，可以直接接着改。', 'ok');
+    } else {
+      randomize(true);
+      msg('已生成一张随机地图作为起点。改完点「写入本机游戏」或「导出 JSON」。', 'ok');
+    }
+  } catch (e) {
+    randomize(true);
+  }
+
+  undoStack.length = 0;
+  redoStack.length = 0;
+
+  syncInputs();
+  refresh();
+  fitView();
+
+  (function tick() {
+    draw();
+    requestAnimationFrame(tick);
+  })();
+}
+boot();
+</script>
+</body>
+</html>
