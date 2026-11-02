@@ -538,7 +538,7 @@
       <section class="card">
         <h4>行动简报</h4>
         <ul class="brief">
-          <li>进入封锁区，靠近物资容器按 E 开箱，东西会一件件翻出来</li>
+          <li>进入封锁区，靠近物资容器按 F 开箱，东西会一件件翻出来</li>
           <li>容器有六种：弹药箱最快、医疗箱全是药、武器箱必出枪、保险柜最慢最肥</li>
           <li>品质越高翻得越慢：普通货一秒，神话货（红）要蹲着翻近五秒</li>
           <li>容器里会翻出枪和枪的配件，撤出去才能在改装台上装</li>
@@ -583,6 +583,7 @@
     </header>
     <div class="tabs" id="shopTabs">
       <button class="tab on" data-tab="weapon">武 器</button>
+      <button class="tab" data-tab="melee">近 战</button>
       <button class="tab" data-tab="armor">护 甲</button>
       <button class="tab" data-tab="supply">补 给</button>
     </div>
@@ -921,11 +922,35 @@ const SAVE_KEY = 'neonpurge_extract_v1';
 /* 免费保底枪：永远拥有、备弹无限。破产了也一定能再战一局。 */
 const STARTER_WEAPON = 'g17';
 
+/* ── 近战武器 ──
+   刀不占枪的弹药，槽位独立（数字键 3）。判定是"身前一段扇形"，
+   一次挥击能同时扫到扇区里的所有敌人。近战无视盾牌 —— 贴身就是贴到盾后了。
+   reach 是加在 玩家半径 + 敌人半径 之上的额外距离。 */
+const MELEES = {
+  knife_tactical: {
+    name: '战术匕首', code: 'TACTICAL KNIFE', price: 0,
+    dmg: 55, reach: 30, arc: 0.72, rate: 0.42, knock: 120,
+    desc: '制式战术匕首。静音、不耗弹药，普通小兵一刀一个；被贴脸时的最后手段。',
+    color: '#cfd8e3',
+  },
+  knife_blackhawk: {
+    name: '黑鹰匕首', code: 'BLACK HAWK', price: 2600,
+    dmg: 92, reach: 36, arc: 0.80, rate: 0.36, knock: 190,
+    desc: '加长刃的重型战术刀。单刀伤害接近步枪单发，出手更长、挥速更快，机密图也能一刀带走小兵。',
+    color: '#ffd08a',
+  },
+};
+const MELEE_ORDER = ['knife_tactical', 'knife_blackhawk'];
+const STARTER_MELEE = 'knife_tactical';
+
 const DEFAULT_SAVE = () => ({
   credits: 3500,
   owned: { [STARTER_WEAPON]: true },
   armorMax: 0,
-  equippedWeapon: STARTER_WEAPON,
+  /* 出击配装：主武器 / 副武器（都只能放长枪）/ 手枪。空槽是 null */
+  loadout: { primary: null, secondary: null, pistol: STARTER_WEAPON },
+  ownedMelee: { [STARTER_MELEE]: true },
+  equippedMelee: STARTER_MELEE,
   equippedArmor: 0,
   medkits: 2,
   grenades: 1,
@@ -963,12 +988,13 @@ function loadSave() {
     if (!raw) return base;
     const d = JSON.parse(raw);
     const owned = migrateWeaponIds(Object.assign({}, DEFAULT_SAVE().owned, d.owned || {}));
-    const eqW = WEAPON_ID_MIGRATE[d.equippedWeapon] || d.equippedWeapon || STARTER_WEAPON;
     return {
       credits: typeof d.credits === 'number' ? d.credits : base.credits,
       owned: owned,
       armorMax: d.armorMax | 0,
-      equippedWeapon: KNOWN_WEAPON_IDS[eqW] ? eqW : STARTER_WEAPON,
+      loadout: cleanLoadout(d, owned),
+      ownedMelee: cleanOwnedMelee(d.ownedMelee),
+      equippedMelee: MELEES[d.equippedMelee] ? d.equippedMelee : STARTER_MELEE,
       equippedArmor: d.equippedArmor | 0,
       medkits: d.medkits | 0,
       grenades: d.grenades | 0,
@@ -979,6 +1005,42 @@ function loadSave() {
       stats: Object.assign({ raids: 0, extracts: 0, deaths: 0, loot: 0, kills: 0, sold: 0 }, d.stats || {}),
     };
   } catch (e) { return base; }
+}
+
+/* 配装清洗：三把枪各自只能放对应类别的枪，而且必须真的拥有。
+   旧档没有 loadout 字段，只有 equippedWeapon（唯一一把），按类别塞进对应槽。 */
+function cleanLoadout(d, owned) {
+  const LO = { primary: null, secondary: null, pistol: STARTER_WEAPON };
+  const pick = (rawId, kind) => {
+    const to = WEAPON_ID_MIGRATE[rawId] || rawId;
+    if (!to || !KNOWN_WEAPON_IDS[to]) return null;
+    if (!owned[to]) return null;
+    const isPistol = !!PISTOL_IDS[to];
+    if (kind === 'pistol') return isPistol ? to : null;
+    return isPistol ? null : to;
+  };
+
+  const src = (d && d.loadout && typeof d.loadout === 'object') ? d.loadout : null;
+  if (src) {
+    LO.primary = pick(src.primary, 'long');
+    LO.secondary = pick(src.secondary, 'long');
+    if (LO.secondary === LO.primary) LO.secondary = null;
+    LO.pistol = pick(src.pistol, 'pistol') || STARTER_WEAPON;
+  } else {
+    /* 老档：只有一把装备，按它是长枪还是手枪归位 */
+    const eq = d.equippedWeapon;
+    const one = pick(eq, 'long');
+    if (one) LO.primary = one;
+    LO.pistol = pick(eq, 'pistol') || STARTER_WEAPON;
+  }
+  return LO;
+}
+
+function cleanOwnedMelee(raw) {
+  const out = { [STARTER_MELEE]: true };
+  if (!raw || typeof raw !== 'object') return out;
+  for (const id in raw) if (raw[id] && MELEES[id]) out[id] = true;
+  return out;
 }
 
 /* 仓库数据清洗：只留已知收集品，数量取正整数 */
@@ -1139,8 +1201,20 @@ function adsOf(w) {
   return (w && w.ads) || { spread: 0.5, move: 0.6, time: 0.18 };
 }
 
-/* 快捷栏 / 滚轮 / HUD 都按这个顺序（数字键 1~8） */
+/* 军火库 / 改装台 / 掉落池的枚举顺序（不直接等于快捷栏） */
 const WEAPON_ORDER = ['g17', '93r', 'g18', 'bizon', 'm870', 'm4a1', 'sr9', 'r93'];
+
+
+/* 装备槽：数字键 1~5 一一对应 */
+const SLOT_DEFS = [
+  { id: 'primary',   key: '1', cn: '主武器', en: 'PRIMARY' },
+  { id: 'secondary', key: '2', cn: '副武器', en: 'SECONDARY' },
+  { id: 'melee',     key: '3', cn: '近战',   en: 'MELEE' },
+  { id: 'pistol',    key: '4', cn: '手枪',   en: 'PISTOL' },
+  { id: 'medkit',    key: '5', cn: '医疗',   en: 'MEDKIT' },
+];
+/* 哪些槽装的是枪 */
+const GUN_SLOTS = ['primary', 'secondary', 'pistol'];
 
 /* ══════════════════════════════════════════════════════════
    改枪：把「基础枪 + 已装配件」算成一份生效数值
@@ -1217,7 +1291,7 @@ const ARMORS = [
 ];
 
 const SUPPLY = {
-  medkit:  { name: '医疗包',  price: 320, desc: '局内按 F 使用，立即恢复 55 点生命。' },
+  medkit:  { name: '医疗包',  price: 320, desc: '局内按 5 掏出立即包扎，恢复 55 点生命。' },
   grenade: { name: '破片手雷', price: 500, desc: '局内按 G 投掷，范围爆炸伤害。' },
   ammoPack:{ name: '弹药包',  price: 800, desc: '出击时所有武器备弹量 +50%。可叠加。' },
 };
@@ -1433,13 +1507,12 @@ window.addEventListener('keydown', e => {
     else if (G.scene === 'lobby' && !$('maps').classList.contains('hidden')) closeMaps();
   }
   if (G.scene !== 'playing') return;
-  if (k === 'e' && !e.repeat) searchInteract();   // 点一下开箱，不用长按
+  if (k === 'f' && !e.repeat) searchInteract();   // 点一下开箱，不用长按
   if (k === 'r') startReload();
-  if (k === 'f') useMedkit();
   if (k === 'g') throwGrenade();
-  if (k >= '1' && k <= '9') {
-    const wq = WEAPON_ORDER[+k - 1];
-    if (wq) switchWeapon(wq);
+  if (k >= '1' && k <= '5' && !e.repeat) {
+    const sd = SLOT_DEFS[+k - 1];
+    if (sd) equipSlot(sd.id);
   }
 });
 window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
@@ -1462,11 +1535,7 @@ canvas.addEventListener('contextmenu', e => e.preventDefault());
 canvas.addEventListener('wheel', e => {
   e.preventDefault();
   if (G.scene !== 'playing') return;
-  const list = WEAPON_ORDER.filter(w => P.owned[w]);
-  if (list.length < 2) return;
-  let i = list.indexOf(P.weapon);
-  i = (i + (e.deltaY > 0 ? 1 : -1) + list.length) % list.length;
-  switchWeapon(list[i]);
+  cycleSlot(e.deltaY > 0 ? 1 : -1);
 }, { passive: false });
 
 /* ══════════════════════════════════════════════════════════
@@ -1537,7 +1606,14 @@ const P = {
   dashCd: 0,
   invuln: 0,
   hurtFlash: 0,
-  weapon: STARTER_WEAPON,
+  weapon: STARTER_WEAPON,       // 当前手持的那把枪（切到刀/医疗时保留上次的枪）
+  curSlot: 'pistol',            // primary / secondary / melee / pistol / medkit
+  slots: { primary: null, secondary: null, pistol: STARTER_WEAPON },
+  melee: STARTER_MELEE,
+  meleeCd: 0,
+  swingT: 0,                    // 挥击动画剩余时间
+  swingAim: 0,                  // 挥击时的朝向
+  swingHit: 0,                  // 本次挥击命中人数（>0 就画命中特效）
   owned: { [STARTER_WEAPON]: true },
   ammo: {},
   walkPhase: 0,
@@ -2187,7 +2263,7 @@ function resetPlayer() {
   P.vy = 0;
   P.ads = 0;
   P.adsPrev = 0;
-  popup(P.x, P.y - 46, '右键开镜', '#8ef2ff', 13);
+  popup(P.x, P.y - 46, P.curSlot === 'pistol' ? '只有手枪 · 1~5 切换装备' : '右键开镜 · 1~5 切换装备', '#8ef2ff', 13);
   P.fireCd = 0;
   P.burstLeft = 0;
   P.triggerPrev = false;
@@ -2207,14 +2283,26 @@ function resetPlayer() {
   P.hurtDir = 0;
   P.hurtDirT = 0;
 
-  // 每局只携带出击时选定的那一把武器，搜到的临时武器不会保留到下一局
+  // 每局按大厅配装携带：主武器 / 副武器 / 手枪，三槽各自独立弹药
   // 免费保底枪永远带在身上（备弹无限），破产也不至于空手
   P.owned = {};
-  P.owned[STARTER_WEAPON] = true;
-  let wq = SAVE.equippedWeapon;
-  if (!SAVE.owned[wq] || !WEAPONS[wq]) wq = STARTER_WEAPON;
-  P.owned[wq] = true;
-  P.weapon = wq;
+  P.slots = { primary: null, secondary: null, pistol: null };
+  const LO = SAVE.loadout || {};
+  for (const k of GUN_SLOTS) {
+    const id = LO[k];
+    if (!id || !WEAPONS[id] || !SAVE.owned[id]) continue;
+    P.slots[k] = id;
+    P.owned[id] = true;
+  }
+  if (!P.slots.pistol) P.slots.pistol = STARTER_WEAPON;
+  P.owned[P.slots.pistol] = true;
+  P.curSlot = P.slots.primary ? 'primary' : (P.slots.secondary ? 'secondary' : 'pistol');
+  P.weapon = P.slots[P.curSlot] || STARTER_WEAPON;
+
+  P.melee = (SAVE.ownedMelee && SAVE.ownedMelee[SAVE.equippedMelee]) ? SAVE.equippedMelee : STARTER_MELEE;
+  P.meleeCd = 0;
+  P.swingT = 0;
+  P.swingHit = 0;
 
   const ammoMul = 1 + SAVE.ammoPacks * 0.5;
   P.ammo = {};
@@ -2239,13 +2327,104 @@ function currentAmmo() {
   return P.ammo[P.weapon];
 }
 
-function switchWeapon(w) {
-  if (!w || !P.owned[w] || P.weapon === w) return;
-  P.weapon = w;
+/* 这个槽现在能不能掏出来 */
+function slotReady(slot) {
+  if (slot === 'melee') return !!(P.melee && MELEES[P.melee]);
+  if (slot === 'medkit') return P.medkits > 0;
+  return !!(P.slots && P.slots[slot] && P.owned[P.slots[slot]]);
+}
+
+function slotGunId(slot) {
+  return (P.slots && GUN_SLOTS.indexOf(slot) >= 0) ? P.slots[slot] : null;
+}
+
+/* 局内拾到的枪往哪放：同类槽优先空位，都满了就顶掉没拿在手上的那个槽。
+   顶替不会删除 P.owned —— 那把枪还在背包里，撤离后照样入库。 */
+function stowGun(id) {
+  const isP = !!PISTOL_IDS[id];
+  const spots = isP ? ['pistol'] : ['primary', 'secondary'];
+  if (!P.slots) return null;
+  for (const k of spots) {
+    if (!P.slots[k]) { P.slots[k] = id; return k; }
+  }
+  const idle = spots.find(k => k !== P.curSlot) || spots[0];
+  P.slots[idle] = id;
+  return idle;
+}
+
+/* 按 1~5 / 滚轮：切到对应槽位。
+   切到医疗槽时直接把医疗包拿出来用一次（再按 5 或左键可以接着用）。 */
+function equipSlot(slot) {
+  if (!P.alive) return;
+  if (!slotReady(slot)) {
+    if (slot === 'medkit') uiToast('没有医疗包了', 'small warn');
+    else if (slot === 'secondary') uiToast('副武器槽是空的 · 回大厅装配', 'small warn');
+    else if (slot === 'primary') uiToast('主武器槽是空的 · 回大厅装配', 'small warn');
+    else uiToast('没有可用的近战武器', 'small warn');
+    return;
+  }
+  if (P.curSlot === slot) {
+    if (slot === 'medkit') useMedkit();
+    return;
+  }
+  P.curSlot = slot;
   P.burstLeft = 0;
   P.reloading = 0;
+  P.meleeCd = 0;
+  P.ads = 0;
+  P.adsPrev = 0;
+  const g = slotGunId(slot);
+  if (g) P.weapon = g;
   P.fireCd = Math.max(P.fireCd, 0.14);
   Sfx.tone(420, 0.05, 0.06, 'square');
+  if (slot === 'medkit') useMedkit();
+}
+
+/* 滚轮：在摸得到的槽之间循环 */
+function cycleSlot(dir) {
+  const list = SLOT_DEFS.map(d => d.id).filter(slotReady);
+  if (list.length < 2) return;
+  let i = list.indexOf(P.curSlot);
+  if (i < 0) i = 0;
+  i = (i + (dir > 0 ? 1 : -1) + list.length) % list.length;
+  equipSlot(list[i]);
+}
+
+/* 挥刀：身前扇形内所有敌人一起吃伤害，静音、不吃盾、不耗弹药 */
+function swingMelee() {
+  if (!P.alive || P.meleeCd > 0) return;
+  const M = MELEES[P.melee] || MELEES[STARTER_MELEE];
+  P.meleeCd = M.rate;
+  P.swingT = 0.22;
+  P.swingAim = P.aim;
+  P.swingHit = 0;
+  P.fireCd = Math.max(P.fireCd, 0.05);
+
+  let hitN = 0;
+  for (let i = G.enemies.length - 1; i >= 0; i--) {
+    const e = G.enemies[i];
+    if (!e.alive) continue;
+    const dx = e.x - P.x, dy = e.y - P.y;
+    const d = Math.hypot(dx, dy);
+    if (d > P.r + e.r + M.reach) continue;
+    if (Math.abs(angleDiff(Math.atan2(dy, dx), P.aim)) > M.arc) continue;
+    const ux = d > 0.001 ? dx / d : Math.cos(P.aim);
+    const uy = d > 0.001 ? dy / d : Math.sin(P.aim);
+    damageEnemy(e, M.dmg, ux, uy, M.knock);
+    popup(e.x, e.y - e.r - 8, String(Math.round(M.dmg)), M.color, 13);
+    burst(e.x + ux * e.r * 0.6, e.y + uy * e.r * 0.6, 7, {
+      color: [M.color, '#ff8fa3'], life: 0.35, r: 3.4, spdMin: 40, spdMax: 190, glow: true,
+    });
+    hitN++;
+  }
+  P.swingHit = hitN;
+  if (hitN) {
+    Sfx.meleeHit();
+    shake(4);
+    emitNoise(P.x, P.y, 260, 0.35);   // 刀声很轻，只惊动贴脸的
+  } else {
+    Sfx.meleeMiss();
+  }
 }
 
 function startReload() {
@@ -2340,6 +2519,8 @@ function playerShoot() {
 function useMedkit() {
   if (P.medkits <= 0 || P.medCd > 0 || P.hp >= P.maxHp) {
     if (P.medkits <= 0) uiToast('没有医疗包了', 'small warn');
+    else if (P.hp >= P.maxHp && P.medCd <= 0) uiToast('生命值已满，不用包扎', 'small');
+    P.medCd = Math.max(P.medCd, 0.5);   // 别让左键连点把提示刷满屏
     return;
   }
   P.medkits--;
@@ -2403,13 +2584,16 @@ function updatePlayer(dt) {
   /* ── 开镜：右键按住抬枪收束视野，换弹 / 翻滚 / 阵亡强制关镜 ── */
   const wNow = weaponStats(P.weapon);
   const aCfg = adsOf(wNow);
-  const adsOn = mouse.right && P.alive && P.reloading <= 0 && P.dashT <= 0;
+  const gunOut = P.curSlot !== 'melee' && P.curSlot !== 'medkit';
+  const adsOn = mouse.right && gunOut && P.alive && P.reloading <= 0 && P.dashT <= 0;
   P.ads = clamp(P.ads + (adsOn ? dt / aCfg.time : -dt / (aCfg.time * 0.75)), 0, 1);
   if (P.ads > 0.02 && P.adsPrev <= 0.02) Sfx.adsIn();
   if (P.ads <= 0.02 && P.adsPrev > 0.02) Sfx.adsOut();
   P.adsPrev = P.ads;
 
   let spd = P.speed * (wNow.moveMul || 1);           // 配件带来的负重 / 轻量化
+  if (P.curSlot === 'melee') spd *= 1.06;            // 收枪持刀：跑得更利索
+  else if (P.curSlot === 'medkit') spd *= 0.92;      // 一边包扎一边走，慢一点
   if (P.dashT > 0) spd *= 3.3;
   if (P.reloading > 0) spd *= 0.82;
   if (P.fireCd > 0.02) spd *= 0.94;
@@ -2449,6 +2633,8 @@ function updatePlayer(dt) {
   P.muzzle = Math.max(0, P.muzzle - dt);
   P.medCd = Math.max(0, P.medCd - dt);
   P.nadeCd = Math.max(0, P.nadeCd - dt);
+  P.meleeCd = Math.max(0, P.meleeCd - dt);
+  P.swingT = Math.max(0, P.swingT - dt);
   P.hurtDirT = Math.max(0, P.hurtDirT - dt);
 
   // 燃烧状态：离开火场后还会被烧一小会儿
@@ -2472,9 +2658,15 @@ function updatePlayer(dt) {
     if (P.reloading <= 0) { P.reloading = 0; finishReload(); }
   }
 
-  const wa = currentAmmo();
-  if (wa.mag <= 0 && P.reloading <= 0 && wa.reserve > 0) startReload();
-  tryFire(mouse.pressed);
+  if (P.curSlot === 'melee') {
+    if (mouse.down) swingMelee();          // 按住就一下一下地挥
+  } else if (P.curSlot === 'medkit') {
+    if (mouse.pressed) useMedkit();
+  } else {
+    const wa = currentAmmo();
+    if (wa.mag <= 0 && P.reloading <= 0 && wa.reserve > 0) startReload();
+    tryFire(mouse.pressed);
+  }
   mouse.pressed = false;      // 一次按下只算一次扣扳机
 
   // 拾取地上掉落
@@ -4096,9 +4288,9 @@ function burnPlayer(dmg, srcX, srcY) {
 /* ══════════════════════════════════════════════════════════
    11. 搜刮 & 撤离
    ──────────────────────────────────────────────────────────
-   搜刮不再是长按 E 的进度条：靠近箱子点一下 E，弹出一块
+   搜刮不再是长按 F 的进度条：靠近箱子点一下 F，弹出一块
    补给箱面板，里面的东西一件一件"转"出来，翻到哪件才真正
-   拿到哪件。全部翻完 1.2s 自动收下，也可以再按 E 直接收。
+   拿到哪件。全部翻完 1.2s 自动收下，也可以再按 F 直接收。
    ══════════════════════════════════════════════════════════ */
 const LOOT_ROW  = 0.24;   // 相邻两件之间的间隔（秒）—— 已被逐件时间轴取代，留作兜底
 const LOOT_HOLD = 0.15;   // 每件先打码抖动，再翻出来
@@ -4394,6 +4586,11 @@ function applyLootItem(it, c) {
           ? Math.round(WS.mag * WS.reserveMul * (1 + SAVE.ammoPacks * 0.5))
           : Infinity,
       };
+      const sl = stowGun(w);
+      if (sl) {
+        const sd = SLOT_DEFS.find(d => d.id === sl);
+        uiToast('拾取 ' + WS.short + ' · 装入' + (sd ? sd.cn : '背包'), 'small');
+      }
     }
   } else if (it.kind === 'mod') {
     // 先揣身上，撤离成功才进配件库
@@ -4736,7 +4933,7 @@ function drawCrates() {
     ctx.shadowOffsetY = 0;
 
     if (isTarget) {
-      // 不再画长按进度环，只做一圈呼吸光提示「按 E 就能开」
+      // 不再画长按进度环，只做一圈呼吸光提示「按 F 就能开」
       const pulse = 0.5 + Math.sin(t * 4.6) * 0.5;
       ctx.strokeStyle = C.dim + (0.28 + pulse * 0.55).toFixed(2) + ')';
       ctx.lineWidth = 2;
@@ -5217,6 +5414,75 @@ function drawGunPreview(wid) {
   g.restore();
 }
 
+/* 手持匕首：收刀时贴着身体，挥击时向前划出一道弧光 */
+function drawPlayerBlade(rec) {
+  const M = MELEES[P.melee] || MELEES[STARTER_MELEE];
+  const total = 0.22;
+  const k = P.swingT > 0 ? 1 - P.swingT / total : 1;
+  const sw = P.swingT > 0 ? (k * k * (3 - 2 * k)) : 0;    // 平滑的 0 → 1
+  const len = 12 + M.reach * 0.52;
+
+  ctx.save();
+  ctx.translate(P.r * 0.45 + rec, 0);
+  ctx.rotate(-0.55 + sw * 1.30);
+  /* 刀柄 */
+  ctx.fillStyle = '#2b3a48';
+  ctx.fillRect(-4, -2.2, 6, 4.4);
+  /* 护手 */
+  ctx.fillStyle = '#43586b';
+  ctx.fillRect(1.4, -4.6, 2.6, 9.2);
+  /* 刀身：靠近刀尖收成尖头 */
+  ctx.fillStyle = M.color;
+  ctx.beginPath();
+  ctx.moveTo(4, -2.0);
+  ctx.lineTo(4 + len, -2.6);
+  ctx.lineTo(5.5 + len, 0);
+  ctx.lineTo(4 + len, 2.4);
+  ctx.lineTo(4, 2.0);
+  ctx.closePath();
+  ctx.fill();
+  /* 血槽 */
+  ctx.fillStyle = 'rgba(40,60,80,0.5)';
+  ctx.fillRect(6, -0.4, len - 4, 0.9);
+  /* 挥击弧光 */
+  if (P.swingT > 0) {
+    const fade = P.swingT / total;
+    ctx.strokeStyle = (P.swingHit > 0 ? 'rgba(255,210,150,' : 'rgba(220,240,255,') + (0.5 * fade) + ')';
+    ctx.lineWidth = 3.4;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(0, 0, P.r + M.reach * 0.72, -0.85 + sw * 1.25, -0.35 + sw * 1.25);
+    ctx.stroke();
+    ctx.lineCap = 'butt';
+  }
+  ctx.restore();
+}
+
+/* 包扎动作：手上捧着医疗包，施法进度用一圈绿光表示 */
+function drawPlayerMedkit(rec) {
+  ctx.save();
+  ctx.translate(P.r * 0.5 + rec, 0);
+  ctx.rotate(-0.22);
+  ctx.fillStyle = '#e8f4ea';
+  ctx.fillRect(-5, -6, 12, 12);
+  ctx.strokeStyle = 'rgba(10,25,35,0.55)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(-5, -6, 12, 12);
+  ctx.fillStyle = '#46e08a';
+  ctx.fillRect(-1.6, -4.4, 3.2, 8.8);
+  ctx.fillRect(-4.4, -1.6, 8.8, 3.2);
+  ctx.restore();
+
+  if (P.medCd > 0.2) {
+    const k = 1 - P.medCd / 1.0;
+    ctx.strokeStyle = 'rgba(70,224,138,0.85)';
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    ctx.arc(0, 0, P.r + 7, -Math.PI / 2, -Math.PI / 2 + TAU * clamp(k, 0, 1));
+    ctx.stroke();
+  }
+}
+
 function drawPlayer() {
   const t = G.time;
   const bob = Math.sin(P.walkPhase) * 1.4;
@@ -5264,15 +5530,21 @@ function drawPlayer() {
   ctx.moveTo(P.r - 1, -5); ctx.lineTo(P.r + 6, 0); ctx.lineTo(P.r - 1, 5);
   ctx.closePath(); ctx.fill();
 
-  /* 枪画在身体之上：枪身从胸口伸出去，不会被躯干和朝向箭头盖掉 */
-  const wObj = weaponStats(P.weapon);
-  const gun = drawPlayerGun(wObj, rec);
-  if (P.muzzle > 0) {
-    const fl = P.muzzle / 0.06;
-    ctx.fillStyle = 'rgba(255,240,190,' + fl + ')';
-    ctx.beginPath();
-    ctx.arc(P.r * 0.5 + rec + gun.len + 4, 0, 11 * fl, 0, TAU);
-    ctx.fill();
+  /* 手持物画在身体之上：枪身从胸口伸出去，不会被躯干和朝向箭头盖掉 */
+  if (P.curSlot === 'melee') {
+    drawPlayerBlade(rec);
+  } else if (P.curSlot === 'medkit') {
+    drawPlayerMedkit(rec);
+  } else {
+    const wObj = weaponStats(P.weapon);
+    const gun = drawPlayerGun(wObj, rec);
+    if (P.muzzle > 0) {
+      const fl = P.muzzle / 0.06;
+      ctx.fillStyle = 'rgba(255,240,190,' + fl + ')';
+      ctx.beginPath();
+      ctx.arc(P.r * 0.5 + rec + gun.len + 4, 0, 11 * fl, 0, TAU);
+      ctx.fill();
+    }
   }
 
   ctx.restore();
@@ -6414,57 +6686,85 @@ function drawHUD() {
 
   ctx.font = '700 11px ' + mono;
   ctx.fillStyle = P.medkits > 0 ? '#46e08a' : '#3d5a6a';
-  ctx.fillText('[F] ✚ ' + P.medkits, hpX + 10, supY);
+  ctx.fillText('[5] ✚ ' + P.medkits, hpX + 10, supY);
   ctx.fillStyle = P.grenades > 0 ? '#ffb347' : '#3d5a6a';
   ctx.fillText('[G] ◉ ' + P.grenades, hpX + 100, supY);
   ctx.restore();
 
-  // ── 右下：武器 / 弹药 ──
+  // ── 右下：当前槽位 / 弹药 ──
   ctx.save();
   const wx = VW - 30;
   const wy = VH - 44;
   const W = weaponStats(P.weapon);
-  const a = currentAmmo();
+  const inHand = P.curSlot === 'primary' || P.curSlot === 'secondary' || P.curSlot === 'pistol';
+  const a = inHand ? currentAmmo() : null;
 
   ctx.textAlign = 'right';
   ctx.fillStyle = '#7fb8d6';
   ctx.font = '700 12px ' + mono;
-  ctx.fillText(weaponName(W), wx, wy - 58);
+  const slotTag = (SLOT_DEFS.find(d => d.id === P.curSlot) || SLOT_DEFS[0]);
+  const headTxt = inHand
+    ? (slotTag.cn + ' · ' + weaponName(W))
+    : (slotTag.cn + ' · ' + (P.curSlot === 'melee'
+        ? (MELEES[P.melee] || MELEES[STARTER_MELEE]).name
+        : '医疗包'));
+  ctx.fillText(headTxt, wx, wy - 58);
 
-  const magStr = String(a.mag).padStart(2, '0');
-  const resStr = '/ ' + (a.reserve === Infinity ? '∞' : a.reserve);
-  ctx.font = '800 34px ' + mono;
-  const magW = ctx.measureText(magStr).width;
-  ctx.font = '700 16px ' + mono;
-  const resW = ctx.measureText(resStr).width;
-  const bLeft = wx - (magW + 10 + resW);
+  if (inHand) {
+    const magStr = String(a.mag).padStart(2, '0');
+    const resStr = '/ ' + (a.reserve === Infinity ? '∞' : a.reserve);
+    ctx.font = '800 34px ' + mono;
+    const magW = ctx.measureText(magStr).width;
+    ctx.font = '700 16px ' + mono;
+    const resW = ctx.measureText(resStr).width;
+    const bLeft = wx - (magW + 10 + resW);
 
-  ctx.textAlign = 'left';
-  ctx.fillStyle = a.mag === 0 ? '#ff4060' : '#ffffff';
-  ctx.font = '800 34px ' + mono;
-  ctx.fillText(magStr, bLeft, wy);
-  ctx.fillStyle = '#4d7a94';
-  ctx.font = '700 16px ' + mono;
-  ctx.fillText(resStr, bLeft + magW + 10, wy);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = a.mag === 0 ? '#ff4060' : '#ffffff';
+    ctx.font = '800 34px ' + mono;
+    ctx.fillText(magStr, bLeft, wy);
+    ctx.fillStyle = '#4d7a94';
+    ctx.font = '700 16px ' + mono;
+    ctx.fillText(resStr, bLeft + magW + 10, wy);
 
-  ctx.textAlign = 'right';
-  ctx.font = '700 10px ' + mono;
-  ctx.fillStyle = 'rgba(120,170,200,0.6)';
-  const modeTxt = W.mode === 'auto' ? '全自动' : (W.mode === 'burst' ? '三连点射' : '半自动');
-  const modN = W.modCount || 0;
-  ctx.fillStyle = P.ads > 0.5 ? 'rgba(150,228,255,0.95)' : 'rgba(120,170,200,0.6)';
-  ctx.fillText(modeTxt + (P.ads > 0.5 ? ' · 开镜' : ' · 右键开镜') + (modN ? ' · 改' + modN : ''), wx, wy + 16);
+    ctx.textAlign = 'right';
+    ctx.font = '700 10px ' + mono;
+    const modeTxt = W.mode === 'auto' ? '全自动' : (W.mode === 'burst' ? '三连点射' : '半自动');
+    const modN = W.modCount || 0;
+    ctx.fillStyle = P.ads > 0.5 ? 'rgba(150,228,255,0.95)' : 'rgba(120,170,200,0.6)';
+    ctx.fillText(modeTxt + (P.ads > 0.5 ? ' · 开镜' : ' · 右键开镜') + (modN ? ' · 改' + modN : ''), wx, wy + 16);
 
-  const cells = Math.min(W.mag, 20);
-  const cw = 4, gap = 2;
-  const totalW = cells * (cw + gap);
-  for (let i = 0; i < cells; i++) {
-    const filled = i < Math.ceil(cells * (a.mag / W.mag));
-    ctx.fillStyle = filled ? W.color : 'rgba(70,100,125,0.3)';
-    ctx.fillRect(wx - totalW + i * (cw + gap), wy - 44, cw, 4);
+    const cells = Math.min(W.mag, 20);
+    const cw = 4, gap = 2;
+    const totalW = cells * (cw + gap);
+    for (let i = 0; i < cells; i++) {
+      const filled = i < Math.ceil(cells * (a.mag / W.mag));
+      ctx.fillStyle = filled ? W.color : 'rgba(70,100,125,0.3)';
+      ctx.fillRect(wx - totalW + i * (cw + gap), wy - 44, cw, 4);
+    }
+  } else if (P.curSlot === 'melee') {
+    const M = MELEES[P.melee] || MELEES[STARTER_MELEE];
+    ctx.textAlign = 'right';
+    ctx.font = '800 30px ' + mono;
+    ctx.fillStyle = M.color;
+    ctx.fillText(String(M.dmg), wx, wy);
+    ctx.font = '700 12px ' + mono;
+    ctx.fillStyle = '#4d7a94';
+    ctx.fillText('/ 单刀', wx, wy + 16);
+    ctx.font = '700 10px ' + mono;
+    ctx.fillStyle = P.meleeCd > 0 ? 'rgba(120,170,200,0.4)' : 'rgba(150,228,255,0.9)';
+    ctx.fillText((1 / M.rate).toFixed(1) + ' 刀/秒 · 静音 · 左键挥刀', wx, wy + 32);
+  } else {
+    ctx.textAlign = 'right';
+    ctx.font = '800 30px ' + mono;
+    ctx.fillStyle = P.medkits > 0 ? '#46e08a' : '#3d5a6a';
+    ctx.fillText('×' + P.medkits, wx, wy);
+    ctx.font = '700 10px ' + mono;
+    ctx.fillStyle = 'rgba(120,170,200,0.6)';
+    ctx.fillText('恢复 55 HP · 按 5 使用 · 左键再用', wx, wy + 16);
   }
 
-  if (P.reloading > 0) {
+  if (inHand && P.reloading > 0) {
     const prog = 1 - P.reloading / W.reload;
     ctx.textAlign = 'center';
     ctx.fillStyle = '#ffd66b';
@@ -6480,16 +6780,16 @@ function drawHUD() {
     ctx.textAlign = 'right';
   }
 
-  const ownedList = WEAPON_ORDER.filter(k => P.owned[k]);
+  /* 快捷栏：固定 1~5 五个槽，空的画暗 */
   let ox = wx;
   ctx.font = '700 10px ' + mono;
-  for (let i = ownedList.length - 1; i >= 0; i--) {
-    const k = ownedList[i];
-    const isCur = k === P.weapon;
-    const label = String(WEAPON_ORDER.indexOf(k) + 1);
-    ctx.fillStyle = isCur ? '#43d9f5' : 'rgba(90,125,150,0.55)';
-    ctx.fillText(label, ox, wy - 74);
-    ox -= 16;
+  for (let i = SLOT_DEFS.length - 1; i >= 0; i--) {
+    const sd = SLOT_DEFS[i];
+    const isCur = sd.id === P.curSlot;
+    const ok = slotReady(sd.id);
+    ctx.fillStyle = isCur ? '#43d9f5' : (ok ? 'rgba(120,170,200,0.7)' : 'rgba(70,95,115,0.32)');
+    ctx.fillText(sd.key + sd.cn.charAt(0), ox, wy - 74);
+    ox -= 24;
   }
   ctx.restore();
 
@@ -6502,7 +6802,7 @@ function drawHUD() {
     ctx.textAlign = 'center';
     ctx.font = '700 12px ' + mono;
     ctx.fillStyle = CC.dim + '0.95)';
-    ctx.fillText('[E] 搜刮' + CC.name, sx, sy + 46);
+    ctx.fillText('[F] 搜刮' + CC.name, sx, sy + 46);
     ctx.font = '600 9px ' + mono;
     ctx.fillStyle = 'rgba(150,185,210,0.55)';
     ctx.fillText(CC.hint, sx, sy + 60);
@@ -6804,7 +7104,7 @@ function drawLootPanel(mono) {
   if (done) {
     const pulse = 0.6 + Math.sin(G.time * 7) * 0.4;
     ctx.fillStyle = dim + (0.5 + pulse * 0.5).toFixed(2) + ')';
-    ctx.fillText('[E] 收 下', x + w / 2, y + h - 12);
+    ctx.fillText('[F] 收 下', x + w / 2, y + h - 12);
   } else {
     // 显示当前正在翻的这一档，让「翻得慢」有解释
     let cur = null;
@@ -7297,32 +7597,22 @@ const $ = id => document.getElementById(id);
 function refreshLobby() {
   $('creditVal').textContent = fmtMoney(SAVE.credits);
 
-  const w = weaponStats(SAVE.equippedWeapon);
   const armor = ARMORS[SAVE.equippedArmor] || ARMORS[0];
+  if (!SAVE.loadout) SAVE.loadout = { primary: null, secondary: null, pistol: STARTER_WEAPON };
 
   const ownedWeapons = WEAPON_ORDER.filter(k => SAVE.owned[k]);
+  const ownedLong = ownedWeapons.filter(k => !PISTOL_IDS[k]);
+  const ownedPistols = ownedWeapons.filter(k => PISTOL_IDS[k]);
+  const ownedKnives = MELEE_ORDER.filter(k => SAVE.ownedMelee && SAVE.ownedMelee[k]);
+
   const slotList = $('slotList');
   slotList.innerHTML = '';
 
-  const modN = gunModCount(SAVE.equippedWeapon);
-
-  // 武器槽
-  slotList.appendChild(makeSlot({
-    ico: '⌖',
-    nm: weaponName(w),
-    ds: '伤害 ' + w.dmg + (w.count > 1 ? ' ×' + w.count : '') + ' · 弹匣 ' + w.mag + ' · ' +
-        (w.mode === 'burst' ? '三连点射' : '射速 ' + (1 / w.rate).toFixed(1) + '/s') +
-        ' · 改装 ' + modN + '/' + modSlotTotal(SAVE.equippedWeapon),
-    val: '主武器',
-    onClick: () => {
-      if (ownedWeapons.length < 2) { uiToast('只有一把武器，去军火库看看', 'small'); return; }
-      let i = ownedWeapons.indexOf(SAVE.equippedWeapon);
-      i = (i + 1) % ownedWeapons.length;
-      SAVE.equippedWeapon = ownedWeapons[i];
-      saveGame();
-      refreshLobby();
-    },
-  }));
+  /* 主武器 / 副武器（都只能放长枪，副武器可以空着） / 手枪 */
+  slotList.appendChild(gunSlot({ slot: 'primary',   cn: '主武器', ico: '⌖', pool: ownedLong,    allowEmpty: false }));
+  slotList.appendChild(gunSlot({ slot: 'secondary', cn: '副武器', ico: '⌗', pool: ownedLong,    allowEmpty: true }));
+  slotList.appendChild(knifeSlot(ownedKnives));
+  slotList.appendChild(gunSlot({ slot: 'pistol',    cn: '手枪',   ico: '⌐', pool: ownedPistols, allowEmpty: false }));
 
   // 护甲槽
   slotList.appendChild(makeSlot({
@@ -7364,18 +7654,86 @@ function refreshLobby() {
     const secretRaid = G.tier === 'secret';
     if (secretRaid) {
       risk.textContent = '机密行动：敌人血量与伤害全面上调，但军械与保险柜更多、品质更高';
-    } else if (ownedWeapons.length < 2) {
-      risk.textContent = '手上还只有保底手枪——照样能免费出击，攒够钱去军火库补一把主武器';
+    } else if (!SAVE.loadout.primary) {
+      risk.textContent = '主武器槽是空的 · 现在只能带手枪和刀出击，去军火库买一把长枪';
+    } else if (!SAVE.loadout.secondary && ownedWeapons.length < 3) {
+      risk.textContent = '副武器槽空着 · 多带一把枪能少跑一趟，但阵亡会一起丢';
     } else if (SAVE.credits < 800) {
-      risk.textContent = '资金吃紧：建议用手枪低成本出击，撤离后再升级装备';
+      risk.textContent = '资金吃紧：建议只带主武器低成本出击，撤离后再升级装备';
     } else {
-      risk.textContent = '手枪永久保底，阵亡后可无成本再战';
+      risk.textContent = 'G17 与匕首永久保底 · 阵亡会丢掉带进去的枪和搜到的战利品';
     }
   }
 
   refreshStashBadge();
   refreshModBadge();
   refreshMapSelect();
+}
+
+/* 配装槽：点一下在"这个槽能装的"枪之间轮换；副武器可以轮到空槽 */
+function cycleLoadout(slot, pool, allowEmpty) {
+  const LO = SAVE.loadout;
+  const other = slot === 'primary' ? LO.secondary : (slot === 'secondary' ? LO.primary : null);
+  const avail = pool.filter(id => id !== other);
+  const opts = allowEmpty ? [null].concat(avail) : avail;
+  if (!opts.length) {
+    uiToast(slot === 'pistol' ? '还没有别的手枪' : '还没有能装的长枪，去军火库买一把', 'small warn');
+    return;
+  }
+  let i = opts.indexOf(LO[slot]);
+  i = (i + 1) % opts.length;
+  LO[slot] = opts[i];
+  saveGame();
+  Sfx.init(); Sfx.resume(); Sfx.pickup();
+  refreshLobby();
+}
+
+function gunSlot(o) {
+  const LO = SAVE.loadout;
+  let id = LO[o.slot];
+  if (id && (!SAVE.owned[id] || !WEAPONS[id])) { LO[o.slot] = id = null; }
+  if (o.slot === 'pistol' && !id) { LO.pistol = id = STARTER_WEAPON; }
+
+  if (!id) {
+    return makeSlot({
+      ico: o.ico,
+      nm: o.cn + ' · 空槽',
+      ds: o.pool.length ? '点击装入一把长枪（在已拥有的之间轮换）' : '还没有长枪，去军火库买一把',
+      val: o.cn,
+      empty: true,
+      onClick: () => cycleLoadout(o.slot, o.pool, o.allowEmpty),
+    });
+  }
+  const w = weaponStats(id);
+  const modN = gunModCount(id);
+  return makeSlot({
+    ico: o.ico,
+    nm: weaponName(w),
+    ds: '伤害 ' + w.dmg + (w.count > 1 ? ' ×' + w.count : '') + ' · 弹匣 ' + w.mag + ' · ' +
+        (w.mode === 'burst' ? '三连点射' : '射速 ' + (1 / w.rate).toFixed(1) + '/s') +
+        ' · 改装 ' + modN + '/' + modSlotTotal(id),
+    val: o.cn,
+    onClick: () => cycleLoadout(o.slot, o.pool, o.allowEmpty),
+  });
+}
+
+function knifeSlot(ownedKnives) {
+  const id = (SAVE.ownedMelee && SAVE.ownedMelee[SAVE.equippedMelee]) ? SAVE.equippedMelee : STARTER_MELEE;
+  const KM = MELEES[id];
+  return makeSlot({
+    ico: '†',
+    nm: KM.name,
+    ds: '伤害 ' + KM.dmg + ' · ' + (1 / KM.rate).toFixed(1) + ' 刀/秒 · 静音无弹药 · 点击换刀',
+    val: '近战',
+    onClick: () => {
+      if (ownedKnives.length < 2) { uiToast('只有一把刀 · 军火库有黑鹰匕首', 'small'); return; }
+      let i = ownedKnives.indexOf(SAVE.equippedMelee);
+      i = (i + 1) % ownedKnives.length;
+      SAVE.equippedMelee = ownedKnives[i];
+      saveGame();
+      refreshLobby();
+    },
+  });
 }
 
 function makeSlot(o) {
@@ -7442,8 +7800,10 @@ function modEffChips(m) {
 function openGunsmith(wid) {
   Sfx.init();
   const owned = WEAPON_ORDER.filter(k => SAVE.owned[k]);
-  gsPick.weapon = (wid && SAVE.owned[wid]) ? wid
-    : (SAVE.owned[SAVE.equippedWeapon] ? SAVE.equippedWeapon : (owned[0] || STARTER_WEAPON));
+  const LO = SAVE.loadout || {};
+  const fav = (LO.primary && SAVE.owned[LO.primary]) ? LO.primary
+    : (LO.pistol && SAVE.owned[LO.pistol] ? LO.pistol : null);
+  gsPick.weapon = (wid && SAVE.owned[wid]) ? wid : (fav || owned[0] || STARTER_WEAPON);
   gsPick.slot = 'muzzle';
   gsFrom = $('shop').classList.contains('hidden') ? 'lobby' : 'shop';
   $('lobby').classList.add('hidden');
@@ -8066,6 +8426,46 @@ function refreshShop() {
   }
 
   grid.classList.remove('stack');
+  if (shopTab === 'melee') {
+    for (const id of MELEE_ORDER) {
+      const M = MELEES[id];
+      const owned = !!(SAVE.ownedMelee && SAVE.ownedMelee[id]);
+      const equipped = SAVE.equippedMelee === id;
+      const canAfford = SAVE.credits >= M.price;
+
+      const el = document.createElement('div');
+      el.className = 'item' + (owned ? ' owned' : '');
+      el.innerHTML =
+        '<div class="top"><span class="nm">' + M.name + '</span>' +
+        (equipped ? '<span class="tag own">已装备</span>'
+                  : (owned ? '<span class="tag">已拥有</span>' : '<span class="tag cat">近战</span>')) + '</div>' +
+        '<div class="code">' + M.code + '</div>' +
+        '<div class="ds">' + M.desc + '</div>' +
+        '<div class="specs">' +
+          '<span class="spec"><i>伤害</i><b>' + M.dmg + '</b></span>' +
+          '<span class="spec"><i>出手</i><b>' + (1 / M.rate).toFixed(1) + ' 刀/秒</b></span>' +
+          '<span class="spec"><i>范围</i><b>' + Math.round(M.reach + 16) + ' px</b></span>' +
+          '<span class="spec"><i>噪音</i><b>260</b></span>' +
+        '</div>' +
+        '<div class="buyrow">' +
+          '<span class="price">' + (M.price === 0 ? '免费' : '<i>¥</i>' + fmtMoney(M.price)) + '</span>' +
+          '<button class="buybtn' + (owned ? ' tune' : '') + '"' + (!owned && !canAfford ? ' disabled' : '') + '>' +
+          (owned ? (equipped ? '已装备' : '装 备') : (canAfford ? '购买' : '资金不足')) + '</button>' +
+        '</div>';
+
+      el.querySelector('.buybtn').addEventListener('click', () => {
+        if (owned) {
+          SAVE.equippedMelee = id;
+          saveGame();
+          refreshShop();
+          uiToast('已装备 ' + M.name, 'small');
+        } else buyMelee(id);
+      });
+      grid.appendChild(el);
+    }
+    return;
+  }
+
   if (shopTab === 'armor') {
     for (const a of ARMORS) {
       if (a.id === 0) continue;
@@ -8156,16 +8556,39 @@ function weaponSpecs(w) {
   return rows.map(r => '<div class="spec"><span>' + r[0] + '</span><b>' + r[1] + '</b></div>').join('');
 }
 
+/* 新买的枪往哪放：空槽优先，都满了就替换主武器 */
+function autoAssign(id) {
+  if (!SAVE.loadout) SAVE.loadout = { primary: null, secondary: null, pistol: STARTER_WEAPON };
+  const LO = SAVE.loadout;
+  if (PISTOL_IDS[id]) { LO.pistol = id; return 'pistol'; }
+  if (!LO.primary || !SAVE.owned[LO.primary]) { LO.primary = id; return 'primary'; }
+  if (!LO.secondary || !SAVE.owned[LO.secondary]) { LO.secondary = id; return 'secondary'; }
+  LO.primary = id;
+  return 'primary';
+}
+
 function buyWeapon(id) {
   const w = WEAPONS[id];
   if (SAVE.owned[id] || SAVE.credits < w.price) return;
   SAVE.credits -= w.price;
   SAVE.owned[id] = true;
-  SAVE.equippedWeapon = id;
+  const slot = autoAssign(id);
   saveGame();
   Sfx.init(); Sfx.resume(); Sfx.pickup();
   refreshShop();
-  uiToast('已购入 ' + w.short, 'small');
+  uiToast('已购入 ' + w.short + ' · 装入' + (slot === 'pistol' ? '手枪' : (slot === 'secondary' ? '副武器' : '主武器')), 'small');
+}
+
+function buyMelee(id) {
+  const M = MELEES[id];
+  if (!M || (SAVE.ownedMelee && SAVE.ownedMelee[id]) || SAVE.credits < M.price) return;
+  SAVE.credits -= M.price;
+  SAVE.ownedMelee[id] = true;
+  SAVE.equippedMelee = id;
+  saveGame();
+  Sfx.init(); Sfx.resume(); Sfx.pickup();
+  refreshShop();
+  uiToast('已购入 ' + M.name + ' · 已装备', 'small');
 }
 
 function buyArmor(id) {
@@ -8296,7 +8719,15 @@ function endRaid(success) {
 
     // 保留局内获得的装备
     for (const k in P.owned) if (P.owned[k]) SAVE.owned[k] = true;
-    SAVE.equippedWeapon = P.owned[P.weapon] ? P.weapon : SAVE.equippedWeapon;
+    // 搜到并带到撤离点的枪，自动补进还空着的槽位
+    for (const sl of ['primary', 'secondary']) {
+      if (SAVE.loadout[sl] && SAVE.owned[SAVE.loadout[sl]]) continue;
+      const cand = ['primary', 'secondary'].map(k => P.slots && P.slots[k]).filter(id => id && !PISTOL_IDS[id] && SAVE.owned[id]);
+      const pickId = cand.find(id => id !== SAVE.loadout[sl === 'primary' ? 'secondary' : 'primary']);
+      if (pickId) SAVE.loadout[sl] = pickId;
+    }
+    SAVE.equippedMelee = P.melee;
+    if (P.melee) SAVE.ownedMelee[P.melee] = true;
     SAVE.medkits = P.medkits;
     SAVE.grenades = P.grenades;
 
@@ -8321,24 +8752,31 @@ function endRaid(success) {
     SAVE.stats.deaths++;
     SAVE.stats.kills += G.kills;
 
-    const lostWeapon = SAVE.equippedWeapon !== STARTER_WEAPON ? WEAPONS[SAVE.equippedWeapon].short : null;
+    const lostNames = [];
+    let lostModN = 0;
+    for (const sl of GUN_SLOTS) {
+      const id = SAVE.loadout[sl];
+      if (!id || id === STARTER_WEAPON || !SAVE.owned[id]) continue;
+      lostNames.push(WEAPONS[id].short);
+      lostModN += gunModCount(id);
+      delete SAVE.owned[id];
+      delete SAVE.mods[id];          // 枪没了，装在上面的配件跟着一起没
+      SAVE.loadout[sl] = sl === 'pistol' ? STARTER_WEAPON : null;
+    }
+    const lostWeapon = lostNames.length ? lostNames.join(' · ') : null;
     const lostArmor = SAVE.equippedArmor > 0 ? ARMORS[SAVE.equippedArmor].name : null;
     const lostN = relicCount();
-    const lostModN = gunModCount(SAVE.equippedWeapon);
     const foundN = G.foundMods.length;
 
-    if (lostWeapon) SAVE.owned[SAVE.equippedWeapon] = false;
-    // 枪没了，装在上面的配件跟着一起没；背包里还没入库的也一起丢
-    if (lostWeapon) delete SAVE.mods[SAVE.equippedWeapon];
-    SAVE.equippedWeapon = STARTER_WEAPON;
     SAVE.equippedArmor = 0;
     SAVE.armorMax = 0;
     SAVE.medkits = 0;
     SAVE.grenades = 0;
 
     rows.push(['丢失收集品', lostN + ' 件 · 价值 ¥' + fmtMoney(G.lootValue), 'neg']);
-    rows.push(['损失武器', lostWeapon ? lostWeapon : '无（手枪保底）', lostWeapon ? 'neg' : 'neu']);
+    rows.push(['损失武器', lostWeapon ? lostWeapon : '无（G17 保底）', lostWeapon ? 'neg' : 'neu']);
     rows.push(['损失配件', (lostModN + foundN) ? (lostModN + foundN) + ' 件（随枪）' : '无', (lostModN + foundN) ? 'neg' : 'neu']);
+    rows.push(['近战武器', '随身带走 · 不丢', 'neu']);
     rows.push(['损失护甲', lostArmor ? lostArmor : '无', lostArmor ? 'neg' : 'neu']);
     rows.push(['损失补给', '医疗包 ×' + P.medkits + ' · 手雷 ×' + P.grenades, 'neg']);
 
