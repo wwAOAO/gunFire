@@ -992,27 +992,40 @@ const STARTER_MEDKIT = 'inject_s';
 const PAIN_DR = 0.10;      // 止痛效果：受伤减免
 const WOUND_HEAL_K = 0.75; // 带伤口时包扎效率
 
-/* ── 止血消耗品 ──
-   流血只能靠这两种东西止住：绷带做局部压迫，止血带直接把近心端的血流掐住。
-   都是一次性，用掉就没，所以要按卷囤。止痛药压不住流血，别指望它。 */
+/* ── 止血 / 止痛消耗品 ──
+   流血只能靠前两种东西止住：绷带做局部压迫，止血带把近心端的血流掐住。
+   后三种都是止疼药：只骗过脑子，压不住流血，也接不上骨头。
+   uses 是「一次买到的份数」，库存按份记，用一份扣一份。 */
 const STOPS = {
   bandage: {
     name: '弹力绷带', short: '绷带', code: 'ELASTIC BANDAGE',
-    sec: 1.8, price: 140, layers: 1, color: '#cfe6f2',
+    grade: '白', uses: 1, sec: 1.8, price: 140, layers: 1, color: '#cfe6f2',
     desc: '一次性。压迫包扎一处创口，止住 1 层流血。便宜，多带几卷。',
   },
   tourniquet: {
     name: '止血带', short: '止血带', code: 'TOURNIQUET',
-    sec: 2.6, price: 320, layers: 99, color: '#ff9b6b',
+    grade: '绿', uses: 1, sec: 2.6, price: 320, layers: 99, color: '#ff9b6b',
     desc: '一次性。扎紧近心端，一次压住全部流血层。失血太多时这是保命的东西。',
   },
-  painkiller: {
-    name: '止痛药', short: '止痛药', code: 'PAINKILLER',
-    sec: 1.2, price: 260, pain: 45, color: '#82ffcd',
-    desc: '一次性。45 秒内受伤 -10%，手臂骨折的负面被屏蔽，贯穿伤的黑边淡下去。压不住流血，也接不上骨头。',
+  pain_release: {
+    name: '缓释止痛片', short: '缓释片', code: 'SUSTAINED RELEASE',
+    grade: '白', uses: 1, sec: 4, price: 320, pain: 200, color: '#e8eef4',
+    desc: '1 次。含服后药效慢慢铺开，200 秒里受伤 -10%，臂折的负面被压住、贯穿伤黑边淡下去。压不住流血。',
+  },
+  pain_antibio: {
+    name: '瓶装抗生素', short: '抗生素', code: 'BOTTLED ANTIBIOTICS',
+    grade: '绿', uses: 3, sec: 4, price: 1200, pain: 240, color: '#46e08a',
+    desc: '3 次。抗生素把炎症压下去，疼痛跟着退：单次 240 秒止痛。一瓶三片，一片一片吃。',
+  },
+  pain_dve: {
+    name: 'DVE 止疼片', short: 'DVE 片', code: 'DVE ANALGESIC',
+    grade: '紫', uses: 5, sec: 3, price: 3200, pain: 360, color: '#b46bff',
+    desc: '5 次。DEK 的战地止疼片，单次 360 秒，读条只要 3 秒 —— 打完一波蹲下就能含一片。',
   },
 };
-const STOP_ORDER = ['bandage', 'tourniquet', 'painkiller'];
+const STOP_ORDER = ['bandage', 'tourniquet', 'pain_release', 'pain_antibio', 'pain_dve'];
+/* 只是止疼、不处理创口的那几件 */
+const STOP_PAINS = ['pain_release', 'pain_antibio', 'pain_dve'];
 
 /* ── 手术包 ──
    不是回血用的：它把贯穿伤缝上、把断骨接回去、把骨裂固定住。
@@ -1069,6 +1082,7 @@ function normCareKey(v) {
   const k = v.slice(0, i), id = v.slice(i + 1);
   if (k === 'med' && MEDKITS[id]) return v;
   if (k === 'stop' && STOPS[id]) return v;
+  if (k === 'stop' && id === 'painkiller') return careKeyMake('stop', 'pain_release');   // 老档的止痛药
   if (k === 'surg' && SURGERIES[id]) return v;
   return careKeyMake('med', STARTER_MEDKIT);
 }
@@ -1084,8 +1098,8 @@ const DEFAULT_SAVE = () => ({
   equippedArmor: 0,
   /* 每种医疗包的库存：n 是没开封的支数，left 是当前拆开那支的剩余耐久 */
   meds: { [STARTER_MEDKIT]: { n: 2, left: 0 } },
-  /* 止血消耗品：一次性，按个数算 */
-  stops: { bandage: 1, tourniquet: 0, painkiller: 1 },
+  /* 止血 / 止痛：按份数算（止痛片一瓶三片 / 五片，进包就是三份五份） */
+  stops: { bandage: 1, tourniquet: 0, pain_release: 1, pain_antibio: 0, pain_dve: 0 },
   /* 手术包：uses 是这包还能动几次刀 */
   surgs: { surg_simple: { uses: 2 } },
   carePick: 'med:' + STARTER_MEDKIT,   // 上次用的那种 —— 短按 5 直接掏它
@@ -1205,13 +1219,14 @@ function cleanMeds(raw, legacyCount) {
   return out;
 }
 
-/* 止血消耗品清洗：只认这两种，数量取 0~99 */
+/* 止血 / 止痛清洗：数量是「还剩几份」，老档的止痛药折成缓释片 */
 function cleanStops(raw) {
   const out = {};
   for (const id of STOP_ORDER) out[id] = 0;
   if (!raw || typeof raw !== 'object') return out;
   for (const id of STOP_ORDER) {
-    const n = Math.floor(Number(raw[id]) || 0);
+    let n = Math.floor(Number(raw[id]) || 0);
+    if (id === 'pain_release') n += Math.floor(Number(raw.painkiller) || 0);   // 老档只有一种止痛药
     out[id] = n > 0 ? Math.min(n, 99) : 0;
   }
   return out;
@@ -2668,8 +2683,7 @@ function addStop(id, n) {
   const key = STOPS[id] ? id : 'bandage';
   if (!P.stops) P.stops = {};
   P.stops[key] = Math.min(99, (P.stops[key] | 0) + Math.max(1, n | 0));
-}
-function addSurg(id, n) {
+}function addSurg(id, n) {
   const key = SURGERIES[id] ? id : SURG_ORDER[0];
   if (!P.surgs) P.surgs = {};
   const s = P.surgs[key] || (P.surgs[key] = { uses: 0 });
@@ -3163,6 +3177,7 @@ function startStopBleed(id) {
   P.medWindT = P.medWind;
 
   popup(P.x, P.y - 34, S.name + (S.pain ? ' · 服用' : ' · 止血'), S.color, 13);
+  if (S.pain && (P.stops[key] | 0) > 1) uiToast(S.name + ' · 单次止痛 ' + S.pain + 's · 用完这剂还剩 ' + ((P.stops[key] | 0) - 1) + ' 次', 'small');
   Sfx.tone(420, 0.08, 0.05, 'sine', 600);
   return true;
 }
@@ -3288,6 +3303,7 @@ function updateMedHeal(dt) {
       if (S.pain) {
         P.painT = Math.max(P.painT, S.pain);
         popup(P.x, P.y - 46, '止痛 ' + S.pain + 's', S.color, 14);
+        if ((P.stops[id] | 0) > 0) popup(P.x, P.y - 62, S.short + ' 还剩 ' + (P.stops[id] | 0) + ' 次', 'rgba(190,230,250,0.9)', 12);
       } else {
         stopBleeding(S.layers);
       }
@@ -5260,12 +5276,22 @@ function makeMedItem(id, n) {
     note: M.dur + ' 耐久 · ' + M.hps + '/秒',
   };
 }
+/* 抽一件急救 / 止痛：绷带最常见，止疼片越贵越稀罕 */
+function stopDropId() {
+  const r = Math.random();
+  if (r < 0.56) return 'bandage';
+  if (r < 0.70) return 'tourniquet';
+  if (r < 0.90) return 'pain_release';
+  if (r < 0.985) return 'pain_antibio';
+  return 'pain_dve';
+}
 function makeStopItem(id) {
   const S = STOPS[id] || STOPS.bandage;
+  const cnt = Math.max(1, S.uses | 0);
   return {
-    kind: 'stop', icon: '带', name: S.name, val: '×1', color: S.color,
-    tier: 'supply', stop: S === STOPS[id] ? id : 'bandage', n: 1,
-    note: S.layers > 1 ? '止全部流血' : '止 1 层流血',
+    kind: 'stop', icon: S.pain ? '片' : '带', name: S.name, val: '×' + cnt, color: S.color,
+    tier: 'supply', stop: S === STOPS[id] ? id : 'bandage', n: cnt,
+    note: S.pain ? ('止痛 ' + S.pain + 's · ' + S.sec + 's') : (S.layers > 1 ? '止全部流血' : '止 1 层流血'),
   };
 }
 function makeSurgItem(id) {
@@ -5339,10 +5365,7 @@ function rollContainer(kind) {
       for (let i = 0, r = randInt(2, 3); i < r; i++) items.push(makeMedItem(rollMedDropId(false)));
       if (Math.random() < 0.30) items.push(makeMedItem(rollMedDropId(true)));   // 压箱底的好货
       /* 医疗箱也是止血件和手术包的主要来源 —— 打崩了就地能找东西处理 */
-      if (Math.random() < 0.50) {
-        const rs = Math.random();
-        items.push(makeStopItem(rs < 0.62 ? 'bandage' : (rs < 0.86 ? 'painkiller' : 'tourniquet')));
-      }
+      if (Math.random() < 0.50) items.push(makeStopItem(stopDropId()));
       if (Math.random() < 0.16) {
         const r = Math.random();
         items.push(makeSurgItem(r < 0.74 ? 'surg_simple' : (r < 0.96 ? 'surg_tactical' : 'surg_dek')));
@@ -6387,8 +6410,27 @@ function drawPlayerMedkit(rec) {
   ctx.rotate(-0.22);
 
   if (kind === 'stop') {
-    /* 止血件：绷带卷 / 止血带 */
-    if (id === 'tourniquet') {
+    /* 止血件：绷带卷 / 止血带；止疼药：药瓶 + 一片药 */
+    const S = STOPS[id] || STOPS.bandage;
+    if (S.pain) {
+      const bottle = (S.uses | 0) > 1;
+      if (bottle) {
+        ctx.fillStyle = 'rgba(216,238,248,0.95)';
+        drawRoundRect(-9, -5.5, 12, 11, 2); ctx.fill();
+        ctx.strokeStyle = S.color;
+        ctx.lineWidth = 1.3;
+        drawRoundRect(-9, -5.5, 12, 11, 2); ctx.stroke();
+        ctx.fillStyle = S.color;
+        drawRoundRect(-7.5, -8, 9, 3, 1.2); ctx.fill();      // 瓶盖
+      }
+      const px = bottle ? 4.6 : 0, py = bottle ? 2 : 0;
+      ctx.fillStyle = 'rgba(248,252,254,0.98)';
+      ctx.beginPath(); ctx.arc(px, py, 4.6, 0, TAU); ctx.fill();
+      ctx.strokeStyle = S.color;
+      ctx.lineWidth = 1.1;
+      ctx.beginPath(); ctx.arc(px, py, 4.6, 0, TAU); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(px - 3, py); ctx.lineTo(px + 3, py); ctx.stroke();   // 刻痕
+    } else if (id === 'tourniquet') {
       ctx.fillStyle = 'rgba(255,155,107,0.95)';
       drawRoundRect(-9, -3, 18, 6, 2); ctx.fill();
       ctx.strokeStyle = 'rgba(40,60,74,0.7)';
@@ -7504,7 +7546,7 @@ function drawMedSelect(mono) {
   const list = MED_SEL.list;
   const groups = [
     { kind: 'med', label: '医疗包', color: '#46e08a' },
-    { kind: 'stop', label: '急救', color: '#cfe6f2' },
+    { kind: 'stop', label: '急救 / 止痛', color: '#cfe6f2' },
     { kind: 'surg', label: '手术包', color: '#8fe3ff' },
   ];
   const rows = [];
@@ -7594,7 +7636,9 @@ function drawMedSelect(mono) {
     if (k === 'med') hint = '回血 · ' + careName(picked) + ' 还剩耐久 ' + Math.ceil(medLeftOf(careIdOf(picked)));
     else if (k === 'stop') {
       const S = STOPS[careIdOf(picked)];
-      if (S && S.pain) hint = P.painT > 0 ? ('止痛还剩 ' + Math.ceil(P.painT) + 's，先别重复吃') : '45 秒止痛：压臂伤、淡黑边，压不住流血';
+      if (S && S.pain) hint = P.painT > 0
+        ? ('止痛还剩 ' + Math.ceil(P.painT) + 's，先别重复吃')
+        : (S.pain + 's 止痛 · 压臂伤 / 淡黑边 · 压不住流血' + (S.uses > 1 ? ' · 还剩 ' + careCount(picked) + ' 次' : ''));
       else hint = P.deb.bleed > 0 ? ('当前流血 ×' + P.deb.bleed + '：用它可以压住') : '现在没有流血，用不上';
     }
     else {
@@ -7603,6 +7647,11 @@ function drawMedSelect(mono) {
     }
     ctx.fillStyle = 'rgba(170,215,240,0.8)';
     ctx.font = '700 10px ' + mono;
+    /* 垫一层底，别让下面的世界和飘字把这行说明糊掉 */
+    const hw = ctx.measureText(hint).width;
+    ctx.fillStyle = 'rgba(6,14,20,0.78)';
+    drawRoundRect(VW / 2 - hw / 2 - 8, ry + 2, hw + 16, 15, 3); ctx.fill();
+    ctx.fillStyle = 'rgba(170,215,240,0.88)';
     ctx.fillText(hint, VW / 2, ry + 12);
   }
 
@@ -7984,7 +8033,7 @@ function drawHUD() {
     drawRoundRect(wx - bw2, wy2 + 7, bw2, 4, 2); ctx.fill();
     let pct2 = 0;
     if (pk && kind === 'med') pct2 = clamp(medLeftOf(cid2) / MEDKITS[cid2].dur, 0, 1);
-    else if (pk && kind === 'stop') pct2 = clamp(careCount(pk) / 6, 0, 1);
+    else if (pk && kind === 'stop') pct2 = clamp(careCount(pk) / Math.max(2, (STOPS[cid2] || STOPS.bandage).uses), 0, 1);
     else if (pk && kind === 'surg') pct2 = clamp(careCount(pk) / SURGERIES[cid2].uses, 0, 1);
     if (pk) {
       ctx.fillStyle = col2;
@@ -8001,7 +8050,7 @@ function drawHUD() {
     } else if (kind === 'stop') {
       const S = STOPS[cid2];
       if (S.pain) {
-        sub1 = '止痛 ' + S.pain + 's · 读条 ' + S.sec + 's · 一次性';
+        sub1 = '单次止痛 ' + S.pain + 's · 读条 ' + S.sec + 's';
         sub2 = P.painT > 0 ? ('止痛还剩 ' + Math.ceil(P.painT) + 's') : '受伤 -10% · 屏蔽臂伤与黑边';
         sub2warn = P.painT > 0;
       } else {
@@ -8965,7 +9014,7 @@ function refreshLobby() {
   const pickKey = saveCarePick();
   slotList.appendChild(makeSlot({
     ico: '✚',
-    nm: '医疗 ×' + medN + ' · 止血 ×' + stopN + ' · 手术 ' + surgN + ' 次',
+    nm: '医疗 ×' + medN + ' · 急救 ×' + stopN + ' · 手术 ' + surgN + ' 次',
     ds: '首选 ' + careName(pickKey) + ' · 手雷 ×' + SAVE.grenades + ' · 弹药包 ×' + SAVE.ammoPacks + ' · 备弹 +' + (SAVE.ammoPacks * 50) + '%',
     val: '补给',
     empty: medN + stopN + surgN + SAVE.grenades === 0,
@@ -9850,27 +9899,28 @@ function refreshShop() {
       grid.appendChild(el);
     }
 
-    /* 止血件：一次性消耗，按卷 / 条算 */
+    /* 急救 / 止痛：按份数囤，三片一瓶的止痛片一次进 3 份 */
     for (const id of STOP_ORDER) {
       const S = STOPS[id];
       const held = (SAVE.stops && SAVE.stops[id]) | 0;
       const canAfford = SAVE.credits >= S.price;
+      const pack = Math.max(1, S.uses | 0);
 
       const el = document.createElement('div');
       el.className = 'item';
       el.innerHTML =
         '<div class="top"><span class="nm">' + S.name + '</span>' +
         '<span class="tag">持有 ×' + held + '</span></div>' +
-        '<div class="code">' + S.code + '</div>' +
+        '<div class="code">' + S.code + ' · ' + S.grade + '</div>' +
         '<div class="ds">' + S.desc + '</div>' +
         '<div class="ds" style="color:#6fb0cf">' +
-          (S.pain ? ('止痛 ' + S.pain + 's（受伤 -10% · 屏蔽臂伤与黑边）')
+          (S.pain ? ('单次止痛 ' + S.pain + 's · ' + (pack > 1 ? '一份 ' + pack + ' 次' : '一次性'))
                   : (S.layers > 1 ? '一次压住全部流血层' : '一次止 1 层流血'))
           + ' · 读条 ' + S.sec + 's</div>' +
         '<div class="buyrow">' +
           '<span class="price"><i>¥</i>' + fmtMoney(S.price) + '</span>' +
           '<button class="buybtn"' + (canAfford ? '' : ' disabled') + '>' +
-          (canAfford ? '购买' : '资金不足') + '</button>' +
+          (canAfford ? (pack > 1 ? '购买 ×' + pack : '购买') : '资金不足') + '</button>' +
         '</div>';
 
       el.querySelector('.buybtn').addEventListener('click', () => buyStop(id));
@@ -10029,17 +10079,18 @@ function buyMedkit(id) {
   uiToast('已购入 ' + M.name + ' ×1', 'small');
 }
 
-/* 买一卷止血件 */
+/* 买一份急救 / 止痛：止痛片一次进 3~5 份，库存按份叠 */
 function buyStop(id) {
   const S = STOPS[id];
   if (!S || SAVE.credits < S.price) return;
   SAVE.credits -= S.price;
   if (!SAVE.stops) SAVE.stops = {};
-  SAVE.stops[id] = Math.min(99, (SAVE.stops[id] | 0) + 1);
+  const add = Math.max(1, S.uses | 0);
+  SAVE.stops[id] = Math.min(99, ((SAVE.stops[id] | 0) + add));
   saveGame();
   Sfx.init(); Sfx.resume(); Sfx.pickup();
   refreshShop();
-  uiToast('已购入 ' + S.name + ' ×1', 'small');
+  uiToast('已购入 ' + S.name + (add > 1 ? ' · ' + add + ' 次' : ' ×1'), 'small');
 }
 
 /* 买手术包：一个整包，直接补满次数（不能囤两包） */
