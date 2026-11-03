@@ -200,6 +200,8 @@
       <option value="sniper">阿萨拉狙击兵 · 激光锁定、一枪见血</option>
       <option value="rocket">阿萨拉火箭筒兵 · 范围爆炸</option>
       <option value="flamer">阿萨拉喷火兵 · 近身火舌</option>
+      <option value="cryo">阿萨拉冰冻军团 · 霜区减速</option>
+      <option value="nader">阿萨拉手雷兵 · 抛掷破片雷</option>
       <option value="boss">赤霄 · 重机枪（守点）</option>
     </select></label>
     <div id="unitSummary">0 人</div>
@@ -248,6 +250,8 @@
         <option value="sniper">阿萨拉狙击兵</option>
         <option value="rocket">阿萨拉火箭筒兵</option>
         <option value="flamer">阿萨拉喷火兵</option>
+        <option value="cryo">阿萨拉冰冻军团</option>
+        <option value="nader">阿萨拉手雷兵</option>
         <option value="boss">赤霄 · 重机枪</option>
       </select></label>
       <label id="selCrateRow" style="display:none">容器种类<select id="selCrateKind">
@@ -310,7 +314,7 @@ const MAP_FORMAT = 'neonpurge-map';
 const MAP_VERSION = 1;
 const DEFAULT_SQUAD = ['runner', 'runner', 'shooter', 'runner', 'brute', 'runner',
                        'shooter', 'sniper', 'runner', 'rocket', 'brute', 'flamer',
-                       'shooter', 'runner'];
+                       'shooter', 'runner', 'cryo', 'nader'];
 const SNAP = 10;
 
 /* 与游戏 ENEMY_TYPES 保持一致的兵种表（只取编辑需要的字段） */
@@ -321,9 +325,11 @@ const ENEMY_TYPES = {
   sniper:  { r: 13, color: '#5ce1e6', glow: '#18a8bd', label: '阿萨拉狙击兵', short: '狙击兵' },
   rocket:  { r: 19, color: '#8ad34a', glow: '#4d9a1a', label: '阿萨拉火箭筒兵', short: '火箭兵' },
   flamer:  { r: 20, color: '#ffd24a', glow: '#ff8a1f', label: '阿萨拉喷火兵', short: '喷火兵' },
+  cryo:    { r: 23, color: '#7fd4ff', glow: '#2f9fe0', label: '阿萨拉冰冻军团', short: '冰冻兵' },
+  nader:   { r: 18, color: '#ffb347', glow: '#ff7a1f', label: '阿萨拉手雷兵', short: '手雷兵' },
   boss:    { r: 44, color: '#ff2d55', glow: '#ff0040', label: '赤霄', short: '赤霄' },
 };
-const ENEMY_ORDER = ['runner', 'shooter', 'brute', 'sniper', 'rocket', 'flamer', 'boss'];
+const ENEMY_ORDER = ['runner', 'shooter', 'brute', 'sniper', 'rocket', 'flamer', 'cryo', 'nader', 'boss'];
 
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
@@ -703,6 +709,18 @@ function drawUnits(hair) {
         k ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
       }
       ctx.closePath();
+    } else if (u.type === 'cryo') {
+      /* 冰冻军团：六边冰晶 */
+      for (let k = 0; k < 6; k++) {
+        const a = k * TAU / 6 - Math.PI / 2;
+        const px = Math.cos(a) * rr, py = Math.sin(a) * rr;
+        k ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+      }
+      ctx.closePath();
+    } else if (u.type === 'nader') {
+      /* 手雷兵：圆角方身板 */
+      const s = rr * 0.84;
+      ctx.rect(-s, -s, s * 2, s * 2);
     } else {
       for (let k = 0; k < 8; k++) {
         const a = k * TAU / 8;
