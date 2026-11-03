@@ -516,6 +516,70 @@
     72% { opacity:1; }
     100% { opacity:0; transform:translateY(-14px); }
   }
+
+  /* ══════════ 干员 ══════════ */
+  .opbar {
+    display:flex; gap:10px; align-items:center; padding:9px 10px; margin-bottom:11px;
+    border:1px solid rgba(80,140,185,.24); border-radius:4px; background:rgba(10,20,28,.55);
+    cursor:pointer; transition:border-color .16s, background .16s;
+  }
+  .opbar:hover { border-color:rgba(255,138,76,.62); background:rgba(34,18,13,.72); }
+  .opavatar {
+    flex:none; width:42px; height:42px; border-radius:3px; display:grid; place-items:center;
+    font-size:18px; font-weight:900; color:#ffe6dc; letter-spacing:0;
+    background:linear-gradient(145deg,#ff5a3c,#7a1710);
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.18), 0 0 16px rgba(255,80,40,.22);
+  }
+  .opinfo { flex:1; min-width:0; }
+  .opinfo b { display:block; font-size:14px; color:#ffd9cc; letter-spacing:.12em; }
+  .opinfo .role { display:block; font-size:9.5px; color:#8aa7bb; letter-spacing:.2em; margin-top:2px; }
+  .opchips { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
+  .opchip {
+    font-size:9.5px; padding:1px 5px; border-radius:2px; letter-spacing:.04em;
+    border:1px solid rgba(120,180,210,.28); color:#a8c6d8; white-space:nowrap;
+  }
+  .opchip b { color:#ffb08a; margin-right:3px; font-weight:900; }
+  .opgo { flex:none; font-size:10px; color:#6b9ab5; letter-spacing:.1em; }
+  .opempty { font-size:11px; color:#6b9ab5; letter-spacing:.08em; }
+
+  .ops-wrap { display:grid; grid-template-columns:270px 1fr; gap:14px; align-items:start; }
+  .ops-list { display:flex; flex-direction:column; gap:8px; }
+  .ops-card {
+    display:flex; gap:10px; align-items:center; padding:10px;
+    border:1px solid rgba(80,140,185,.22); border-radius:4px; background:rgba(9,16,23,.7);
+    cursor:pointer; transition:border-color .16s, background .16s;
+  }
+  .ops-card:hover { border-color:rgba(255,138,76,.45); }
+  .ops-card.on { border-color:rgba(255,138,76,.78); background:rgba(40,21,15,.75); }
+  .ops-card b { display:block; font-size:13.5px; color:#eaf7ff; letter-spacing:.1em; }
+  .ops-card .role { display:block; font-size:9px; color:#7fa5bd; letter-spacing:.2em; margin-top:3px; }
+  .ops-card.on b { color:#ffd9cc; }
+
+  .ops-detail {
+    border:1px solid rgba(80,140,185,.22); border-radius:4px;
+    background:rgba(9,16,23,.62); padding:16px 18px 14px;
+  }
+  .ops-head { display:flex; gap:14px; align-items:center; }
+  .ops-head .opavatar { width:58px; height:58px; font-size:24px; }
+  .ops-name { font-size:22px; font-weight:900; letter-spacing:.14em; color:#eaf7ff; }
+  .ops-role { font-size:10px; letter-spacing:.24em; color:#7fa5bd; margin-top:4px; }
+  .ops-desc { font-size:11.5px; color:#9fc0d4; line-height:1.9; margin:13px 0 6px; }
+  .skillrow { display:flex; gap:10px; padding:10px 0; border-top:1px dashed rgba(80,140,185,.16); }
+  .skillkey {
+    flex:none; width:27px; height:27px; border-radius:3px; display:grid; place-items:center;
+    font-size:11px; font-weight:900; border:1px solid rgba(255,138,76,.42); color:#ffb08a;
+    background:rgba(255,120,60,.07);
+  }
+  .skillkey.pas { border-color:rgba(120,200,230,.4); color:#8fd8f5; background:rgba(67,217,245,.06); }
+  .skillbody { min-width:0; }
+  .skillbody b { font-size:12.5px; color:#dbeefb; letter-spacing:.04em; }
+  .skillbody .meta { font-size:9.5px; color:#7fa5bd; margin-left:8px; letter-spacing:.04em; }
+  .skillbody p { font-size:11px; color:#9fc0d4; line-height:1.85; margin-top:4px; }
+  .ops-foot { display:flex; gap:8px; margin-top:12px; }
+
+  @media (max-width: 820px) {
+    .ops-wrap { grid-template-columns:1fr; }
+  }
 </style>
 </head>
 <body>
@@ -533,6 +597,7 @@
     <div class="cols">
       <section class="card">
         <h4>作战装备</h4>
+        <div class="opbar" id="opBar"></div>
         <div class="slots" id="slotList"></div>
         <div class="hintline">点击槽位可在已拥有的装备间切换</div>
       </section>
@@ -565,6 +630,7 @@
     </div>
 
     <footer class="footbar">
+      <button id="opBtn" class="btn ghost">干 员</button>
       <button id="shopBtn" class="btn ghost">军 火 库</button>
       <button id="gunsmithBtn" class="btn ghost">改 装 台<span id="modBadge" class="cnt hidden">0</span></button>
       <button id="stashBtn" class="btn ghost">仓 库<span id="stashBadge" class="cnt hidden">0</span></button>
@@ -572,6 +638,21 @@
       <div class="stats" id="lobbyStats"></div>
       <button id="resetBtn" class="btn ghost danger small">重置存档</button>
     </footer>
+  </div>
+</div>
+
+
+<!-- ══════════ 干员 ══════════ -->
+<div id="ops" class="overlay hidden">
+  <div class="frame">
+    <header class="topbar">
+      <div class="logo" style="font-size:22px">干 员</div>
+      <button id="closeOps" class="btn ghost small">返回大厅</button>
+    </header>
+    <div class="ops-wrap">
+      <aside class="ops-list" id="opsList"></aside>
+      <section class="ops-detail" id="opsDetail"></section>
+    </div>
   </div>
 </div>
 
@@ -1113,6 +1194,8 @@ function normCareKey(v) {
 
 const DEFAULT_SAVE = () => ({
   credits: 3500,
+  /* 出战干员：决定局内能按 V / X / G / C 放什么（技能表在 OPERATORS 里） */
+  operator: 'redwolf',
   /* 新档一把枪都没有：G17 也要去军火库买，只有匕首是白送的 */
   owned: {},
   armorMax: 0,
@@ -1152,6 +1235,9 @@ const KNOWN_WEAPON_IDS = { g17: 1, '93r': 1, g18: 1, bizon: 1, m870: 1,
 /* 手枪不能装枪托 —— 存档加载时就要判断，同样不能等 WEAPONS 表。
    以后加手枪，这里和 KNOWN_WEAPON_IDS 都要补上。 */
 const PISTOL_IDS = { g17: 1, '93r': 1, g18: 1 };
+
+/* 干员白名单：存档加载比 OPERATORS 表更早执行，这里只放 id，别引用表本身 */
+const OP_IDS = { redwolf: 1 };
 
 /* 空弹药表：CAL_ORDER 个口径 × 8 个弹级，全 0。
    新档和清洗共用一份，加口径时不用再改两处。 */
@@ -1231,6 +1317,7 @@ function loadSave() {
     const owned = migrateWeaponIds(Object.assign({}, DEFAULT_SAVE().owned, d.owned || {}));
     return {
       credits: typeof d.credits === 'number' ? d.credits : base.credits,
+      operator: OP_IDS[d.operator] ? d.operator : base.operator,
       owned: owned,
       armorMax: d.armorMax | 0,
       loadout: cleanLoadout(d, owned),
@@ -1793,6 +1880,57 @@ const ARMORS = [
   { id: 3, name: '重型护甲', short: '重型护甲', dr: 0.50, price: 4600, load: 2.2, desc: '全覆式重甲，减免 50% 伤害 —— 代价是脚步最沉，跑不了几秒。' },
 ];
 
+/* ══════════════════════════════════════════════════════════
+   干员
+   ──────────────────────────────────────────────────────────
+   每人 4 个能力：G 战术道具 / V 小技能 / X 大招 / 被动。
+   技能不花钱买，选定干员后每局自带 —— 储备与冷却都随开局重置，
+   所以「储备 2 颗」是每局 2 颗，不是仓库里的存货。
+   三条主动各自独立冷却，互不占用；被动不占键位资源，只要求状态。
+   ══════════════════════════════════════════════════════════ */
+const SKILL = {
+  /* 烟雾弹：落点即起烟，0.3s 铺满、8s 总时长、最后 1.2s 收烟（起烟快、散得也快） */
+  smoke: { r: 118, life: 8.0, grow: 0.30, fade: 1.2, range: 340 },
+  /* 三联装手炮：一组三发、0.11s 间隔；榴弹撞墙反弹最多 3 次再炸 */
+  gl: { dmg: 52, radius: 100, speed: 640, bounce: 3, fuse: 2.2, stun: 1.6, cripple: 6.0, selfMul: 0.5 },
+  /* 滑铲：奔跑中才能起手，0.45s 位移，无冷却（只吃一点体力） */
+  slide: { dur: 0.45, mul: 2.6, cost: 10 },
+  /* 动力外骨骼：移速与滑铲距离同时抬一档 */
+  exo: { move: 1.22, slide: 1.55, slideDur: 1.18 },
+};
+
+const OPERATORS = {
+  redwolf: {
+    id: 'redwolf', name: '红狼', role: '突击', en: 'RED WOLF',
+    color: '#ff5a3c', glow: '#ff2a12',
+    desc: '破门手。先用烟把走廊糊上，再用手炮把烟里的人炸出来；外骨骼一开，这一分钟就是你的。',
+    g: {
+      name: '突破型烟雾弹', short: '烟雾弹', tag: '战术道具',
+      desc: '朝准星抛出一枚快速成烟的烟雾弹（射程 340），落点立刻起烟：0.3 秒铺满、持续 8 秒、最后 1.2 秒收干净。烟里的敌人看不见你，突进、拉人、脱身都靠它。',
+      cd: 45, charges: 2,
+    },
+    v: {
+      name: '三联装手炮', sub: '三头犬', short: '三头犬', tag: '小技能',
+      desc: '一次打出三发榴弹（间隔 0.11 秒），榴弹撞墙会反弹（最多 3 次）、2.2 秒自爆。爆炸半径 100、中心 52 伤：被炸到的敌人眩晕 1.6 秒并骨折（移速 -40%，持续 6 秒）。自炸只有一半伤害。',
+      cd: 70, charges: 2, shots: 3,
+    },
+    x: {
+      name: '动力外骨骼', short: '外骨骼', tag: '大招',
+      desc: '外骨骼撑起 25 秒：移速 +22%、滑铲更远更快，免疫骨折、腿断了也能跑。期间每击倒一名敌人延长 5 秒，并回 30 血、回满体力。冷却从启动那刻开始算。',
+      cd: 90, dur: 25, killExtend: 5, killHeal: 30,
+    },
+    passive: {
+      name: '战术滑铲', short: '战术滑铲', tag: '被动',
+      desc: '奔跑途中按 C 滑铲：0.45 秒的低身位突进（约 1.6 个身位），没有冷却，只吃 10 点体力。外骨骼期间滑得更远、不耗体力。',
+    },
+  },
+};
+const OP_ORDER = ['redwolf'];
+
+function opDef() { return OPERATORS[SAVE.operator] || null; }
+function exoOn() { return !!(P.op && P.op.x && P.op.x.on); }
+
+
 const SUPPLY = {
   ammoPack:{ name: '弹药包',  price: 800, desc: '出击时备弹上限 +50%，等于能多带半份子弹进图。可叠加。' },
 };
@@ -2044,6 +2182,11 @@ window.addEventListener('keydown', e => {
   if (G.scene !== 'playing') return;
   if (k === 'f' && !e.repeat) searchInteract();   // 点一下开箱，不用长按
   if (k === 'r') startReload();
+  /* 干员技能：G 战术道具 / V 小技能 / X 大招 / C 被动滑铲 */
+  if (k === 'g' && !e.repeat) useTactic();
+  if (k === 'v' && !e.repeat) useSkill();
+  if (k === 'x' && !e.repeat) useUlt();
+  if (k === 'c' && !e.repeat) trySlide();
   if (k === '5') { if (!e.repeat) medPressDown(); return; }
   if (k >= '1' && k <= '4' && !e.repeat) {
     const sd = SLOT_DEFS[+k - 1];
@@ -2129,6 +2272,8 @@ const G = {
   rockets: [],      // 敌方火箭弹
   icebolts: [],     // 敌方冰弹（冰冻军团）
   frosts: [],       // 冰弹炸开后留下的霜区
+  smokes: [],       // 干员烟雾弹留下的烟幕（挡敌人视线）
+  gls: [],          // 玩家三联装手炮的榴弹（会弹墙）
   units: [],        // 地图里布置的敌人（兵种 + 驻地）
   bossSpawned: false, // 本局是否已有 BOSS（避免增援重复刷）
   bossBarBottom: false, // BOSS 血条是否临时挪到屏幕底部
@@ -2150,6 +2295,10 @@ const P = {
   sprinting: false,             // 这一帧是否在跑
   exhaust: 0,                   // 力竭锁定剩余时间
   armorLoad: 0,                 // 当前护甲的负重（影响走速与体力消耗）
+  /* 干员技能运行时：g/v 各自 {cd,use}（use = 本局剩余储备），x = {cd,on,t}，
+     volley 是三连发的排程，slide/slideA 是滑铲的剩余时间与方向 */
+  op: null,
+  concuss: 0,                   // 被自己的榴弹震到：眩晕，重影 + 不能开镜
   aim: 0,
   fireCd: 0,
   reloading: 0,
@@ -2814,6 +2963,20 @@ function pickSpawnPoint() {
   return list[idx];
 }
 
+/* 每局开局把干员技能重置：储备按表回满、冷却归零、外骨骼一定关着 */
+function initOperatorSkills() {
+  const op = opDef();
+  P.op = {
+    g: { cd: 0, use: op ? op.g.charges : 0 },
+    v: { cd: 0, use: op ? op.v.charges : 0 },
+    x: { cd: 0, on: false, t: 0 },
+    volley: null,          // 三连发的排程：{ left, t }
+    slide: 0,              // 滑铲剩余时间
+    slideA: 0,             // 滑铲锁定的方向
+  };
+  P.concuss = 0;
+}
+
 function resetPlayer() {
   const sp = pickSpawnPoint();
   G.spawn = { x: sp.x, y: sp.y };
@@ -2835,6 +2998,7 @@ function resetPlayer() {
   P.stamina = SPRINT.max;
   P.sprinting = false;
   P.exhaust = 0;
+  initOperatorSkills();
   P.invuln = 0;
   P.hurtFlash = 0;
   P.recoil = 0;
@@ -3108,8 +3272,12 @@ function redLayers() {
 }
 /* 手臂骨折的负面：止痛期间被压住 */
 function armHurt() { return P.deb.arm > 0 && P.painT <= 0; }
-/* 腿骨折 / 骨裂 是实打实的结构损伤，止痛只能骗过脑子，跑不动还是跑不动 */
-function legBroken() { return P.deb.leg > 0 || P.deb.fissure > 0; }
+/* 腿骨折 / 骨裂 是实打实的结构损伤，止痛只能骗过脑子，跑不动还是跑不动。
+   外骨骼撑着的时候腿是机械在带，骨折照挂、但照样能跑（见 X 技能）。 */
+function legBroken() {
+  if (exoOn()) return false;
+  return P.deb.leg > 0 || P.deb.fissure > 0;
+}
 
 /* 挂一层创伤。kind: bleed / redHead / redChest / redAbdomen / arm / leg / fissure / weak */
 function addDebuff(kind, n, label) {
@@ -3127,10 +3295,12 @@ function addDebuff(kind, n, label) {
     if (d[kind] === before) return;
     txt = label || '贯穿伤';
   } else if (kind === 'arm' || kind === 'leg') {
+    if (kind === 'leg' && exoOn()) return;      // 外骨骼撑着：腿不会被打断
     if (d[kind] > 0) return;
     d[kind] = 1;
     txt = label || (kind === 'arm' ? '手臂骨折' : '腿部骨折');
   } else if (kind === 'fissure') {
+    if (exoOn()) return;                        // 同上：外骨骼期间不吃骨裂
     const before = d.fissure;
     d.fissure = Math.min(2, d.fissure + k);
     if (d.fissure === before) return;
@@ -3791,6 +3961,7 @@ function updatePlayer(dt) {
   updateDebuff(dt);             // 流血 tick / 止痛倒计时
   updateFrosts(dt);             // 霜区结算 / 冻伤叠层
   updateMedHeal(dt);            // 包扎按耐久持续回血
+  updateOperatorSkills(dt);     // 干员技能：冷却 / 三连发 / 外骨骼 / 滑铲计时
 
   const wmx = mouse.x + G.cam.x;
   const wmy = mouse.y + G.cam.y;
@@ -3812,7 +3983,7 @@ function updatePlayer(dt) {
   const wNow = weaponStats(P.weapon);
   const aCfg = adsOf(wNow);
   const gunOut = P.curSlot !== 'melee' && P.curSlot !== 'medkit';
-  const adsOn = mouse.right && gunOut && P.alive && P.reloading <= 0 && !P.sprinting;
+  const adsOn = mouse.right && gunOut && P.alive && P.reloading <= 0 && !P.sprinting && P.concuss <= 0;
   /* 手臂断了抬枪又慢又抖，止痛之后能压住 */
   const adsTime = aCfg.time * (armHurt() ? DEBUFF.armAds : 1) * (1 + 0.12 * P.chill);
   P.ads = clamp(P.ads + (adsOn ? dt / adsTime : -dt / (adsTime * 0.75)), 0, 1);
@@ -3836,6 +4007,17 @@ function updatePlayer(dt) {
   if (P.reloading > 0) spd *= 0.82;
   if (P.fireCd > 0.02) spd *= 0.94;
   spd *= 1 - P.ads * (1 - aCfg.move);            // 开镜走得慢（重枪更慢）
+  if (exoOn()) spd *= SKILL.exo.move;            // 外骨骼推着人往前走
+  if (P.concuss > 0) spd *= 0.65;                // 被自己的榴弹震懵了，脚下发飘
+
+  /* 滑铲：方向锁死、速度按剩余时间衰减 —— 会盖掉上面所有移速修正 */
+  if (P.op && P.op.slide > 0) {
+    const k = P.op.slideDur ? P.op.slide / P.op.slideDur : 0;
+    const boost = exoOn() ? SKILL.exo.slide : 1;
+    spd = P.speed * SKILL.slide.mul * boost * (0.55 + 0.45 * k);
+    ix = Math.cos(P.op.slideA);
+    iy = Math.sin(P.op.slideA);
+  }
   P.walkPhase += dt * (il > 0 ? (P.sprinting ? 16 : 11) : 0);
 
   /* 跑动扬尘：给「正在跑」一点视觉回馈，也让脚步看得出来 */
@@ -3999,7 +4181,9 @@ function canSeePlayer(e) {
   const d = Math.hypot(dx, dy);
   if (d > e.sight) return false;
   if (d > 54 && Math.abs(angleDiff(Math.atan2(dy, dx), e.facing)) > e.fov) return false;
-  return losClear(e.x, e.y, P.x, P.y);
+  if (!losClear(e.x, e.y, P.x, P.y)) return false;
+  /* 烟幕：线段穿过成形后的烟圈就看不见 —— 这就是烟雾弹的全部价值 */
+  return !smokeBlocks(e.x, e.y, P.x, P.y);
 }
 
 /* 声音穿墙传播：只要在半径内，敌人一定会过来查看（这就是开枪的代价） */
@@ -4391,6 +4575,317 @@ function updateRockets(dt) {
   }
 }
 
+
+/* ══════════════════════════════════════════════════════════
+   9.4 干员技能：烟雾 / 三联手炮 / 外骨骼 / 滑铲
+   ──────────────────────────────────────────────────────────
+   G 战术道具（烟雾）· V 小技能（三头犬）· X 大招（外骨骼）· 被动（滑铲）
+   三条主动各自独立冷却，储备按「每局」算 —— 花完就没了，冷却只决定
+   下一颗什么时候能用。所以别攒，该扔就扔。
+   ══════════════════════════════════════════════════════════ */
+
+/* ── 烟雾：半径随时间长大 / 最后一段收缩 ── */
+function smokeRadius(s) {
+  const SM = SKILL.smoke;
+  if (s.t < SM.grow) return SM.r * Math.pow(s.t / SM.grow, 0.55);
+  const left = SM.life - s.t;
+  if (left < SM.fade) return SM.r * Math.pow(Math.max(0, left) / SM.fade, 0.7);
+  return SM.r;
+}
+
+/* 线段与圆是否相交：烟雾挡视线的判定核心 */
+function segmentHitsCircle(x1, y1, x2, y2, cx, cy, r) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const len2 = dx * dx + dy * dy;
+  let t = len2 > 0 ? ((cx - x1) * dx + (cy - y1) * dy) / len2 : 0;
+  t = clamp(t, 0, 1);
+  const px = x1 + dx * t, py = y1 + dy * t;
+  return (px - cx) * (px - cx) + (py - cy) * (py - cy) <= r * r;
+}
+
+/* 视线是否被烟幕遮断：只按成形后的 82% 半径算，免得刚起烟就把人挡死 */
+function smokeBlocks(x1, y1, x2, y2) {
+  for (let i = 0; i < G.smokes.length; i++) {
+    const s = G.smokes[i];
+    if (s.r < 14) continue;
+    if (segmentHitsCircle(x1, y1, x2, y2, s.x, s.y, s.r * 0.82)) return true;
+  }
+  return false;
+}
+
+function updateSmokes(dt) {
+  for (let i = G.smokes.length - 1; i >= 0; i--) {
+    const s = G.smokes[i];
+    s.t += dt;
+    s.r = smokeRadius(s);
+
+    if (s.t >= SKILL.smoke.life) { G.smokes.splice(i, 1); continue; }
+
+    /* 起烟那 0.3s 往外喷几团，让它看起来是"炸开"的而不是"淡入"的 */
+    if (s.t < SKILL.smoke.grow && Math.random() < dt * 110) {
+      const a = rand(0, TAU), rr = rand(0, s.r * 0.7);
+      addParticle(s.x + Math.cos(a) * rr, s.y + Math.sin(a) * rr, {
+        vx: rand(-40, 40), vy: rand(-40, 40), life: rand(0.5, 1.1), r: rand(7, 14),
+        color: 'rgba(196,206,212,0.45)', drag: 0.88,
+      });
+    }
+    /* 收烟阶段零星往外散 */
+    if (s.t > SKILL.smoke.life - SKILL.smoke.fade && Math.random() < dt * 26) {
+      const a = rand(0, TAU), rr = s.r * rand(0.3, 1);
+      addParticle(s.x + Math.cos(a) * rr, s.y + Math.sin(a) * rr, {
+        vx: rand(-24, 24), vy: rand(-30, 10), life: rand(0.4, 0.9), r: rand(6, 12),
+        color: 'rgba(196,206,212,0.32)', drag: 0.9,
+      });
+    }
+  }
+}
+
+/* ── G：突破型烟雾弹 ── */
+function useTactic() {
+  const op = opDef();
+  if (!op) { uiToast('没有出战干员 · 去大厅挑一个', 'small warn'); return; }
+  if (!P.alive) return;
+  const S = P.op.g;
+  if (S.cd > 0) { uiToast('烟雾弹冷却 ' + Math.ceil(S.cd) + 's', 'small'); return; }
+  if (S.use <= 0) { uiToast('本局烟雾弹用完了', 'small warn'); return; }
+
+  const SM = SKILL.smoke;
+  const dx = mouse.wx - P.x, dy = mouse.wy - P.y;
+  const d = Math.hypot(dx, dy) || 1;
+  const k = Math.min(SM.range, Math.max(70, d)) / d;
+  let tx = clamp(P.x + dx * k, 30, WORLD.w - 30);
+  let ty = clamp(P.y + dy * k, 30, WORLD.h - 30);
+  /* 落点压在墙里就往回退，别让烟长在水泥里 */
+  for (let t = 0; t < 14 && pointInObstacle(tx, ty); t++) {
+    tx -= (dx / d) * 24;
+    ty -= (dy / d) * 24;
+  }
+
+  S.use--;
+  S.cd = op.g.cd;
+  G.smokes.push({ x: tx, y: ty, t: 0, r: 0, seed: rand(0, 100) });
+  popup(P.x, P.y - 46, '烟 雾 弹', '#c8d6de', 12);
+  Sfx.dash();
+  burst(tx, ty, 12, { color: ['#e8eef2', '#aab8c2'], life: 0.4, r: 6, spdMin: 20, spdMax: 120, drag: 0.88 });
+}
+
+/* ── V：三联装手炮（三头犬）—— 一次三发、间隔 0.11s，撞墙反弹 ── */
+function fireGL() {
+  const a = P.aim + rand(-0.025, 0.025);
+  const mx = P.x + Math.cos(a) * (P.r + 16);
+  const my = P.y + Math.sin(a) * (P.r + 16);
+  G.gls.push({
+    x: mx, y: my, px: mx, py: my,
+    vx: Math.cos(a) * SKILL.gl.speed,
+    vy: Math.sin(a) * SKILL.gl.speed,
+    r: 5, fuse: SKILL.gl.fuse, bounces: SKILL.gl.bounce,
+    travel: 0, spin: rand(0, TAU),
+  });
+  P.recoil = Math.max(P.recoil, 3);
+  P.x -= Math.cos(a) * 3.2;
+  P.y -= Math.sin(a) * 3.2;
+  burst(mx, my, 9, {
+    angle: a, spread: 0.42, spdMin: 80, spdMax: 280,
+    color: ['#ffd66b', '#fff3c4'], life: 0.26, r: 3.2, glow: true,
+  });
+  Sfx.shoot('shotgun');
+}
+
+function useSkill() {
+  const op = opDef();
+  if (!op) { uiToast('没有出战干员 · 去大厅挑一个', 'small warn'); return; }
+  if (!P.alive) return;
+  const S = P.op.v;
+  if (S.cd > 0) { uiToast('三头犬冷却 ' + Math.ceil(S.cd) + 's', 'small'); return; }
+  if (S.use <= 0) { uiToast('手炮储备用完了', 'small warn'); return; }
+
+  S.use--;
+  S.cd = op.v.cd;
+  fireGL();
+  P.op.volley = { left: Math.max(0, (op.v.shots || 3) - 1), t: 0.11 };
+  popup(P.x, P.y - 46, '三 头 犬', '#ffd66b', 12);
+}
+
+function glBlast(x, y) {
+  const GL = SKILL.gl;
+  blastFX(x, y, GL.radius);
+  Sfx.explode();
+  shake(15);
+  emitNoise(x, y, 1200, 1.0);
+
+  for (let j = G.enemies.length - 1; j >= 0; j--) {
+    const e = G.enemies[j];
+    if (!e.alive) continue;
+    const d = dist(x, y, e.x, e.y);
+    if (d > GL.radius + e.r) continue;
+    const fall = 1 - clamp((d - e.r) / GL.radius, 0, 1);
+    const ddx = (e.x - x) / (d || 1), ddy = (e.y - y) / (d || 1);
+    damageEnemy(e, GL.dmg * (0.35 + fall * 0.65), ddx, ddy, 460);
+    /* 眩晕 + 骨折：先站住不动 1.6s，之后一瘸一拐 6s */
+    e.stun = Math.max(e.stun || 0, GL.stun);
+    e.cripple = Math.max(e.cripple || 0, GL.cripple);
+    e.stagger = 0.4;
+    popup(e.x, e.y - e.r - 16, '眩晕 · 骨折', '#ffb347', 11);
+  }
+
+  /* 自己扔的也会炸自己：半伤 + 近距离糊一脸（外骨骼期间不骨折） */
+  if (P.alive) {
+    const dp = dist(x, y, P.x, P.y);
+    if (dp < GL.radius + P.r) {
+      const fall = 1 - clamp((dp - P.r) / GL.radius, 0, 1);
+      damagePlayer(GL.dmg * (0.35 + fall * 0.65) * GL.selfMul, x, y, 0.4);
+      P.concuss = Math.max(P.concuss, 0.9);
+      if (!exoOn() && Math.random() < 0.35) addDebuff('fissure', 1);
+    }
+  }
+}
+
+function updateGls(dt) {
+  for (let i = G.gls.length - 1; i >= 0; i--) {
+    const g = G.gls[i];
+    g.fuse -= dt;
+    g.spin += dt * 14;
+    g.px = g.x; g.py = g.y;
+
+    const step = Math.hypot(g.vx, g.vy) * dt;
+    const n = Math.max(1, Math.ceil(step / 8));
+    let boom = false;
+
+    for (let s = 0; s < n; s++) {
+      const dtt = dt / n;
+      let nx = g.x + g.vx * dtt;
+      let ny = g.y + g.vy * dtt;
+
+      if (nx < 12 || nx > WORLD.w - 12) { nx = clamp(nx, 12, WORLD.w - 12); g.vx *= -0.62; g.bounces--; }
+      if (ny < 12 || ny > WORLD.h - 12) { ny = clamp(ny, 12, WORLD.h - 12); g.vy *= -0.62; g.bounces--; }
+      if (pointInObstacle(nx, g.y)) { nx = g.x; g.vx *= -0.62; g.bounces--; }
+      if (pointInObstacle(g.x, ny)) { ny = g.y; g.vy *= -0.62; g.bounces--; }
+
+      g.x = nx; g.y = ny;
+      g.travel += step / n;
+
+      /* 弹药用完了就一头撞死在墙上 */
+      if (g.bounces < 0) { boom = true; break; }
+
+      for (let k = 0; k < G.enemies.length; k++) {
+        const e = G.enemies[k];
+        if (!e.alive) continue;
+        if (dist2(g.x, g.y, e.x, e.y) < (e.r + g.r) * (e.r + g.r)) { boom = true; break; }
+      }
+      if (boom) break;
+    }
+
+    if (Math.random() < 0.8) {
+      addParticle(g.x, g.y, {
+        vx: rand(-16, 16), vy: rand(-16, 16), life: rand(0.2, 0.45), r: rand(2, 4),
+        color: '#ffcf6b', drag: 0.9, glow: true,
+      });
+    }
+
+    if (g.fuse <= 0) boom = true;
+    if (boom) { glBlast(g.x, g.y); G.gls.splice(i, 1); }
+  }
+}
+
+/* ── X：动力外骨骼 ── */
+function useUlt() {
+  const op = opDef();
+  if (!op) { uiToast('没有出战干员 · 去大厅挑一个', 'small warn'); return; }
+  if (!P.alive) return;
+  const S = P.op.x;
+  if (S.on) { uiToast('外骨骼已经在跑了', 'small'); return; }
+  if (S.cd > 0) { uiToast('外骨骼冷却 ' + Math.ceil(S.cd) + 's', 'small'); return; }
+
+  S.on = true;
+  S.t = op.x.dur;
+  S.cd = op.x.cd;               // 冷却从启动那刻开始算
+  P.deb.leg = 0;                // 机械腿把断腿撑住
+  P.deb.fissure = 0;
+  P.stamina = SPRINT.max;
+  P.exhaust = 0;
+  P.hp = Math.min(P.maxHp, P.hp + 10);
+  uiToast('动力外骨骼 · ' + op.x.dur + 's', '');
+  popup(P.x, P.y - 52, '外 骨 骼 上 线', '#ff8a4c', 14);
+  Sfx.adsIn();
+  shake(8);
+  burst(P.x, P.y, 26, { color: ['#ff8a4c', '#ffd66b', '#ffffff'], life: 0.6, r: 4, spdMin: 60, spdMax: 300, glow: true });
+}
+
+function endExo() {
+  if (!P.op) return;
+  P.op.x.on = false;
+  P.op.x.t = 0;
+  popup(P.x, P.y - 50, '外骨骼离线', '#ff8a5c', 12);
+}
+
+/* 外骨骼击杀结算：续命 + 回血 + 回满体力 */
+function exoOnKill() {
+  if (!exoOn()) return;
+  const op = opDef();
+  if (!op) return;
+  const X = op.x;
+  P.op.x.t += X.killExtend;
+  P.hp = Math.min(P.maxHp, P.hp + X.killHeal);
+  P.stamina = SPRINT.max;
+  P.exhaust = 0;
+  popup(P.x, P.y - 64, '延长 +' + X.killExtend + 's · +' + X.killHeal + ' 血', '#ff8a4c', 12);
+}
+
+/* ── 被动：战术滑铲（奔跑中按 C，无冷却） ── */
+function trySlide() {
+  const op = opDef();
+  if (!op || !op.passive) return;
+  if (!P.alive) return;
+  const S = P.op;
+  if (S.slide > 0) return;                          // 这一下滑完再说
+  if (!P.sprinting) { uiToast('先跑起来再滑铲', 'small'); return; }
+  if (!exoOn() && P.stamina < SKILL.slide.cost) { uiToast('体力不够滑铲', 'small warn'); return; }
+  if (legBroken()) return;
+
+  const exo = exoOn();
+  const dur = SKILL.slide.dur * (exo ? SKILL.exo.slideDur : 1);
+  S.slide = dur;
+  S.slideDur = dur;
+  S.slideA = (Math.abs(P.vx) + Math.abs(P.vy) > 6) ? Math.atan2(P.vy, P.vx) : P.aim;
+  if (!exo) P.stamina = Math.max(0, P.stamina - SKILL.slide.cost);
+  P.invuln = Math.max(P.invuln, 0.10);              // 低身位：滑出去的瞬间擦掉一点判定
+  Sfx.dash();
+
+  burst(P.x, P.y + 8, 12, {
+    angle: S.slideA + Math.PI, spread: 0.7, spdMin: 40, spdMax: 190,
+    color: ['#c8d6de', '#8fb6d0'], life: 0.4, r: 3.6, drag: 0.9,
+  });
+}
+
+/* 每帧：冷却、三连发排程、外骨骼计时、滑铲计时 */
+function updateOperatorSkills(dt) {
+  if (!P.op) initOperatorSkills();
+  const S = P.op;
+  S.g.cd = Math.max(0, S.g.cd - dt);
+  S.v.cd = Math.max(0, S.v.cd - dt);
+  S.x.cd = Math.max(0, S.x.cd - dt);
+  P.concuss = Math.max(0, P.concuss - dt);
+
+  if (S.volley) {
+    S.volley.t -= dt;
+    if (S.volley.t <= 0) {
+      if (S.volley.left > 0) {
+        fireGL();
+        S.volley.left--;
+        S.volley.t = 0.11;
+      }
+      if (S.volley.left <= 0) S.volley = null;
+    }
+  }
+
+  if (S.x.on) {
+    S.x.t -= dt;
+    if (S.x.t <= 0) endExo();
+  }
+
+  if (S.slide > 0) S.slide = Math.max(0, S.slide - dt);
+}
+
 /* ══════════════════════════════════════════════════════════
    9.5 冰冻军团：冰弹 → 霜区 → 冻伤
    ──────────────────────────────────────────────────────────
@@ -4693,6 +5188,8 @@ function updateEnemies(dt) {
     e.meleeBack = Math.max(0, e.meleeBack - dt);
     e.meleeHit = Math.max(0, e.meleeHit - dt * 2);
     e.stagger = Math.max(0, e.stagger - dt);
+    e.stun = Math.max(0, (e.stun || 0) - dt);        // 三头犬震晕：不吃不减，纯粹站着发呆
+    e.cripple = Math.max(0, (e.cripple || 0) - dt);  // 骨折：移速打折
     e.invuln = Math.max(0, e.invuln - dt);
     e.walkPhase += dt * 8;
 
@@ -4746,6 +5243,9 @@ function updateEnemies(dt) {
     if (e.state === 'combat') G.combatCount++;
     else if (e.state === 'alert') G.alertCount++;
     else if (e.alertMeter > G.suspect) G.suspect = e.alertMeter;
+
+    /* 被三头犬震晕：计时照走（上面统一扣过了），但这一帧不移动、不瞄准、不开枪 */
+    if (e.stun > 0) continue;
 
     /* ── 按状态决定移动目标与速度 ── */
     let mvx = 0, mvy = 0, spdMul = 1, faceAim = null;
@@ -5185,6 +5685,7 @@ function updateEnemies(dt) {
     if (faceAim !== null) e.facing += angleDiff(faceAim, e.facing) * Math.min(1, dt * 9);
 
     let spd = e.speed * spdMul * (e.stagger > 0 ? 0.25 : 1);
+    if (e.cripple > 0) spd *= 0.6;                        // 被炸断腿：一瘸一拐
     if (e.type === 'runner') {
       // 点射时半蹲着走，打完继续撒腿冲
       if (e.ptN > 0) spd *= 0.5;
@@ -5366,6 +5867,7 @@ function killEnemy(e) {
   G.kills++;
   G.combo++;
   G.comboTimer = 2.6;
+  exoOnKill();                  // 外骨骼期间：每倒一个都续 5 秒 + 回 30 血 + 满体力
   const mult = 1 + Math.min(G.combo, 20) * 0.06;
   const gain = Math.round(e.score * mult);
   G.score += gain;
@@ -7244,6 +7746,31 @@ function drawPlayer() {
 
   ctx.restore();
 
+  /* 外骨骼：脚下一圈六边形力场 + 背后两根推进器，一眼看得出在增益里 */
+  if (exoOn()) {
+    const X = opDef().x;
+    const remain = P.op.x.t / X.dur;
+    ctx.save();
+    ctx.translate(P.x, P.y);
+    ctx.rotate(t * 1.2);
+    ctx.strokeStyle = 'rgba(255,138,76,' + (0.55 + Math.sin(t * 9) * 0.2) + ')';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = i * TAU / 6;
+      const px = Math.cos(a) * (P.r + 10), py = Math.sin(a) * (P.r + 10);
+      i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+    }
+    ctx.closePath(); ctx.stroke();
+    ctx.rotate(-t * 1.2);
+    ctx.strokeStyle = 'rgba(255,214,107,0.55)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.arc(0, 0, P.r + 15, -Math.PI / 2, -Math.PI / 2 + TAU * remain);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   /* 启动读条提示画在未旋转的坐标系里，不然文字会跟着朝向倒过来 */
   if (P.medOn && P.medWind > 0) {
     ctx.save();
@@ -7884,6 +8411,41 @@ function drawEnemy(e) {
       ctx.restore();
     }
   }
+
+  /* ── 三头犬的两件"礼物"：头顶转三颗星是眩晕，脚下一道折线是骨折 ── */
+  if (e.stun > 0) {
+    const k = clamp(e.stun / SKILL.gl.stun, 0, 1);
+    ctx.save();
+    ctx.translate(e.x, e.y - e.r - 26);
+    for (let i = 0; i < 3; i++) {
+      const a = G.time * 6 + i * TAU / 3;
+      const sx = Math.cos(a) * 12, sy = Math.sin(a) * 3.4 - 3;
+      ctx.globalAlpha = 0.3 + k * 0.65;
+      ctx.fillStyle = '#ffd66b';
+      ctx.beginPath();
+      for (let j = 0; j < 5; j++) {
+        const aa = -Math.PI / 2 + j * TAU / 5;
+        const rr = j % 2 ? 2 : 4.2;
+        const px = sx + Math.cos(aa) * rr, py = sy + Math.sin(aa) * rr;
+        j ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+      }
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+  if (e.cripple > 0) {
+    ctx.globalAlpha = 0.55;
+    ctx.strokeStyle = '#ff8a3a';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(e.x - 7, e.y + e.r + 6);
+    ctx.lineTo(e.x - 2.5, e.y + e.r + 2);
+    ctx.lineTo(e.x + 1.5, e.y + e.r + 7);
+    ctx.lineTo(e.x + 6, e.y + e.r + 3);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
 }
 
 function drawBullets() {
@@ -8074,6 +8636,69 @@ function drawNades() {
     ctx.fillStyle = '#ff5533';
     ctx.beginPath(); ctx.arc(n.x, drawY - 9, 2.5, 0, TAU); ctx.fill();
     ctx.globalAlpha = 1;
+  }
+}
+
+
+/* 烟雾：一团会呼吸的灰白气，边缘是渐隐的，戴不住一个完美圆 */
+function drawSmokes() {
+  const SM = SKILL.smoke;
+  for (const s of G.smokes) {
+    if (!fogVisibleAt(s.x, s.y)) continue;
+    const t = s.t;
+    const a = clamp(Math.min(t / SM.grow, (SM.life - t) / SM.fade + 0.2), 0, 1);
+    const r = s.r;
+    if (r < 1) continue;
+
+    const g = ctx.createRadialGradient(s.x, s.y, r * 0.08, s.x, s.y, r);
+    g.addColorStop(0, 'rgba(228,234,238,' + (0.93 * a) + ')');
+    g.addColorStop(0.58, 'rgba(208,216,222,' + (0.87 * a) + ')');
+    g.addColorStop(0.86, 'rgba(188,200,208,' + (0.55 * a) + ')');
+    g.addColorStop(1, 'rgba(176,190,200,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, TAU); ctx.fill();
+
+    /* 七个鼓包：位置按 seed 固定、缓慢呼吸，看起来才有体积 */
+    for (let i = 0; i < 7; i++) {
+      const ang = s.seed + i * 2.399 + Math.sin(G.time * 0.5 + i) * 0.25;
+      const rr = r * (0.38 + (i % 3) * 0.15);
+      const bx = s.x + Math.cos(ang) * r * 0.40;
+      const by = s.y + Math.sin(ang * 1.27) * r * 0.33;
+      const gg = ctx.createRadialGradient(bx, by, 0, bx, by, rr);
+      gg.addColorStop(0, 'rgba(238,244,248,' + (0.34 * a) + ')');
+      gg.addColorStop(1, 'rgba(200,212,220,0)');
+      ctx.fillStyle = gg;
+      ctx.beginPath(); ctx.arc(bx, by, rr, 0, TAU); ctx.fill();
+    }
+  }
+}
+
+/* 三头犬的榴弹：一颗带尾焰的胖子，弹过墙会留下火星 */
+function drawGls() {
+  for (const g of G.gls) {
+    if (!fogVisibleAt(g.x, g.y)) continue;
+
+    ctx.globalAlpha = 0.28;
+    ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.ellipse(g.x, g.y + 6, 7, 4, 0, 0, TAU); ctx.fill();
+    ctx.globalAlpha = 1;
+
+    const glow = ctx.createRadialGradient(g.x, g.y, 0, g.x, g.y, 18);
+    glow.addColorStop(0, 'rgba(255,214,107,0.75)');
+    glow.addColorStop(1, 'rgba(255,120,40,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(g.x, g.y, 18, 0, TAU); ctx.fill();
+
+    ctx.save();
+    ctx.translate(g.x, g.y);
+    ctx.rotate(g.spin);
+    ctx.fillStyle = '#3a2f1a';
+    drawRoundRect(-5.5, -4.5, 11, 9, 3);
+    ctx.fill();
+    ctx.strokeStyle = '#ffbe55';
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+    ctx.restore();
   }
 }
 
@@ -9073,8 +9698,94 @@ function drawHUD() {
     ctx.globalAlpha = 1;
   }
 
+  // ── 干员技能栏（底部正中）──
+  drawSkillBar(mono);
+
   // ── 准星 ──
   drawCrosshair(mono);
+}
+
+/* 干员技能栏：底部正中三格 —— G 战术道具 / V 小技能 / X 大招。
+   冷却时整格压黑并盖一层从下往上退的遮罩，储备用下方小圆点表示。 */
+function drawSkillBar(mono) {
+  const op = opDef();
+  if (!op || !P.op || !P.alive) return;
+  const S = P.op;
+  const size = 54, gap = 8, total = size * 3 + gap * 2;
+  const x0 = Math.round(VW / 2 - total / 2);
+  const y0 = VH - 84;
+
+  const rows = [
+    { k: 'G', cn: '烟雾', col: '#c8d6de', cd: S.g.cd, max: op.g.cd, use: S.g.use, cap: op.g.charges },
+    { k: 'V', cn: '手炮', col: '#ffd66b', cd: S.v.cd, max: op.v.cd, use: S.v.use, cap: op.v.charges },
+    { k: 'X', cn: '外骨骼', col: '#ff8a4c', cd: S.x.on ? S.x.t : S.x.cd,
+      max: S.x.on ? op.x.dur : op.x.cd, use: S.x.on ? 1 : 0, cap: 1, on: S.x.on },
+  ];
+
+  ctx.save();
+  ctx.textAlign = 'center';
+
+  for (let i = 0; i < rows.length; i++) {
+    const it = rows[i];
+    const x = x0 + i * (size + gap);
+    const ready = it.on || (it.cd <= 0 && it.use > 0);
+
+    /* 底板 */
+    ctx.fillStyle = 'rgba(8,14,20,0.72)';
+    drawRoundRect(x, y0, size, size, 3);
+    ctx.fill();
+    ctx.strokeStyle = it.on ? 'rgba(255,138,76,0.95)'
+                    : ready ? 'rgba(140,200,230,0.55)' : 'rgba(90,130,160,0.28)';
+    ctx.lineWidth = 1.4;
+    drawRoundRect(x, y0, size, size, 3);
+    ctx.stroke();
+
+    /* 键位 + 名称 */
+    ctx.fillStyle = it.on ? '#ffd0b0' : ready ? it.col : 'rgba(120,160,190,0.45)';
+    ctx.font = '800 19px ' + mono;
+    ctx.fillText(it.k, x + size / 2, y0 + 25);
+    ctx.fillStyle = it.on ? 'rgba(255,190,160,0.9)' : ready ? 'rgba(190,225,245,0.85)' : 'rgba(120,160,190,0.4)';
+    ctx.font = '700 9px ' + mono;
+    ctx.fillText(it.cn, x + size / 2, y0 + 39);
+
+    /* 储备点 */
+    if (it.cap > 1) {
+      for (let d = 0; d < it.cap; d++) {
+        ctx.beginPath();
+        ctx.arc(x + size / 2 + (d - (it.cap - 1) / 2) * 10, y0 + size - 9, 2.6, 0, TAU);
+        ctx.fillStyle = d < it.use ? it.col : 'rgba(110,150,180,0.22)';
+        ctx.fill();
+      }
+    }
+
+    /* 冷却遮罩 */
+    if (!it.on && it.cd > 0) {
+      const k = clamp(it.cd / it.max, 0, 1);
+      ctx.fillStyle = 'rgba(3,7,11,0.74)';
+      ctx.fillRect(x + 1, y0 + 1, size - 2, (size - 2) * k);
+      ctx.fillStyle = 'rgba(220,240,255,0.9)';
+      ctx.font = '800 15px ' + mono;
+      ctx.fillText(Math.ceil(it.cd) + '', x + size / 2, y0 + size / 2 + 6);
+    }
+  }
+
+  /* 外骨骼剩余时间：一条压在技能栏上方 */
+  if (S.x.on) {
+    const k = clamp(S.x.t / op.x.dur, 0, 1);
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    drawRoundRect(x0, y0 - 11, total, 4, 2);
+    ctx.fill();
+    ctx.fillStyle = '#ff8a4c';
+    drawRoundRect(x0, y0 - 11, Math.max(2, total * k), 4, 2);
+    ctx.fill();
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#ffbd94';
+    ctx.font = '700 9px ' + mono;
+    ctx.fillText('外骨骼 ' + S.x.t.toFixed(1) + 's', x0 + total + 8, y0 - 6);
+  }
+
+  ctx.restore();
+  ctx.textAlign = 'left';
 }
 
 /* 战利品面板：一行一行从「打码」翻成真物品，翻到哪件才拿到哪件 */
@@ -9394,6 +10105,8 @@ function update(dt) {
   updateEnemies(dt);
   updateBullets(dt);
   updateNades(dt);
+  updateSmokes(dt);
+  updateGls(dt);
   updateIceBolts(dt);
   updateMolotovs(dt);
   updateRockets(dt);
@@ -9757,6 +10470,8 @@ function render() {
   drawBullets();
   drawIceBolts();
   drawNades();
+  drawGls();
+  drawSmokes();
   drawMolotovs();
   drawRockets();
   drawFlameCones();
@@ -9852,8 +10567,108 @@ function loop(ts) {
    ══════════════════════════════════════════════════════════ */
 const $ = id => document.getElementById(id);
 
+
+/* ══════════════════════════════════════════════════════════
+   20. 干员：大厅卡片 + 档案浮层
+   ──────────────────────────────────────────────────────────
+   大厅卡片只放"现在是谁 + 四个键位缩写"，点开才是完整技能说明。
+   目前只有红狼一个，但结构按"多干员"写：OP_ORDER 加 id 就多一个。
+   ══════════════════════════════════════════════════════════ */
+function renderOpBar() {
+  const el = $('opBar');
+  if (!el) return;
+  const op = opDef();
+  if (!op) {
+    el.innerHTML = '<div class="opempty">未选择干员 · 点这里挑选</div>';
+    el.onclick = openOperators;
+    return;
+  }
+  const chip = (k, t) => '<span class="opchip"><b>' + k + '</b>' + t + '</span>';
+  el.innerHTML =
+    '<div class="opavatar">' + op.name.slice(-1) + '</div>' +
+    '<div class="opinfo"><b>' + op.name + '</b>' +
+      '<span class="role">' + op.role + ' · ' + op.en + '</span>' +
+      '<div class="opchips">' +
+        chip('G', op.g.short) + chip('V', op.v.short) + chip('X', op.x.short) + chip('被动', op.passive.short) +
+      '</div>' +
+    '</div>' +
+    '<span class="opgo">换 人 ›</span>';
+  el.onclick = openOperators;
+}
+
+function openOperators() {
+  $('lobby').classList.add('hidden');
+  $('ops').classList.remove('hidden');
+  renderOpsPanel();
+}
+function closeOperators() {
+  $('ops').classList.add('hidden');
+  $('lobby').classList.remove('hidden');
+  refreshLobby();
+}
+
+function renderOpsPanel() {
+  const list = $('opsList');
+  const det = $('opsDetail');
+  if (!list || !det) return;
+  list.innerHTML = '';
+
+  for (const id of OP_ORDER) {
+    const o = OPERATORS[id];
+    if (!o) continue;
+    const el = document.createElement('div');
+    el.className = 'ops-card' + (SAVE.operator === id ? ' on' : '');
+    el.innerHTML =
+      '<div class="opavatar">' + o.name.slice(-1) + '</div>' +
+      '<div style="min-width:0"><b>' + o.name + '</b>' +
+      '<span class="role">' + o.role + ' · ' + o.en + '</span></div>';
+    el.addEventListener('click', () => {
+      if (SAVE.operator === id) return;
+      SAVE.operator = id;
+      saveGame();
+      uiToast('出战干员 · ' + o.name, 'small');
+      renderOpsPanel();
+      renderOpBar();
+    });
+    list.appendChild(el);
+  }
+
+  const op = opDef() || OPERATORS[OP_ORDER[0]];
+  if (!op) { det.innerHTML = ''; return; }
+  const row = (key, cls, title, meta, desc) =>
+    '<div class="skillrow"><div class="skillkey' + (cls ? ' ' + cls : '') + '">' + key + '</div>' +
+    '<div class="skillbody"><b>' + title + '</b><span class="meta">' + meta + '</span><p>' + desc + '</p></div></div>';
+
+  const onDuty = SAVE.operator === op.id;
+  det.innerHTML =
+    '<div class="ops-head"><div class="opavatar">' + op.name.slice(-1) + '</div>' +
+      '<div><div class="ops-name">' + op.name + '</div>' +
+      '<div class="ops-role">' + op.role + ' · ' + op.en + ' · 4 项能力</div></div>' +
+    '</div>' +
+    '<div class="ops-desc">' + op.desc + '</div>' +
+    row('G', '', op.g.name, '战术道具 · CD ' + op.g.cd + 's · 储备 ' + op.g.charges, op.g.desc) +
+    row('V', '', op.v.name + (op.v.sub ? ' · ' + op.v.sub : ''),
+        '小技能 · CD ' + op.v.cd + 's · 储备 ' + op.v.charges + ' 组', op.v.desc) +
+    row('X', '', op.x.name, '大招 · CD ' + op.x.cd + 's · 持续 ' + op.x.dur + 's', op.x.desc) +
+    row('C', 'pas', op.passive.name, '被动 · 无冷却', op.passive.desc) +
+    '<div class="ops-foot"><button class="btn primary" id="opDeploy"' + (onDuty ? ' disabled' : '') + '>' +
+      (onDuty ? '当 前 出 战' : '设 为 出 战 干 员') + '</button></div>';
+
+  const btn = $('opDeploy');
+  if (btn) {
+    btn.addEventListener('click', () => {
+      SAVE.operator = op.id;
+      saveGame();
+      uiToast('出战干员 · ' + op.name, 'small');
+      renderOpsPanel();
+      renderOpBar();
+    });
+  }
+}
+
 function refreshLobby() {
   $('creditVal').textContent = fmtMoney(SAVE.credits);
+  renderOpBar();
 
   const armor = ARMORS[SAVE.equippedArmor] || ARMORS[0];
   if (!SAVE.loadout) SAVE.loadout = { primary: null, secondary: null, pistol: null };
@@ -11166,6 +11981,8 @@ function startRaid() {
   G.nades = [];
   G.icebolts = [];
   G.frosts = [];
+  G.smokes = [];
+  G.gls = [];
   G.fires = [];
   G.molotovs = [];
   G.rockets = [];
@@ -11387,8 +12204,10 @@ function backToLobby() {
    19. 事件绑定
    ══════════════════════════════════════════════════════════ */
 $('deployBtn').addEventListener('click', startRaid);
+$('opBtn').addEventListener('click', openOperators);
 $('shopBtn').addEventListener('click', () => openShop('weapon'));
 $('closeShop').addEventListener('click', closeShop);
+$('closeOps').addEventListener('click', closeOperators);
 $('stashBtn').addEventListener('click', openStash);
 $('gunsmithBtn').addEventListener('click', () => openGunsmith());
 $('closeGunsmith').addEventListener('click', closeGunsmith);
