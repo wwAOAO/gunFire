@@ -787,6 +787,10 @@
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d', { alpha: false });
 let DPR = 1, VW = 0, VH = 0;
+/* 相机缩放：<1 = 镜头拉远，一屏装下更多世界，屏幕上的位移整体变小。
+   0.85 让视野变成 1/0.85 ≈ 1.18 倍宽，所有「屏幕速度」降 15%，角色 32px → 27px。
+   只改世界→屏幕的映射：射程、弹速、AI 距离这些世界内比例一个都不动。 */
+const ZOOM = 0.85;
 
 const WORLD = { w: 3000, h: 2200 };
 const TAU = Math.PI * 2;
@@ -1161,7 +1165,7 @@ const SPRINT = {
   regenWalk: 9,         // 边走边回
   resumeAt: 25,         // 想重新起跑至少要有这么多体力
   exhaustT: 2.2,        // 力竭锁定时长（跑空要付 2.2s 的代价：慢走 + 不能起跑）
-  exhaustMul: 0.75,     // 力竭期间移速（176×0.75 = 132，刚好落在最快小兵 runner 134 之下）
+  exhaustMul: 0.75,     // 力竭期间移速（165×0.75 ≈ 124，落在最快小兵 runner 134 之下）
   exhaustRegen: 0.55,   // 力竭期间回体力打折
   loadWalk: 0.05,       // 每点负重 -5% 移速
   loadDrain: 0.32,      // 每点负重 +32% 体力消耗
@@ -2672,7 +2676,7 @@ const P = {
   x: 0, y: 0, r: 16,
   vx: 0, vy: 0,                 // 本帧速度，仅供敌方预判瞄准用
   hp: 100, maxHp: 100,
-  speed: 176,                   // 走路基础速度（全局节奏下调后的一档，跑起来靠 Shift）
+  speed: 165,                   // 走路基础速度（配合 0.85 相机缩放：屏幕速度再降 15%）
   stamina: 100,                 // 体力：跑步消耗，不跑才回
   sprinting: false,             // 这一帧是否在跑
   exhaust: 0,                   // 力竭锁定剩余时间
@@ -2917,7 +2921,7 @@ const MAP_VERSION = 1;
    内置地图：零号大坝（水坝工业区）
    —— 与 maps/zero-dam.json 完全一致，可在编辑器里导入后继续改
    ══════════════════════════════════════════════════════════ */
-const BUILTIN_MAPS = {'zero-dam': ({"format":"neonpurge-map","version":1,"name":"零号大坝·普通","w":3400,"h":2400,"spawns":[{"x":600,"y":260},{"x":1200,"y":2250},{"x":250,"y":1430},{"x":3320,"y":1150},{"x":3320,"y":2180},{"x":2560,"y":2340}],"obstacles":[{"x":0,"y":0,"w":3400,"h":140},{"x":380,"y":140,"w":70,"h":95},{"x":980,"y":140,"w":70,"h":95},{"x":2080,"y":140,"w":70,"h":95},{"x":2600,"y":140,"w":70,"h":95},{"x":3180,"y":140,"w":70,"h":95},{"x":1500,"y":150,"w":130,"h":60},{"x":2300,"y":150,"w":90,"h":60},{"x":0,"y":340,"w":780,"h":130},{"x":920,"y":340,"w":660,"h":130},{"x":1740,"y":340,"w":1000,"h":130},{"x":2880,"y":340,"w":520,"h":130},{"x":2380,"y":540,"w":620,"h":120},{"x":3060,"y":560,"w":130,"h":100},{"x":2380,"y":660,"w":40,"h":200},{"x":2960,"y":660,"w":40,"h":200},{"x":2380,"y":940,"w":220,"h":140},{"x":2760,"y":940,"w":240,"h":140},{"x":2620,"y":940,"w":80,"h":60},{"x":3120,"y":660,"w":80,"h":180},{"x":3120,"y":900,"w":130,"h":90},{"x":380,"y":560,"w":300,"h":90},{"x":380,"y":720,"w":300,"h":90},{"x":380,"y":880,"w":300,"h":90},{"x":760,"y":560,"w":230,"h":90},{"x":760,"y":720,"w":230,"h":90},{"x":800,"y":880,"w":40,"h":130},{"x":800,"y":1010,"w":220,"h":40},{"x":1050,"y":880,"w":40,"h":130},{"x":400,"y":1010,"w":280,"h":110},{"x":1400,"y":1120,"w":120,"h":64},{"x":1880,"y":1120,"w":120,"h":64},{"x":1400,"y":1290,"w":120,"h":64},{"x":1640,"y":1290,"w":120,"h":64},{"x":1640,"y":1460,"w":120,"h":64},{"x":1880,"y":1460,"w":120,"h":64},{"x":1400,"y":1600,"w":140,"h":90},{"x":1880,"y":1600,"w":80,"h":80},{"x":1040,"y":500,"w":460,"h":160},{"x":400,"y":1560,"w":380,"h":210},{"x":830,"y":1560,"w":130,"h":130},{"x":980,"y":1560,"w":130,"h":130},{"x":890,"y":1740,"w":60,"h":260},{"x":560,"y":1850,"w":90,"h":90},{"x":670,"y":1850,"w":90,"h":90},{"x":780,"y":1850,"w":90,"h":90},{"x":400,"y":1820,"w":120,"h":80},{"x":1000,"y":1780,"w":180,"h":110},{"x":400,"y":2020,"w":300,"h":80},{"x":2400,"y":1560,"w":280,"h":80},{"x":2440,"y":1690,"w":90,"h":90},{"x":2570,"y":1690,"w":90,"h":90},{"x":2700,"y":1690,"w":90,"h":90},{"x":2830,"y":1690,"w":90,"h":90},{"x":2440,"y":1820,"w":90,"h":90},{"x":2570,"y":1820,"w":90,"h":90},{"x":2700,"y":1820,"w":90,"h":90},{"x":2360,"y":1620,"w":30,"h":200},{"x":3000,"y":1660,"w":30,"h":220},{"x":2880,"y":1560,"w":110,"h":90},{"x":2900,"y":1900,"w":80,"h":80},{"x":2440,"y":1960,"w":70,"h":70},{"x":1240,"y":700,"w":70,"h":280},{"x":1240,"y":1060,"w":70,"h":240},{"x":2160,"y":1120,"w":70,"h":300},{"x":2160,"y":1500,"w":70,"h":260},{"x":1330,"y":880,"w":80,"h":80},{"x":2280,"y":640,"w":90,"h":90},{"x":900,"y":1240,"w":120,"h":56},{"x":1560,"y":2050,"w":120,"h":56},{"x":2200,"y":900,"w":56,"h":120},{"x":800,"y":2060,"w":320,"h":36},{"x":1700,"y":2060,"w":380,"h":36},{"x":1420,"y":1860,"w":240,"h":120},{"x":1180,"y":1300,"w":90,"h":90},{"x":2280,"y":1350,"w":80,"h":80},{"x":1120,"y":1180,"w":100,"h":90},{"x":1200,"y":2050,"w":80,"h":80},{"x":2250,"y":2180,"w":120,"h":60},{"x":2350,"y":1100,"w":60,"h":220},{"x":2480,"y":1250,"w":120,"h":50},{"x":2650,"y":1150,"w":140,"h":60},{"x":1900,"y":1750,"w":60,"h":160},{"x":2050,"y":1800,"w":130,"h":55},{"x":300,"y":1600,"w":70,"h":200},{"x":1280,"y":2200,"w":140,"h":55},{"x":2380,"y":2150,"w":120,"h":55}],"crates":[{"x":520,"y":685},{"x":900,"y":685},{"x":720,"y":950},{"x":960,"y":960},{"x":2470,"y":710},{"x":2900,"y":810},{"x":2780,"y":700},{"x":1580,"y":1152},{"x":1580,"y":1440},{"x":1580,"y":1492},{"x":2060,"y":1300},{"x":760,"y":2000},{"x":1000,"y":1940},{"x":1180,"y":1960},{"x":2750,"y":1950},{"x":2600,"y":2030},{"x":1500,"y":260},{"x":2900,"y":270},{"x":1300,"y":1450},{"x":2040,"y":1250}],"extracts":[{"x":2130,"y":650,"name":"A"},{"x":1720,"y":2260,"name":"B"}],"nests":[{"x":1090,"y":800},{"x":760,"y":1990},{"x":2920,"y":1845},{"x":1580,"y":1300},{"x":2700,"y":820},{"x":1150,"y":250},{"x":2200,"y":640},{"x":2250,"y":1950}],"units":[{"x":700,"y":685,"type":"runner"},{"x":720,"y":600,"type":"shooter"},{"x":940,"y":945,"type":"brute"},{"x":500,"y":1180,"type":"runner"},{"x":600,"y":1795,"type":"runner"},{"x":1200,"y":1700,"type":"shooter"},{"x":1130,"y":1950,"type":"brute"},{"x":740,"y":2120,"type":"runner"},{"x":2620,"y":1666,"type":"runner"},{"x":2760,"y":1960,"type":"shooter"},{"x":2560,"y":2020,"type":"brute"},{"x":2950,"y":1680,"type":"runner"},{"x":1340,"y":1200,"type":"runner"},{"x":2030,"y":1180,"type":"runner"},{"x":1580,"y":1220,"type":"shooter"},{"x":1580,"y":1400,"type":"shooter"},{"x":1640,"y":1660,"type":"brute"},{"x":1960,"y":1340,"type":"runner"},{"x":2520,"y":880,"type":"runner"},{"x":2900,"y":700,"type":"runner"},{"x":2740,"y":900,"type":"shooter"},{"x":2450,"y":890,"type":"shooter"},{"x":2860,"y":890,"type":"brute"},{"x":2680,"y":800,"type":"boss"},{"x":1200,"y":270,"type":"runner"},{"x":2350,"y":270,"type":"runner"},{"x":2100,"y":950,"type":"runner"},{"x":2560,"y":300,"type":"sniper"},{"x":1151,"y":691,"type":"sniper"},{"x":1980,"y":1080,"type":"rocket"},{"x":813,"y":1819,"type":"rocket"},{"x":2330,"y":1900,"type":"flamer"},{"x":1566,"y":1330,"type":"flamer"}],"squad":["runner","shooter","brute","runner","runner","shooter","brute","runner","runner","shooter","brute","runner","runner","runner","shooter","shooter","brute","runner","runner","runner","shooter","shooter","brute","boss","runner","runner","runner","sniper","sniper","rocket","rocket","flamer","flamer"]}) };
+const BUILTIN_MAPS = {'zero-dam': ({"format":"neonpurge-map","version":1,"name":"零号大坝·普通","w":4400,"h":3200,"spawns":[{"x":600,"y":260},{"x":1200,"y":2250},{"x":250,"y":1430},{"x":3320,"y":1150},{"x":3320,"y":2180},{"x":2560,"y":2340}],"obstacles":[{"x":0,"y":0,"w":4400,"h":140},{"x":380,"y":140,"w":70,"h":95},{"x":980,"y":140,"w":70,"h":95},{"x":2080,"y":140,"w":70,"h":95},{"x":2600,"y":140,"w":70,"h":95},{"x":3180,"y":140,"w":70,"h":95},{"x":1500,"y":150,"w":130,"h":60},{"x":2300,"y":150,"w":90,"h":60},{"x":0,"y":340,"w":780,"h":130},{"x":920,"y":340,"w":660,"h":130},{"x":1740,"y":340,"w":1000,"h":130},{"x":2880,"y":340,"w":520,"h":130},{"x":2380,"y":540,"w":620,"h":120},{"x":3060,"y":560,"w":130,"h":100},{"x":2380,"y":660,"w":40,"h":200},{"x":2960,"y":660,"w":40,"h":200},{"x":2380,"y":940,"w":220,"h":140},{"x":2760,"y":940,"w":240,"h":140},{"x":2620,"y":940,"w":80,"h":60},{"x":3120,"y":660,"w":80,"h":180},{"x":3120,"y":900,"w":130,"h":90},{"x":380,"y":560,"w":300,"h":90},{"x":380,"y":720,"w":300,"h":90},{"x":380,"y":880,"w":300,"h":90},{"x":760,"y":560,"w":230,"h":90},{"x":760,"y":720,"w":230,"h":90},{"x":800,"y":880,"w":40,"h":130},{"x":800,"y":1010,"w":220,"h":40},{"x":1050,"y":880,"w":40,"h":130},{"x":400,"y":1010,"w":280,"h":110},{"x":1400,"y":1120,"w":120,"h":64},{"x":1880,"y":1120,"w":120,"h":64},{"x":1400,"y":1290,"w":120,"h":64},{"x":1640,"y":1290,"w":120,"h":64},{"x":1640,"y":1460,"w":120,"h":64},{"x":1880,"y":1460,"w":120,"h":64},{"x":1400,"y":1600,"w":140,"h":90},{"x":1880,"y":1600,"w":80,"h":80},{"x":1040,"y":500,"w":460,"h":160},{"x":400,"y":1560,"w":380,"h":210},{"x":830,"y":1560,"w":130,"h":130},{"x":980,"y":1560,"w":130,"h":130},{"x":890,"y":1740,"w":60,"h":260},{"x":560,"y":1850,"w":90,"h":90},{"x":670,"y":1850,"w":90,"h":90},{"x":780,"y":1850,"w":90,"h":90},{"x":400,"y":1820,"w":120,"h":80},{"x":1000,"y":1780,"w":180,"h":110},{"x":400,"y":2020,"w":300,"h":80},{"x":2400,"y":1560,"w":280,"h":80},{"x":2440,"y":1690,"w":90,"h":90},{"x":2570,"y":1690,"w":90,"h":90},{"x":2700,"y":1690,"w":90,"h":90},{"x":2830,"y":1690,"w":90,"h":90},{"x":2440,"y":1820,"w":90,"h":90},{"x":2570,"y":1820,"w":90,"h":90},{"x":2700,"y":1820,"w":90,"h":90},{"x":2360,"y":1620,"w":30,"h":200},{"x":3000,"y":1660,"w":30,"h":220},{"x":2880,"y":1560,"w":110,"h":90},{"x":2900,"y":1900,"w":80,"h":80},{"x":2440,"y":1960,"w":70,"h":70},{"x":1240,"y":700,"w":70,"h":280},{"x":1240,"y":1060,"w":70,"h":240},{"x":2160,"y":1120,"w":70,"h":300},{"x":2160,"y":1500,"w":70,"h":260},{"x":1330,"y":880,"w":80,"h":80},{"x":2280,"y":640,"w":90,"h":90},{"x":900,"y":1240,"w":120,"h":56},{"x":1560,"y":2050,"w":120,"h":56},{"x":2200,"y":900,"w":56,"h":120},{"x":800,"y":2060,"w":320,"h":36},{"x":1700,"y":2060,"w":380,"h":36},{"x":1420,"y":1860,"w":240,"h":120},{"x":1180,"y":1300,"w":90,"h":90},{"x":2280,"y":1350,"w":80,"h":80},{"x":1120,"y":1180,"w":100,"h":90},{"x":1200,"y":2050,"w":80,"h":80},{"x":2250,"y":2180,"w":120,"h":60},{"x":2350,"y":1100,"w":60,"h":220},{"x":2480,"y":1250,"w":120,"h":50},{"x":2650,"y":1150,"w":140,"h":60},{"x":1900,"y":1750,"w":60,"h":160},{"x":2050,"y":1800,"w":130,"h":55},{"x":300,"y":1600,"w":70,"h":200},{"x":1280,"y":2200,"w":140,"h":55},{"x":2380,"y":2150,"w":120,"h":55},{"x":3820,"y":300,"w":520,"h":30},{"x":3820,"y":610,"w":200,"h":30},{"x":4140,"y":610,"w":200,"h":30},{"x":3820,"y":300,"w":30,"h":110},{"x":3820,"y":530,"w":30,"h":110},{"x":4310,"y":300,"w":30,"h":340},{"x":3820,"y":820,"w":520,"h":30},{"x":3820,"y":1170,"w":520,"h":30},{"x":3820,"y":820,"w":30,"h":130},{"x":3820,"y":1070,"w":30,"h":130},{"x":4310,"y":820,"w":30,"h":380},{"x":3820,"y":1380,"w":200,"h":30},{"x":4140,"y":1380,"w":200,"h":30},{"x":3820,"y":1730,"w":520,"h":30},{"x":3820,"y":1380,"w":30,"h":130},{"x":3820,"y":1630,"w":30,"h":130},{"x":4310,"y":1380,"w":30,"h":380},{"x":3820,"y":1940,"w":520,"h":30},{"x":3820,"y":2290,"w":520,"h":30},{"x":3820,"y":1940,"w":30,"h":130},{"x":3820,"y":2190,"w":30,"h":130},{"x":4310,"y":1940,"w":30,"h":380},{"x":3410,"y":380,"w":70,"h":120},{"x":3410,"y":710,"w":70,"h":120},{"x":3410,"y":1040,"w":70,"h":120},{"x":3410,"y":1370,"w":70,"h":120},{"x":3410,"y":1700,"w":70,"h":120},{"x":3410,"y":2030,"w":70,"h":120},{"x":3770,"y":660,"w":40,"h":120},{"x":3770,"y":1240,"w":40,"h":140},{"x":3770,"y":1820,"w":40,"h":120},{"x":3770,"y":2380,"w":40,"h":140},{"x":140,"y":2570,"w":110,"h":110},{"x":390,"y":2570,"w":110,"h":110},{"x":890,"y":2570,"w":110,"h":110},{"x":1140,"y":2570,"w":110,"h":110},{"x":1640,"y":2570,"w":110,"h":110},{"x":1890,"y":2570,"w":110,"h":110},{"x":2390,"y":2570,"w":110,"h":110},{"x":2640,"y":2570,"w":110,"h":110},{"x":3140,"y":2570,"w":110,"h":110},{"x":140,"y":2810,"w":110,"h":110},{"x":390,"y":2810,"w":110,"h":110},{"x":890,"y":2810,"w":110,"h":110},{"x":1140,"y":2810,"w":110,"h":110},{"x":1640,"y":2810,"w":110,"h":110},{"x":1890,"y":2810,"w":110,"h":110},{"x":2390,"y":2810,"w":110,"h":110},{"x":2640,"y":2810,"w":110,"h":110},{"x":3140,"y":2810,"w":110,"h":110},{"x":2600,"y":3000,"w":740,"h":40},{"x":60,"y":2440,"w":520,"h":40}],"crates":[{"x":520,"y":685},{"x":900,"y":685},{"x":720,"y":950},{"x":960,"y":960},{"x":2470,"y":710},{"x":2900,"y":810},{"x":2780,"y":700},{"x":1580,"y":1152},{"x":1580,"y":1440},{"x":1580,"y":1492},{"x":2060,"y":1300},{"x":760,"y":2000},{"x":1000,"y":1940},{"x":1180,"y":1960},{"x":2750,"y":1950},{"x":2600,"y":2030},{"x":1500,"y":260},{"x":2900,"y":270},{"x":1300,"y":1450},{"x":2040,"y":1250},{"x":3950,"y":420},{"x":4200,"y":560},{"x":3950,"y":950},{"x":4200,"y":1120},{"x":3950,"y":1500},{"x":4200,"y":1680},{"x":3950,"y":2060},{"x":4200,"y":2240},{"x":360,"y":2650},{"x":1060,"y":2650},{"x":1790,"y":2890},{"x":2560,"y":2650},{"x":3172,"y":2949},{"x":560,"y":2890}],"extracts":[{"x":2130,"y":650,"name":"A"},{"x":4150,"y":3000,"name":"B"}],"nests":[{"x":1090,"y":800},{"x":760,"y":1990},{"x":2920,"y":1845},{"x":1580,"y":1300},{"x":2700,"y":820},{"x":1150,"y":250},{"x":2200,"y":640},{"x":2250,"y":1950},{"x":3650,"y":900},{"x":4080,"y":1000},{"x":4080,"y":2120},{"x":1718,"y":2968}],"units":[{"x":700,"y":685,"type":"runner"},{"x":720,"y":600,"type":"shooter"},{"x":940,"y":945,"type":"brute"},{"x":500,"y":1180,"type":"runner"},{"x":600,"y":1795,"type":"runner"},{"x":1200,"y":1700,"type":"shooter"},{"x":1130,"y":1950,"type":"brute"},{"x":740,"y":2120,"type":"runner"},{"x":2620,"y":1666,"type":"runner"},{"x":2760,"y":1960,"type":"shooter"},{"x":2560,"y":2020,"type":"brute"},{"x":2950,"y":1680,"type":"runner"},{"x":1340,"y":1200,"type":"runner"},{"x":2030,"y":1180,"type":"runner"},{"x":1580,"y":1220,"type":"shooter"},{"x":1580,"y":1400,"type":"shooter"},{"x":1640,"y":1660,"type":"brute"},{"x":1960,"y":1340,"type":"runner"},{"x":2520,"y":880,"type":"runner"},{"x":2900,"y":700,"type":"runner"},{"x":2740,"y":900,"type":"shooter"},{"x":2450,"y":890,"type":"shooter"},{"x":2860,"y":890,"type":"brute"},{"x":2680,"y":800,"type":"boss"},{"x":1200,"y":270,"type":"runner"},{"x":2350,"y":270,"type":"runner"},{"x":2100,"y":950,"type":"runner"},{"x":2560,"y":300,"type":"sniper"},{"x":1151,"y":691,"type":"sniper"},{"x":1980,"y":1080,"type":"rocket"},{"x":813,"y":1819,"type":"rocket"},{"x":2330,"y":1900,"type":"flamer"},{"x":1566,"y":1330,"type":"flamer"},{"x":3600,"y":220,"type":"runner"},{"x":3660,"y":600,"type":"shooter"},{"x":3660,"y":1300,"type":"runner"},{"x":3660,"y":2000,"type":"nader"},{"x":3300,"y":2600,"type":"runner"},{"x":4000,"y":460,"type":"shooter"},{"x":4050,"y":1050,"type":"brute"},{"x":4050,"y":1600,"type":"runner"},{"x":4050,"y":2200,"type":"flamer"},{"x":400,"y":2750,"type":"runner"},{"x":900,"y":2750,"type":"shooter"},{"x":1400,"y":2500,"type":"runner"},{"x":1900,"y":2750,"type":"brute"},{"x":2400,"y":2500,"type":"runner"},{"x":2900,"y":2750,"type":"shooter"},{"x":700,"y":3000,"type":"runner"},{"x":2200,"y":3000,"type":"sniper"},{"x":1200,"y":3000,"type":"shooter"}],"squad":["runner","shooter","brute","runner","runner","shooter","brute","runner","runner","shooter","brute","runner","runner","runner","shooter","shooter","brute","runner","runner","runner","shooter","shooter","brute","boss","runner","runner","runner","sniper","sniper","rocket","rocket","flamer","flamer"]})};
 /* ── 机密变体：同一张零号大坝，敌人换一套数值、战利品整体加码 ──
    容器构成也重排：军械箱与保险柜占一半，便宜好搜的补给箱只剩三个。
    代价是翻找时间与动静都变长，收益是枪、配件与高品质货明显变多。 */
@@ -3215,8 +3219,8 @@ function setCustomMap(m) {
   persistMap(G.customMap);
   prepareWorldForRaid();
   resetPlayer();
-  G.cam.x = clamp(P.x - VW / 2, 0, Math.max(0, WORLD.w - VW));
-  G.cam.y = clamp(P.y - VH / 2, 0, Math.max(0, WORLD.h - VH));
+  G.cam.x = clamp(P.x - VW / ZOOM / 2, 0, Math.max(0, WORLD.w - VW / ZOOM));
+  G.cam.y = clamp(P.y - VH / ZOOM / 2, 0, Math.max(0, WORLD.h - VH / ZOOM));
   if (typeof refreshMapPanel === 'function') refreshMapPanel();
   if (typeof refreshMapSelect === 'function') refreshMapSelect();
 }
@@ -4397,14 +4401,14 @@ function updatePlayer(dt) {
   /* 蜂医倒地：动不了、打不了，只能等着自己爬起来（或者被打死） */
   if (isDowned()) {
     updateDowned(dt);
-    P.aim = Math.atan2(mouse.y + G.cam.y - P.y, mouse.x + G.cam.x - P.x);
+    P.aim = Math.atan2(mouse.y / ZOOM + G.cam.y - P.y, mouse.x / ZOOM + G.cam.x - P.x);
     P.vx = 0; P.vy = 0;
     mouse.pressed = false;
     return;
   }
 
-  const wmx = mouse.x + G.cam.x;
-  const wmy = mouse.y + G.cam.y;
+  const wmx = mouse.x / ZOOM + G.cam.x;
+  const wmy = mouse.y / ZOOM + G.cam.y;
   mouse.wx = wmx; mouse.wy = wmy;
   P.aim = Math.atan2(wmy - P.y, wmx - P.x);
 
@@ -8745,28 +8749,30 @@ function updateParticles(dt) {
    13. 相机
    ══════════════════════════════════════════════════════════ */
 function updateCamera(dt) {
+  /* 一屏能装下的世界尺寸（相机缩放后比窗口大 1/ZOOM 倍） */
+  const vw = VW / ZOOM, vh = VH / ZOOM;
   /* 手控制导期间：镜头跟着导弹飞，爆炸后自动回到干员身上 */
   const ml = ctlLoiter();
   if (ml) {
-    const mx = ml.x - VW / 2, my = ml.y - VH / 2;
-    G.cam.x = lerp(G.cam.x, clamp(mx, 0, Math.max(0, WORLD.w - VW)), 1 - Math.pow(0.0002, dt));
-    G.cam.y = lerp(G.cam.y, clamp(my, 0, Math.max(0, WORLD.h - VH)), 1 - Math.pow(0.0002, dt));
+    const mx = ml.x - vw / 2, my = ml.y - vh / 2;
+    G.cam.x = lerp(G.cam.x, clamp(mx, 0, Math.max(0, WORLD.w - vw)), 1 - Math.pow(0.0002, dt));
+    G.cam.y = lerp(G.cam.y, clamp(my, 0, Math.max(0, WORLD.h - vh)), 1 - Math.pow(0.0002, dt));
     G.shake *= Math.pow(0.0025, dt);
     if (G.shake < 0.15) G.shake = 0;
     return;
   }
 
   const look = 35 + P.ads * 78;                 // 开镜时镜头往准星方向前探
-  const tx = P.x + Math.cos(P.aim) * look - VW / 2;
-  const ty = P.y + Math.sin(P.aim) * look - VH / 2;
+  const tx = P.x + Math.cos(P.aim) * look - vw / 2;
+  const ty = P.y + Math.sin(P.aim) * look - vh / 2;
 
   G.cam.x = lerp(G.cam.x, tx, 1 - Math.pow(0.0015, dt));
   G.cam.y = lerp(G.cam.y, ty, 1 - Math.pow(0.0015, dt));
 
-  if (WORLD.w > VW) G.cam.x = clamp(G.cam.x, 0, WORLD.w - VW);
-  else G.cam.x = (WORLD.w - VW) / 2;
-  if (WORLD.h > VH) G.cam.y = clamp(G.cam.y, 0, WORLD.h - VH);
-  else G.cam.y = (WORLD.h - VH) / 2;
+  if (WORLD.w > vw) G.cam.x = clamp(G.cam.x, 0, WORLD.w - vw);
+  else G.cam.x = (WORLD.w - vw) / 2;
+  if (WORLD.h > vh) G.cam.y = clamp(G.cam.y, 0, WORLD.h - vh);
+  else G.cam.y = (WORLD.h - vh) / 2;
 
   G.shake *= Math.pow(0.0025, dt);
   if (G.shake < 0.15) G.shake = 0;
@@ -8786,26 +8792,28 @@ function drawRoundRect(x, y, w, h, r) {
 }
 
 function drawFloor() {
+  /* 外层（render）已经把坐标系平移到相机原点，这里只负责画。
+     以前这里又 translate 了一次 -cam，等于双重偏移 —— 网格、边框、血迹全被推出屏幕。 */
   const camX = G.cam.x, camY = G.cam.y;
+  const vw = VW / ZOOM, vh = VH / ZOOM;
   const grid = 70;
   const startX = Math.floor(camX / grid) * grid;
   const startY = Math.floor(camY / grid) * grid;
 
   ctx.save();
-  ctx.translate(-camX, -camY);
 
   ctx.strokeStyle = 'rgba(45, 72, 100, 0.45)';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  for (let x = startX; x < camX + VW + grid; x += grid) { ctx.moveTo(x, camY); ctx.lineTo(x, camY + VH); }
-  for (let y = startY; y < camY + VH + grid; y += grid) { ctx.moveTo(camX, y); ctx.lineTo(camX + VW, y); }
+  for (let x = startX; x < camX + vw + grid; x += grid) { ctx.moveTo(x, camY); ctx.lineTo(x, camY + vh); }
+  for (let y = startY; y < camY + vh + grid; y += grid) { ctx.moveTo(camX, y); ctx.lineTo(camX + vw, y); }
   ctx.stroke();
 
   ctx.strokeStyle = 'rgba(58, 100, 138, 0.5)';
   ctx.beginPath();
   const big = grid * 5;
-  for (let x = Math.floor(camX / big) * big; x < camX + VW + big; x += big) { ctx.moveTo(x, camY); ctx.lineTo(x, camY + VH); }
-  for (let y = Math.floor(camY / big) * big; y < camY + VH + big; y += big) { ctx.moveTo(camX, y); ctx.lineTo(camX + VW, y); }
+  for (let x = Math.floor(camX / big) * big; x < camX + vw + big; x += big) { ctx.moveTo(x, camY); ctx.lineTo(x, camY + vh); }
+  for (let y = Math.floor(camY / big) * big; y < camY + vh + big; y += big) { ctx.moveTo(camX, y); ctx.lineTo(camX + vw, y); }
   ctx.stroke();
 
   ctx.strokeStyle = 'rgba(60, 110, 150, 0.5)';
@@ -8813,7 +8821,7 @@ function drawFloor() {
   ctx.strokeRect(0, 0, WORLD.w, WORLD.h);
 
   for (const d of G.decals) {
-    if (d.x < camX - 80 || d.x > camX + VW + 80 || d.y < camY - 80 || d.y > camY + VH + 80) continue;
+    if (d.x < camX - 80 || d.x > camX + vw + 80 || d.y < camY - 80 || d.y > camY + vh + 80) continue;
     ctx.globalAlpha = d.a;
     ctx.fillStyle = d.color;
     ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, TAU); ctx.fill();
@@ -8994,9 +9002,10 @@ function drawCrates() {
 
 function drawObstacles() {
   const camX = G.cam.x, camY = G.cam.y;
+  const vw = VW / ZOOM, vh = VH / ZOOM;
   for (const o of G.obstacles) {
-    if (o.x + o.w < camX - 40 || o.x > camX + VW + 40) continue;
-    if (o.y + o.h < camY - 40 || o.y > camY + VH + 40) continue;
+    if (o.x + o.w < camX - 40 || o.x > camX + vw + 40) continue;
+    if (o.y + o.h < camY - 40 || o.y > camY + vh + 40) continue;
 
     ctx.fillStyle = 'rgba(0,0,0,0.45)';
     drawRoundRect(o.x + 8, o.y + 12, o.w, o.h, 4);
@@ -10661,7 +10670,9 @@ function drawSniperBeams() {
   if (!G.enemies.length) return;
   const SN = ENEMY_TYPES.sniper.snipe;
   ctx.save();
-  ctx.translate(-G.cam.x + G.shakeX, -G.cam.y + G.shakeY);
+  ctx.translate(G.shakeX, G.shakeY);
+  ctx.scale(ZOOM, ZOOM);
+  ctx.translate(-G.cam.x, -G.cam.y);
   ctx.globalCompositeOperation = 'lighter';
 
   for (const e of G.enemies) {
@@ -11012,8 +11023,8 @@ function smokePattern() {
 function drawSmokeBlind() {
   const k = G.smokeBlind;
   if (k <= 0.02 || !P.alive) return;
-  const px = P.x - G.cam.x + G.shakeX;
-  const py = P.y - G.cam.y + G.shakeY;
+  const px = (P.x - G.cam.x) * ZOOM + G.shakeX;
+  const py = (P.y - G.cam.y) * ZOOM + G.shakeY;
 
   ctx.save();
 
@@ -11513,7 +11524,7 @@ function drawOffscreenMarkers() {
   for (const e of G.enemies) {
     // 迷雾里没被察觉的敌人不该给出方位提示
     if (e.state !== 'combat' && e.state !== 'alert') continue;
-    const sx = e.x - G.cam.x, sy = e.y - G.cam.y;
+    const sx = (e.x - G.cam.x) * ZOOM, sy = (e.y - G.cam.y) * ZOOM;
     if (sx > -20 && sx < VW + 20 && sy > -20 && sy < VH + 20) continue;
     const ang = Math.atan2(sy - cy, sx - cx);
     const bx = cx + Math.cos(ang) * (Math.min(VW, VH) / 2 - pad);
@@ -11532,7 +11543,7 @@ function drawOffscreenMarkers() {
 
   // 撤离点方向指引
   for (const ex of G.extracts) {
-    const sx = ex.x - G.cam.x, sy = ex.y - G.cam.y;
+    const sx = (ex.x - G.cam.x) * ZOOM, sy = (ex.y - G.cam.y) * ZOOM;
     if (sx > 0 && sx < VW && sy > 0 && sy < VH) continue;
     const ang = Math.atan2(sy - cy, sx - cx);
     const bx = cx + Math.cos(ang) * (Math.min(VW, VH) / 2 - 16);
@@ -11858,7 +11869,7 @@ function drawHUD() {
     const bw = Math.min(440, VW * 0.44), bh = 9;
     const bx = (VW - bw) / 2;
     // BOSS 守在玩家正上方时身体会撞到顶部面板 —— 临时把面板挪到底部（滞回，避免来回跳）
-    const bossSy = bossRef.y - G.cam.y;
+    const bossSy = (bossRef.y - G.cam.y) * ZOOM;
     if (G.bossBarBottom) {
       if (bossSy - bossRef.r > 170) G.bossBarBottom = false;
     } else if (bossSy - bossRef.r < 90) {
@@ -12222,7 +12233,7 @@ function drawHUD() {
   if (G.searchTarget && !G.searchTarget.opened && !G.lootPanel) {
     const c = G.searchTarget;
     const CC = containerOf(c.kind);
-    const sx = c.x - G.cam.x, sy = c.y - G.cam.y;
+    const sx = (c.x - G.cam.x) * ZOOM, sy = (c.y - G.cam.y) * ZOOM;
     ctx.save();
     ctx.textAlign = 'center';
     ctx.font = '700 12px ' + mono;
@@ -13043,7 +13054,7 @@ function drawMarkedOverlays() {
   let any = false;
   for (const e of G.enemies) {
     if (!(e.mark > 0) || fogVisibleAt(e.x, e.y)) continue;
-    if (!any) { ctx.save(); ctx.translate(-G.cam.x + G.shakeX, -G.cam.y + G.shakeY); any = true; }
+    if (!any) { ctx.save(); ctx.translate(G.shakeX, G.shakeY); ctx.scale(ZOOM, ZOOM); ctx.translate(-G.cam.x, -G.cam.y); any = true; }
     try { drawEnemy(e); }
     catch (err) { if (!G._markWarned) { G._markWarned = 1; console.warn('drawMarked failed', err); } }
   }
@@ -13105,7 +13116,9 @@ function drawPlayerLight() {
 function drawFog() {
   if (!FOG.ready) return;
   ctx.save();
-  ctx.translate(-G.cam.x + G.shakeX, -G.cam.y + G.shakeY);
+  ctx.translate(G.shakeX, G.shakeY);
+  ctx.scale(ZOOM, ZOOM);
+  ctx.translate(-G.cam.x, -G.cam.y);
   ctx.imageSmoothingEnabled = true;
   ctx.drawImage(
     FOG.cv,
@@ -13126,7 +13139,9 @@ function render() {
   G.shakeY = (Math.random() - 0.5) * G.shake;
 
   ctx.save();
-  ctx.translate(-G.cam.x + G.shakeX, -G.cam.y + G.shakeY);
+  ctx.translate(G.shakeX, G.shakeY);
+  ctx.scale(ZOOM, ZOOM);
+  ctx.translate(-G.cam.x, -G.cam.y);
 
   drawFloor();
   drawExtracts();
@@ -14783,8 +14798,8 @@ function startRaid() {
   G.bossBarBottom = false;
   if (G.tier === 'secret') uiToast('机 密 行 动 · 敌人更强 · 物资更好', 'warn');
 
-  G.cam.x = clamp(P.x - VW / 2, 0, Math.max(0, WORLD.w - VW));
-  G.cam.y = clamp(P.y - VH / 2, 0, Math.max(0, WORLD.h - VH));
+  G.cam.x = clamp(P.x - VW / ZOOM / 2, 0, Math.max(0, WORLD.w - VW / ZOOM));
+  G.cam.y = clamp(P.y - VH / ZOOM / 2, 0, Math.max(0, WORLD.h - VH / ZOOM));
 
   G.alarm = 0;
   G.callCd = 0;
@@ -15095,8 +15110,8 @@ if (!G.customMap) {
 }
 prepareWorldForRaid();
 resetPlayer();
-G.cam.x = clamp(P.x - VW / 2, 0, Math.max(0, WORLD.w - VW));
-G.cam.y = clamp(P.y - VH / 2, 0, Math.max(0, WORLD.h - VH));
+  G.cam.x = clamp(P.x - VW / ZOOM / 2, 0, Math.max(0, WORLD.w - VW / ZOOM));
+  G.cam.y = clamp(P.y - VH / ZOOM / 2, 0, Math.max(0, WORLD.h - VH / ZOOM));
 fillMapPresets();
 refreshLobby();
 requestAnimationFrame(loop);
