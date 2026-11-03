@@ -1218,7 +1218,7 @@ const DEFAULT_SAVE = () => ({
   stops: { bandage: 1, tourniquet: 0, pain_release: 1, pain_antibio: 0, pain_dve: 0 },
   /* 手术包：uses 是这包还能动几次刀 */
   surgs: { surg_simple: { uses: 2 } },
-  carePick: 'med:' + STARTER_MEDKIT,   // 上次用的那种 —— 短按 5 直接掏它
+  carePick: 'med:' + STARTER_MEDKIT,   // 上次用的那种 —— 选择盘默认高亮它（短按 5 走自动阶梯）
   /* 弹药库存：按口径 × 弹级存「还剩几发」。新档只送 68 发 9×19 一级白弹
      （正好 4 个 G17 弹匣），别的口径自己买。整张表按 CAL_ORDER 铺满，
      免得新口径上架后存档里缺桶、写库存时踩 undefined。 */
@@ -2722,7 +2722,7 @@ const P = {
   adsPrev: 0,
   alive: true,
   armorDR: 0,
-  /* 医疗：meds 是这一局随身带的六种包，carePick 是上次用的那种治疗物品
+  /* 医疗：meds 是这一局随身带的六种包，carePick 是上次用的那种治疗物品（短按 5 走自动阶梯，回血段优先沿用它的剩余耐久）
      key 形如 'med:inject_s' / 'stop:bandage' / 'surg:surg_dek' */
   meds: {},
   stops: {},
@@ -3615,12 +3615,69 @@ function careOwnedKeys() {
   for (const id of SURG_ORDER) if (surgUses(id) > 0) out.push(careKeyMake('surg', id));
   return out;
 }
-/* 这次要用的：优先上次那种，没了就退回第一个还带着的 */
+/* 「上次那种」：选择盘默认高亮谁、以及在没法自动判断时兜底用 */
 function carePickNow() {
   const own = careOwnedKeys();
   if (!own.length) return null;
   if (own.indexOf(P.carePick) >= 0) return P.carePick;
   return own[0];
+}
+
+/* 止痛值不值得吃：止痛压的是「骨伤负面」和「贯穿伤黑边」，
+   顺带打架时 -10% 受伤。纯掉血不算理由 —— 否则每次残血按 5 都先吃一片药，
+   真正想回血的人反而要多按一次。 */
+function painWorthIt() {
+  const d = P.deb || {};
+  if (d.arm > 0 || d.leg > 0 || d.fissure > 0) return true;
+  return d.redHead > 0 || d.redChest > 0 || d.redAbdomen > 0;
+}
+
+/* ── 短按 5 的自动用药阶梯（严格按顺序）──
+   ① 止血 ② 止痛 ③ 手术 ④ 回血
+   规则：上一步身上没有可用的东西，就顺延到下一步；四步都找不到动手的理由，返回 null。
+   为什么是这个顺序：
+     止血永远最先 —— 流血时包扎效率只有 0.75 折，血一边灌一边漏，先止住再谈别的；
+     手术排在回血前面 —— 贯穿伤压着血量上限，不先缝上，血灌到上限也到不了 100；
+     止痛排手术前面 —— 一片药 3~4 秒，动刀要 5~10 秒，先止疼再慢慢缝更安全。 */
+function careAutoPick() {
+  const d = P.deb || {};
+
+  /* ① 止血：两层以上有止血带就一把压完（2.6s），只有一层先用便宜的绷带（1.8s） */
+  if (d.bleed > 0) {
+    const band = stopCount('bandage'), tour = stopCount('tourniquet');
+    if (d.bleed >= 2 && tour > 0) return careKeyMake('stop', 'tourniquet');
+    if (band > 0) return careKeyMake('stop', 'bandage');
+    if (tour > 0) return careKeyMake('stop', 'tourniquet');
+  }
+
+  /* ② 止痛：药效还在就不重复吃（不叠加，只是烧库存）；挑最便宜的那种先吃 */
+  if (P.painT <= 0 && painWorthIt()) {
+    for (const id of STOP_PAINS) if (stopCount(id) > 0) return careKeyMake('stop', id);
+  }
+
+  /* ③ 手术：贯穿伤 / 骨折 / 骨裂，按价钱从低到高挑一个还带着的 */
+  if (surgTarget()) {
+    for (const id of SURG_ORDER) if (surgUses(id) > 0) return careKeyMake('surg', id);
+  }
+
+  /* ④ 回血：先接着烧已经拆开的那支（拆封就归你了，不烧完等于扔钱），
+     都没有半支的才去拆新的 —— 优先上次那种，否则第一支有货的 */
+  if (P.hp < P.maxHp - 0.01) {
+    const last = P.carePick;
+    const lid = last && careKindOf(last) === 'med' ? careIdOf(last) : '';
+    const open = MEDKIT_ORDER.filter(id => { const s = medUnit(id); return s && s.left > 0.01; });
+    if (open.length) return careKeyMake('med', open.indexOf(lid) >= 0 ? lid : open[0]);
+    if (lid && medCount(lid) > 0) return careKeyMake('med', lid);
+    const own = medOwnedIds();
+    if (own.length) return careKeyMake('med', own[0]);
+  }
+  return null;
+}
+
+/* 四步都走不通时该说什么 */
+function careIdleMsg() {
+  if (P.hp >= P.maxHp - 0.01) return '状态正常 · 没有要处理的伤';
+  return '没有能用的治疗物品了 · 回大厅补给';
 }
 
 /* 入袋：局内拾到 / 开箱拿到的医疗包 */
@@ -3905,7 +3962,7 @@ function stowGun(id) {
 }
 
 /* 按 1~5 / 滚轮：切到对应槽位。
-   切到医疗槽只把上次那种物品拿出来，真正开始用要再按 5 或点左键。 */
+   切到医疗槽只把「上次那种」拿在手上；短按 5 / 左键才是按阶梯自动挑一种开始用。 */
 function equipSlot(slot) {
   if (!P.alive) return;
   if (!slotReady(slot)) {
@@ -4223,13 +4280,18 @@ function stopCare(msg, cd) {
 /* 老名字还留着：外面有几处是按"包扎"来调用的 */
 function stopMedHeal(msg) { stopCare(msg); }
 
-/* 左键 / 再按 5：在"开始使用"和"收手"之间切换 */
+/* 左键 / 再按 5：在"开始使用"和"收手"之间切换。
+   用哪一种不看你上次挑了啥，而是按「止血 → 止痛 → 手术 → 回血」现挑（careAutoPick）。 */
 function toggleMedkit() {
   if (!P.alive) return;
   if (P.medOn) { stopCare('已停止'); return; }
-  const key = carePickNow();
-  if (!key) { uiToast('没有治疗物品了 · 回大厅补给', 'small warn'); return; }
-  if (P.curSlot !== 'medkit') { equipSlot('medkit'); return; }
+  const key = careAutoPick();
+  if (!key) { uiToast(careIdleMsg(), 'small'); return; }
+  if (P.curSlot !== 'medkit') {
+    equipSlot('medkit');
+    if (P.curSlot !== 'medkit') return;   // 掏不出来（没药了）
+    P.medCd = 0;
+  }
   startCare(key);
 }
 
@@ -4246,8 +4308,9 @@ function useCareNow(key) {
 }
 
 /* ── 短按 / 长按 5 ──
-   按下只记账，松手时才决定：短按 = 用上次那种，长按 = 弹出选择盘。
-   选择盘里挑中哪一样，松手就当场上手（不再要求补按一次 5）。 */
+   按下只记账，松手时才决定：
+     短按 = 让 careAutoPick 按「止血 → 止痛 → 手术 → 回血」自己挑一样；
+     长按 = 弹出选择盘，滚轮挑型号。 */
 function medPressDown() {
   if (!P.alive) return;
   const own = careOwnedKeys();
@@ -4257,7 +4320,8 @@ function medPressDown() {
   MED_SEL.open = false;
   MED_SEL.wheel = 0;
   MED_SEL.list = own;
-  MED_SEL.idx = Math.max(0, own.indexOf(carePickNow() || own[0]));
+  /* 选择盘默认停在这会儿「该用」的那件上：短按 5 会自动选它，长按想换成别的再滚轮 */
+  MED_SEL.idx = Math.max(0, own.indexOf(careAutoPick() || carePickNow() || own[0]));
 }
 
 function medPressUp() {
@@ -4284,7 +4348,7 @@ function updateMedSelect(dt) {
     MED_SEL.list = careOwnedKeys();
     if (!MED_SEL.list.length) { MED_SEL.down = false; return; }
     MED_SEL.open = true;
-    MED_SEL.idx = Math.max(0, MED_SEL.list.indexOf(carePickNow() || MED_SEL.list[0]));
+    MED_SEL.idx = Math.max(0, MED_SEL.list.indexOf(careAutoPick() || carePickNow() || MED_SEL.list[0]));
     Sfx.tone(520, 0.07, 0.05, 'square');
   }
   if (MED_SEL.open && MED_SEL.wheel) {
@@ -11957,6 +12021,9 @@ function drawMedSelect(mono) {
   ctx.font = '700 11px ' + mono;
   ctx.fillText('治疗物品 · 滚轮切换 · 松开 [5] 直接用', VW / 2, y0 - 12);
 
+  /* 这一下短按 5 会自动选哪件 —— 在卡片右上角标出来 */
+  const autoKey = careAutoPick();
+
   let ry = y0;
   for (const r of rows) {
     /* 组标题：左边一条同色小竖线，后面跟组名 */
@@ -11986,6 +12053,15 @@ function drawMedSelect(mono) {
       ctx.fillStyle = sel ? '#ffffff' : 'rgba(180,215,235,0.85)';
       ctx.font = '700 11px ' + mono;
       ctx.fillText(careName(key), x + cw / 2, y + 16);
+
+      /* 自动用药阶梯选中的那件：右上角一枚「推荐」角标 */
+      if (key === autoKey) {
+        ctx.fillStyle = 'rgba(6,14,20,0.88)';
+        drawRoundRect(x + cw - 27, y + 2, 25, 11, 2.5); ctx.fill();
+        ctx.fillStyle = col;
+        ctx.font = '800 8px ' + mono;
+        ctx.fillText('推荐', x + cw - 14.5, y + 10.5);
+      }
 
       ctx.fillStyle = col;
       ctx.font = '800 15px ' + mono;
@@ -12040,6 +12116,7 @@ function drawMedSelect(mono) {
       const t = surgTarget();
       hint = t ? ('将处理：' + t.label) : '现在没有需要手术的伤';
     }
+    if (picked === autoKey) hint = '短按 5 就是它 · ' + hint;
     ctx.fillStyle = 'rgba(170,215,240,0.8)';
     ctx.font = '700 10px ' + mono;
     /* 垫一层底，别让下面的世界和飘字把这行说明糊掉 */
@@ -12507,7 +12584,7 @@ function drawHUD() {
         : (P.medOn ? (careKindOf(P.medOn) === 'med'
             ? ('回血 ' + P.medHealT.toFixed(1) + 's · 右键收手')
             : '处理中 · 右键收手')
-          : '短按 5 用上次那种 · 长按 5 换药'),
+          : '短按 5 自动用药 · 长按 5 换药'),
       wx, stateY);
   }
 
