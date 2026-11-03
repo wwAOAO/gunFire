@@ -1745,9 +1745,13 @@ const ENEMY_TYPES = {
    ══════════════════════════════════════════════════════════ */
 const SECRET = {
   hp: { runner: 68, shooter: 60, sniper: 55, rocket: 105, flamer: 170, brute: 360, boss: 2400 },
-  /* 机密甲抬升：0 表示不变。抬 1 会让 5.56 三级弹对机枪兵一发都进不去，
-     手感太硬，先留 0；以后想要更硬核改成 1 就行。 */
-  armorAdd: 0,
+  /* 机密甲抬升：只对「本来就穿甲」的兵种生效 —— 突击兵裸奔，机密图里还是裸奔，
+     RIP 修脚弹和「一枪一个小兵」的手感都留着。
+     封顶 5 级：再往上（6 级）就只有红弹 / 顶级弹啃得动，等于硬墙。
+     顶到封顶的（赤霄 5→6 被截回 5）拿耐久补回来，重甲只是更耐磨，不换成「无解」。 */
+  armorAdd: 1,
+  armorLvCap: 5,
+  armorOverCapHp: 1.5,
   dmgMul: { runner: 1.35, shooter: 1.23, sniper: 0.84, rocket: 0.83, flamer: 1.33, brute: 1.33, boss: 1.33 },
   shield: 140,          // 盾兵的盾，普通是 120
   playerInvuln: 0.30,   // 玩家挨打后的无敌帧，普通是 0.55（围攻才开始有压力）
@@ -3943,9 +3947,12 @@ function spawnEnemy(type, atX, atY) {
   const hpBase = (sec && SECRET.hp[type]) ? SECRET.hp[type] : T.hp;
   const dmgMul = sec ? (SECRET.dmgMul[type] || 1) : 1;
   const shieldBase = (sec && type === 'shooter') ? SECRET.shield : (T.shield || 0);
-  /* 护甲等级：决定「几级弹才打得进」。护甲本身有耐久，磨光了就裸奔。 */
-  const armorLv = Math.max(0, (T.armor || 0) + (sec ? (SECRET.armorAdd || 0) : 0));
-  const armorHp = armorLv * 48;
+  /* 护甲等级：决定「几级弹才打得进」。护甲本身有耐久，磨光了就裸奔。
+     机密图里穿甲的兵整体上浮一级（封顶 5 级），多出来的那级换算成耐久。 */
+  const baseLv = T.armor || 0;
+  const rawLv = (sec && baseLv > 0) ? baseLv + (SECRET.armorAdd || 0) : baseLv;
+  const armorLv = Math.min(rawLv, SECRET.armorLvCap || 6);
+  const armorHp = Math.round(armorLv * 48 * ((sec && rawLv > armorLv) ? (SECRET.armorOverCapHp || 1) : 1));
   let x = atX, y = atY, nest = null;
 
   if (atX === undefined) {
@@ -4004,7 +4011,7 @@ function spawnEnemy(type, atX, atY) {
     ptN: 0, ptT: 0, ptInt: 0.1, ptDmg: 0, ptSpd: 0, ptSpr: 0,
     /* 盾牌：正面吃子弹，打完就碎；shieldAim 是盾面朝向，转身比眼睛慢半拍 */
     shield: shieldBase, maxShield: shieldBase, shieldAim: 0, shieldFlash: 0,
-    /* 护甲：armorLv 是等级（0~6），armorHp 是耐久 —— 挡住的弹会磨甲，磨穿就裸了 */
+    /* 护甲：armorLv 是等级（普通最高 5，机密图封顶也是 5），armorHp 是耐久 —— 挡住的弹会磨甲，磨穿就裸了 */
     armorLv, armorHp, armorMax: armorHp, armorFlash: 0,
     /* 加特林：spin 预热 / burst 剩余弹数 / fire 连发间隔 / heat 枪管热度 / bloom 弹道扩散 */
     gatCd: rand(0.7, 1.6), gatSpin: 0, gatBurst: 0, gatFire: 0, gatHeat: 0, gatBloom: 0, gatPhase: 0,
@@ -9338,7 +9345,7 @@ function refreshLobby() {
       .map(k => SAVE.loadout[k])
       .filter(id => id && WEAPONS[id] && ammoTotalOf(calOfWeapon(id)) <= 0);
     if (secretRaid) {
-      risk.textContent = '机密行动：敌人血量与伤害全面上调，但军械与保险柜更多、品质更高';
+      risk.textContent = '机密行动：敌人血量、伤害与护甲全面上调（穿甲的兵甲级 +1），但军械与保险柜更多、品质更高';
     } else if (!ownedWeapons.length) {
       risk.textContent = '一把枪都没有 · 现在只能空手带刀出击，先去军火库买把枪（G17 ¥700 起）';
     } else if (!SAVE.loadout.primary) {
