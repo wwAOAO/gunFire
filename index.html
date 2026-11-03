@@ -1066,6 +1066,26 @@ const DEBUFF = {
   legMove: 0.60, fissureMove: 0.12,
 };
 
+/* ── 跑步与体力 ──
+   走是常态，跑（Shift）是资源：按住就跑、松手就停，跑动不能开镜。
+   体力只在「不在跑」的时候回：站着回得快，边走边回要慢一半。
+   见底进入「力竭」，限定时间里不能再起跑，移速也压一档 —— 逼你算着跑。
+   护甲按 load 折算成两件事：走路更慢（loadWalk）、跑起来更费（loadDrain）。 */
+const SPRINT = {
+  mul: 1.48,            // 跑步相对走路的速度倍率
+  max: 100,
+  drain: 15,            // 每秒耗体力（无甲）
+  regen: 16,            // 站着每秒回
+  regenWalk: 9,         // 边走边回
+  resumeAt: 25,         // 想重新起跑至少要有这么多体力
+  exhaustT: 1.3,        // 力竭锁定时长
+  exhaustMul: 0.85,     // 力竭期间移速
+  exhaustRegen: 0.55,   // 力竭期间回体力打折
+  loadWalk: 0.05,       // 每点负重 -5% 移速
+  loadDrain: 0.32,      // 每点负重 +32% 体力消耗
+  spreadMul: 1.45,      // 跑动中开枪的散布惩罚
+};
+
 /* 治疗物品的统一 key：'med:inject_s' / 'stop:bandage' / 'surg:surg_dek' */
 function careKeyMake(kind, id) { return kind + ':' + id; }
 function careKindOf(key) {
@@ -1767,10 +1787,10 @@ function penTableText(pen) {
 }
 
 const ARMORS = [
-  { id: 0, name: '无护甲',   short: '无护甲',   dr: 0,    price: 0,    desc: '没有任何防护，承受全额伤害。' },
-  { id: 1, name: '轻型护甲', short: '轻型护甲', dr: 0.20, price: 700,  desc: '轻便的防弹背心，减免 20% 伤害。' },
-  { id: 2, name: '战术护甲', short: '战术护甲', dr: 0.35, price: 2000, desc: '复合插板，减免 35% 伤害。' },
-  { id: 3, name: '重型护甲', short: '重型护甲', dr: 0.50, price: 4600, desc: '全覆式重甲，减免 50% 伤害。' },
+  { id: 0, name: '无护甲',   short: '无护甲',   dr: 0,    price: 0,    load: 0,   desc: '没有任何防护，承受全额伤害 —— 但身上最轻，走得最快、跑得最久。' },
+  { id: 1, name: '轻型护甲', short: '轻型护甲', dr: 0.20, price: 700,  load: 0.6, desc: '轻便的防弹背心，减免 20% 伤害，几乎不影响脚步。' },
+  { id: 2, name: '战术护甲', short: '战术护甲', dr: 0.35, price: 2000, load: 1.3, desc: '复合插板，减免 35% 伤害；负重让走路慢一点、跑起来更喘。' },
+  { id: 3, name: '重型护甲', short: '重型护甲', dr: 0.50, price: 4600, load: 2.2, desc: '全覆式重甲，减免 50% 伤害 —— 代价是脚步最沉，跑不了几秒。' },
 ];
 
 const SUPPLY = {
@@ -1780,20 +1800,20 @@ const SUPPLY = {
 
 const ENEMY_TYPES = {
   /* 阿萨拉小兵：全家最小的个头、跑得最快，边冲边短点射，贴脸还有一记近身 */
-  runner:  { hp: 34,  r: 11, speed: 168, dmg: 9,  score: 12,  armor: 0,   // 突击兵是全线唯一无甲的：RIP 修脚弹就是给他们准备的  color: '#ff4d6d', glow: '#ff2d55', shape: 'tri',
+  runner:  { hp: 34,  r: 11, speed: 134, dmg: 9,  score: 12,  armor: 0,   // 突击兵是全线唯一无甲的：RIP 修脚弹就是给他们准备的  color: '#ff4d6d', glow: '#ff2d55', shape: 'tri',
              sight: 320, fov: 1.0,
              burst: { n: 3, gap: 0.11, dmg: 5.2, spd: 560, spread: 0.055, cd: [1.9, 2.7], range: 520 } },
   /* 阿萨拉盾兵：中等身板，正面一块厚盾挡子弹（能被打碎），盾后探头点射 */
-  shooter: { hp: 34,  r: 17, speed: 104, dmg: 8,  score: 22,  armor: 2,  color: '#ffa23a', glow: '#ff8a1f', shape: 'sq',
+  shooter: { hp: 34,  r: 17, speed: 83, dmg: 8,  score: 22,  armor: 2,  color: '#ffa23a', glow: '#ff8a1f', shape: 'sq',
              sight: 350, fov: 0.9, keep: 300, shield: 120, shieldArc: 0.78,
              burst: { n: 2, gap: 0.18, dmg: 6.5, spd: 560, spread: 0.045, cd: [2.1, 2.9], range: 620 } },
   /* 阿萨拉机枪兵：大块头、慢吞吞，一挺加特林先转后喷，血厚得像堵墙 */
-  brute:   { hp: 280, r: 29, speed: 58,  dmg: 24, score: 48,  armor: 4,  color: '#b46bff', glow: '#a040ff', shape: 'hex',
+  brute:   { hp: 280, r: 29, speed: 46,  dmg: 24, score: 48,  armor: 4,  color: '#b46bff', glow: '#a040ff', shape: 'hex',
              sight: 300, fov: 1.15, keep: 330,
              gat: { spin: 0.55, rounds: 20, rate: 0.075, cd: [2.1, 3.1],
                     spd: 780, dmg: 6, spread: 0.05, bloom: 0.05, range: 820 } },
   /* BOSS「赤霄」：守着据点不动窝，扛一挺重机枪打压制，燃烧瓶封锁走位，翻滚拉开距离 */
-  boss:    { hp: 1400, r: 44, speed: 96, dmg: 36, score: 450,  armor: 5, color: '#ff2d55', glow: '#ff0040', shape: 'boss',
+  boss:    { hp: 1400, r: 44, speed: 77, dmg: 36, score: 450,  armor: 5, color: '#ff2d55', glow: '#ff0040', shape: 'boss',
              sight: 520, fov: 1.45, keep: 330, leash: 260,
              // 重机枪：预热 → 长点射 → 过热冷却；后坐力会让弹道越打越散
              hmg: { spin: 0.44, rounds: 26, rate: 0.05, cd: [2.6, 3.6],
@@ -1801,19 +1821,19 @@ const ENEMY_TYPES = {
              molotovCd: [7.2, 9.6], rollCd: [3.8, 5.2], rollSpd: 470, rollTime: 0.34 },
 
   /* 阿萨拉狙击兵：视野最远但视锥很窄，开火前有一道瞄准激光，一枪见血 */
-  sniper:  { hp: 30, r: 13, speed: 96, dmg: 10, score: 34,  armor: 1, color: '#5ce1e6', glow: '#18a8bd', shape: 'dia',
+  sniper:  { hp: 30, r: 13, speed: 77, dmg: 10, score: 34,  armor: 1, color: '#5ce1e6', glow: '#18a8bd', shape: 'dia',
              sight: 500, fov: 0.62, keep: 470,
              /* charge 是激光锁定的时间——看到红线就开始走位；dmg 38 一枪能打掉小半管血 */
              snipe: { charge: 0.9, dmg: 38, spd: 1500, spread: 0.006, cd: [2.4, 3.3], range: 520 } },
 
   /* 阿萨拉火箭筒兵：慢吞吞地扛着筒子，装填完打一发直飞的火箭，范围爆炸 */
-  rocket:  { hp: 72, r: 19, speed: 72, dmg: 12, score: 40,  armor: 2, color: '#8ad34a', glow: '#4d9a1a', shape: 'roc',
+  rocket:  { hp: 72, r: 19, speed: 58, dmg: 12, score: 40,  armor: 2, color: '#8ad34a', glow: '#4d9a1a', shape: 'roc',
              sight: 460, fov: 0.85, keep: 380,
              /* load 装填（有预警），火箭飞得慢，侧身就能躲；打爆半空的火箭会提前炸 */
              rkt: { load: 0.75, spd: 300, radius: 112, dmg: 48, life: 3.6, cd: [3.4, 4.4], range: 560 } },
 
   /* 阿萨拉喷火兵：逼近到十来米就开喷，火舌绕过掩体边缘会持续烧，地上还会留火 */
-  flamer:  { hp: 130, r: 20, speed: 84, dmg: 14, score: 44,  armor: 3, color: '#ffd24a', glow: '#ff8a1f', shape: 'flm',
+  flamer:  { hp: 130, r: 20, speed: 67, dmg: 14, score: 44,  armor: 3, color: '#ffd24a', glow: '#ff8a1f', shape: 'flm',
              sight: 300, fov: 1.05, keep: 165,
              flame: { dur: 1.9, tick: 0.3, dmg: 4.5, range: 228, arc: 0.34, cd: [2.4, 3.2],
                       fireR: 44, fireLife: 2.0, fireDmg: 2.0 } },
@@ -1821,13 +1841,13 @@ const ENEMY_TYPES = {
   /* 阿萨拉冰冻军团：全场最慢的重甲，打的不是血而是「空间」——
      冰弹炸开留一片霜区，站进去越久越僵，跑不动就等于被围死。
      伤害很低，真正致命的是它把你钉在原地，等机枪兵和手雷兵到位。 */
-  cryo:    { hp: 160, r: 23, speed: 56, dmg: 12, score: 56, armor: 3, color: '#7fd4ff', glow: '#2f9fe0', shape: 'cry',
+  cryo:    { hp: 160, r: 23, speed: 45, dmg: 12, score: 56, armor: 3, color: '#7fd4ff', glow: '#2f9fe0', shape: 'cry',
              sight: 420, fov: 0.95, keep: 320,
              ice: { load: 0.8, spd: 420, radius: 104, life: 5.0, dmg: 12, cd: [4.4, 5.8], range: 540 } },
 
   /* 阿萨拉手雷兵：不打枪，只往你脚下丢雷。落点先亮一个红圈倒计时，
      逼你从掩体后面挪窝；空中的雷还能被子弹打爆提前引爆 —— 这是留给玩家的操作空间。 */
-  nader:   { hp: 85, r: 18, speed: 92, dmg: 11, score: 46, armor: 2, color: '#ffb347', glow: '#ff7a1f', shape: 'grd',
+  nader:   { hp: 85, r: 18, speed: 74, dmg: 11, score: 46, armor: 2, color: '#ffb347', glow: '#ff7a1f', shape: 'grd',
              sight: 440, fov: 1.0, keep: 340,
              nad: { throw: 0.95, fuse: 1.3, radius: 118, dmg: 52, cd: [3.6, 5.0], range: 540, near: 200 } },
 };
@@ -1988,6 +2008,7 @@ const Sfx = {
   pickup()  { this.tone(620, 0.10, 0.13, 'triangle'); setTimeout(() => this.tone(980, 0.12, 0.11, 'triangle'), 65); },
   reload_() { this.tone(320, 0.05, 0.07, 'square'); setTimeout(() => this.tone(220, 0.06, 0.07, 'square'), 110); },
   dash()    { this.noiseBurst(0.22, 2400, 0.9, 0.14, 'bandpass'); },
+  breath()  { this.noiseBurst(0.42, 780, 0.8, 0.09, 'bandpass'); },      // 体力见底：一口粗气
   loot()    { this.tone(780, 0.09, 0.12, 'triangle'); setTimeout(() => this.tone(1170, 0.14, 0.10, 'triangle'), 70); },
   extract() { this.tone(392, 0.3, 0.16, 'sine'); setTimeout(() => this.tone(523, 0.3, 0.16, 'sine'), 180); setTimeout(() => this.tone(784, 0.7, 0.16, 'sine'), 360); },
   death()   { this.tone(220, 1.2, 0.25, 'sawtooth', 40); this.noiseBurst(0.9, 500, 0.7, 0.2); },
@@ -2124,7 +2145,11 @@ const P = {
   x: 0, y: 0, r: 16,
   vx: 0, vy: 0,                 // 本帧速度，仅供敌方预判瞄准用
   hp: 100, maxHp: 100,
-  speed: 220,
+  speed: 176,                   // 走路基础速度（全局节奏下调后的一档，跑起来靠 Shift）
+  stamina: 100,                 // 体力：跑步消耗，不跑才回
+  sprinting: false,             // 这一帧是否在跑
+  exhaust: 0,                   // 力竭锁定剩余时间
+  armorLoad: 0,                 // 当前护甲的负重（影响走速与体力消耗）
   aim: 0,
   fireCd: 0,
   reloading: 0,
@@ -2807,6 +2832,9 @@ function resetPlayer() {
   P.reloading = 0;
   P.chill = 0;
   P.chillTick = 0;
+  P.stamina = SPRINT.max;
+  P.sprinting = false;
+  P.exhaust = 0;
   P.invuln = 0;
   P.hurtFlash = 0;
   P.recoil = 0;
@@ -2878,7 +2906,11 @@ function resetPlayer() {
     if (dry.length) uiToast('没子弹：' + dry.join(' / ') + ' · 去军需处买弹药', 'warn');
   }
 
-  P.armorDR = ARMORS[SAVE.equippedArmor] ? ARMORS[SAVE.equippedArmor].dr : 0;
+  {
+    const AR = ARMORS[SAVE.equippedArmor] || ARMORS[0];
+    P.armorDR = AR.dr;
+    P.armorLoad = AR.load || 0;      // 负重：影响走速与跑步耗体力
+  }
 
   /* 医疗：把大厅库存拷一份带进来 —— 打完剩下的耐久再写回去 */
   P.meds = {};
@@ -3396,7 +3428,8 @@ function playerShoot() {
   const my = P.y + Math.sin(P.aim) * muzzleDist;
 
   for (let i = 0; i < W.count; i++) {
-    const sp0 = W.spread * (1 - P.ads * (1 - adsOf(W).spread)) * (armHurt() ? DEBUFF.armSpread : 1);   // 开镜收束散布；手断了端不稳
+    const sp0 = W.spread * (1 - P.ads * (1 - adsOf(W).spread)) * (armHurt() ? DEBUFF.armSpread : 1)  // 开镜收束散布；手断了端不稳
+              * (P.sprinting ? SPRINT.spreadMul : 1);                                                // 跑动中开枪：枪口飘
     const spread = W.count > 1 ? rand(-sp0, sp0) : rand(-sp0, sp0) * 0.6;
     const ang = P.aim + spread;
     const spd = W.bspeed * rand(0.94, 1.06);
@@ -3722,6 +3755,37 @@ function updateMedHeal(dt) {
   }
 }
 
+/* ── 跑步结算：按住 Shift 就跑，体力见底进入力竭 ──
+   只有「在动 + 没开镜 + 没换弹 + 没在包扎 + 腿没断 + 没力竭」才跑得起来；
+   已经在跑的人可以一直跑到 0，重新起跑要 >= resumeAt，避免在 0 附近反复抖。 */
+function updateSprint(dt, il) {
+  const load = P.armorLoad || 0;
+  const ready = P.alive && il > 0 && P.ads < 0.3 && P.reloading <= 0 &&
+                P.medOn === null && !legBroken() && P.exhaust <= 0;
+  const run = ready && !!keys['shift'] &&
+              (P.sprinting ? P.stamina > 0 : P.stamina >= SPRINT.resumeAt);
+
+  if (run && !P.sprinting) Sfx.dash();          // 起跑：一声脚步
+  P.sprinting = run;
+
+  if (P.sprinting) {
+    /* 重甲更费体力；冻伤每层再 +10%（冻僵了跑得费劲） */
+    const drain = SPRINT.drain * (1 + SPRINT.loadDrain * load) * (1 + 0.10 * P.chill) * dt;
+    P.stamina -= drain;
+    if (P.stamina <= 0) {
+      P.stamina = 0;
+      P.sprinting = false;
+      P.exhaust = SPRINT.exhaustT;
+      popup(P.x, P.y - 46, '体力见底', '#ffb347', 12);
+      Sfx.breath();
+    }
+  } else {
+    const regen = (il > 0 ? SPRINT.regenWalk : SPRINT.regen) * (P.exhaust > 0 ? SPRINT.exhaustRegen : 1);
+    P.stamina = Math.min(SPRINT.max, P.stamina + regen * dt);
+    if (P.exhaust > 0) P.exhaust = Math.max(0, P.exhaust - dt);
+  }
+}
+
 function updatePlayer(dt) {
   updateMedSelect(dt);          // 长按 5 的计时 / 选择盘滚轮
   updateDebuff(dt);             // 流血 tick / 止痛倒计时
@@ -3741,11 +3805,14 @@ function updatePlayer(dt) {
   const il = Math.hypot(ix, iy);
   if (il > 0) { ix /= il; iy /= il; }
 
-  /* ── 开镜：右键按住抬枪收束视野，换弹 / 阵亡强制关镜 ── */
+  /* ── 跑步：这一步要排在开镜之前，跑起来就没法开镜 ── */
+  updateSprint(dt, il);
+
+  /* ── 开镜：右键按住抬枪收束视野，换弹 / 阵亡 / 跑动强制关镜 ── */
   const wNow = weaponStats(P.weapon);
   const aCfg = adsOf(wNow);
   const gunOut = P.curSlot !== 'melee' && P.curSlot !== 'medkit';
-  const adsOn = mouse.right && gunOut && P.alive && P.reloading <= 0;
+  const adsOn = mouse.right && gunOut && P.alive && P.reloading <= 0 && !P.sprinting;
   /* 手臂断了抬枪又慢又抖，止痛之后能压住 */
   const adsTime = aCfg.time * (armHurt() ? DEBUFF.armAds : 1) * (1 + 0.12 * P.chill);
   P.ads = clamp(P.ads + (adsOn ? dt / adsTime : -dt / (adsTime * 0.75)), 0, 1);
@@ -3754,6 +3821,9 @@ function updatePlayer(dt) {
   P.adsPrev = P.ads;
 
   let spd = P.speed * (wNow.moveMul || 1);           // 配件带来的负重 / 轻量化
+  spd *= 1 - SPRINT.loadWalk * (P.armorLoad || 0);   // 护甲负重：穿得越厚走得越慢
+  if (P.sprinting) spd *= SPRINT.mul;                // 按住 Shift：跑步
+  else if (P.exhaust > 0) spd *= SPRINT.exhaustMul;  // 体力见底：先喘几口
   if (P.curSlot === 'melee') spd *= 1.06;            // 收枪持刀：跑得更利索
   else if (P.curSlot === 'medkit' && activeMedPerk() !== 'move') spd *= 0.92;   // 一边包扎一边走，慢一点
   /* 创伤：流血越多越虚；腿断了直接掉一半多；骨裂再叠一层，止痛都救不回来 */
@@ -3766,7 +3836,15 @@ function updatePlayer(dt) {
   if (P.reloading > 0) spd *= 0.82;
   if (P.fireCd > 0.02) spd *= 0.94;
   spd *= 1 - P.ads * (1 - aCfg.move);            // 开镜走得慢（重枪更慢）
-  P.walkPhase += dt * (il > 0 ? 11 : 0);
+  P.walkPhase += dt * (il > 0 ? (P.sprinting ? 16 : 11) : 0);
+
+  /* 跑动扬尘：给「正在跑」一点视觉回馈，也让脚步看得出来 */
+  if (P.sprinting && Math.random() < dt * 22) {
+    addParticle(P.x + rand(-7, 7), P.y + rand(8, 14), {
+      vx: -P.vx * 0.16 + rand(-16, 16), vy: -P.vy * 0.16 + rand(-16, 4),
+      life: 0.42, r: rand(2, 4), color: 'rgba(140,180,205,0.38)', drag: 0.9,
+    });
+  }
 
   P.x += ix * spd * dt;
   P.y += iy * spd * dt;
@@ -8676,27 +8754,47 @@ function drawHUD() {
     ctx.fillText('ARMOR -' + Math.round(P.armorDR * 100) + '%', hpX + aw + 10, ay + 6);
   }
 
-  /* 状态条：优先显示冻伤（三层满格），没有冻伤就显示流血层数 */
-  const stY = hpY + 30, stW = 150, stH = 5;
-  if (P.chill > 0 || P.deb.bleed > 0) {
-    const chill = P.chill > 0;
+  /* 体力条：常驻 —— 能不能跑全看这一条 */
+  const stW = 150, stH = 5;
+  const stY = hpY + 30;
+  {
+    const sr = clamp(P.stamina / SPRINT.max, 0, 1);
+    const low = P.stamina < SPRINT.resumeAt;
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
     drawRoundRect(hpX, stY, stW, stH, 2);
     ctx.fill();
+    ctx.fillStyle = P.exhaust > 0 ? 'rgba(255,90,120,0.85)'
+                  : low ? 'rgba(255,179,71,0.85)' : 'rgba(67,217,245,0.85)';
+    drawRoundRect(hpX, stY, Math.max(1, stW * sr), stH, 2);
+    ctx.fill();
+    /* resumeAt 刻度：跑到低于这条线就起不来了，得先回上来 */
+    ctx.fillStyle = 'rgba(255,255,255,0.22)';
+    ctx.fillRect(hpX + stW * (SPRINT.resumeAt / SPRINT.max) - 0.5, stY, 1, stH);
+
+    let stTxt, stCol;
+    if (legBroken()) { stTxt = P.deb.fissure > 0 ? '骨裂 · 跑不了' : '腿折 · 跑不了'; stCol = '#ff785a'; }
+    else if (P.exhaust > 0) { stTxt = '力竭 · 喘气中'; stCol = '#ff5a78'; }
+    else if (P.sprinting) { stTxt = '跑 步'; stCol = '#8ef2ff'; }
+    else { stTxt = '体力 ' + Math.round(P.stamina); stCol = low ? '#ffb347' : '#43d9f5'; }
+    ctx.fillStyle = stCol;
+    ctx.font = '700 9px ' + mono;
+    ctx.fillText(stTxt, hpX + stW + 10, stY + 6);
+  }
+
+  /* 状态条：优先显示冻伤（三层满格），没有冻伤就显示流血层数 */
+  const stY2 = hpY + 40;
+  if (P.chill > 0 || P.deb.bleed > 0) {
+    const chill = P.chill > 0;
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    drawRoundRect(hpX, stY2, stW, stH, 2);
+    ctx.fill();
     ctx.fillStyle = chill ? 'rgba(127,212,255,0.85)' : 'rgba(255,90,120,0.8)';
-    drawRoundRect(hpX, stY, Math.max(4, stW * (chill ? Math.min(1, P.chill / 3) : Math.min(1, P.deb.bleed / 3))), stH, 2);
+    drawRoundRect(hpX, stY2, Math.max(4, stW * (chill ? Math.min(1, P.chill / 3) : Math.min(1, P.deb.bleed / 3))), stH, 2);
     ctx.fill();
     ctx.fillStyle = chill ? '#7fd4ff' : '#ff5a78';
     ctx.font = '700 9px ' + mono;
     ctx.fillText(chill ? '冻伤 ×' + Math.round(P.chill) + ' · 移速 -' + Math.round(P.chill * 7) + '%' : '流血 ×' + P.deb.bleed,
-                 hpX + stW + 10, stY + 6);
-  }
-
-  /* 腿断了：把「跑不快」的原因写清楚 */
-  if (legBroken()) {
-    ctx.fillStyle = 'rgba(255,120,90,0.9)';
-    ctx.font = '700 9px ' + mono;
-    ctx.fillText(P.deb.fissure > 0 ? '骨裂 · 移速大减' : '腿折 · 移速大减', hpX + 10, stY + 20);
+                 hpX + stW + 10, stY2 + 6);
   }
   ctx.restore();
 
@@ -9778,7 +9876,9 @@ function refreshLobby() {
   slotList.appendChild(makeSlot({
     ico: '⛨',
     nm: armor.name,
-    ds: armor.dr > 0 ? ('减免 ' + Math.round(armor.dr * 100) + '% 伤害') : '无任何防护',
+    ds: armor.dr > 0
+      ? ('减免 ' + Math.round(armor.dr * 100) + '% 伤害 · 走速 -' + Math.round(SPRINT.loadWalk * armor.load * 100) + '% · 跑步耗体 +' + Math.round(SPRINT.loadDrain * armor.load * 100) + '%')
+      : '无任何防护 · 走得最快、跑得最久',
     val: '护甲',
     empty: SAVE.armorMax === 0,
     onClick: () => {
