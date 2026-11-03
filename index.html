@@ -1237,7 +1237,7 @@ const KNOWN_WEAPON_IDS = { g17: 1, '93r': 1, g18: 1, bizon: 1, m870: 1,
 const PISTOL_IDS = { g17: 1, '93r': 1, g18: 1 };
 
 /* 干员白名单：存档加载比 OPERATORS 表更早执行，这里只放 id，别引用表本身 */
-const OP_IDS = { redwolf: 1 };
+const OP_IDS = { redwolf: 1, weilong: 1 };
 
 /* 空弹药表：CAL_ORDER 个口径 × 8 个弹级，全 0。
    新档和清洗共用一份，加口径时不用再改两处。 */
@@ -1888,6 +1888,10 @@ const ARMORS = [
    所以「储备 2 颗」是每局 2 颗，不是仓库里的存货。
    三条主动各自独立冷却，互不占用；被动不占键位资源，只要求状态。
    ══════════════════════════════════════════════════════════ */
+/* 全局比例尺：1 米 ≈ 18 像素。技能说明里的「10 米 / 20 米 / 65 米」都按这个换算，
+   所以 20m = 360px（烟幕射程 340 正好是 19 米，两边对得上） */
+const METER = 18;
+
 const SKILL = {
   /* 烟雾弹：落点即起烟，0.3s 铺满、8s 总时长、最后 1.2s 收烟（起烟快、散得也快） */
   smoke: { r: 118, life: 8.0, grow: 0.30, fade: 1.2, range: 340 },
@@ -1897,6 +1901,18 @@ const SKILL = {
   slide: { dur: 0.45, mul: 2.6, cost: 10 },
   /* 动力外骨骼：移速与滑铲距离同时抬一档 */
   exo: { move: 1.22, slide: 1.55, slideDur: 1.18 },
+
+  /* ── 威龙的四件套 ── */
+  /* 磁吸炸弹：最远 20 米，贴附 3 秒引爆；吸附后跟着宿主（墙/敌人）走 */
+  mag: { range: 20 * 18, min: 40, def: 5 * 18, speed: 520, fuse: 3.0, dmg: 130, radius: 120,
+         armorBreak: 260, selfMul: 0.5, hold: 0.28, arc: 46 },
+  /* 动力推进：0.22s 推 10 米（正前），侧/后按 0.62 打折；击杀扣 10 秒冷却 */
+  dash: { dist: 10 * 18, dur: 0.22, sideMul: 0.62, cost: 12, killCd: 10 },
+  /* 虎蹲炮：压缩空气弹，2.5 秒引信 + 撞墙反弹；半径 5 米强制击倒 */
+  shock: { radius: 5 * 18, speed: Math.round(65 * 18 / 2.5), life: 2.5, dmg: 12,
+           kd: 3.0, bossKd: 1.0, selfKd: 2.0, knock: 70 },
+  /* 动能辅助：技能 / 被掀翻后短暂加速，爆炸伤害与骨裂都打折 */
+  kine: { dur: 2.6, move: 1.18, blastMul: 0.55, fissureDodge: 0.75 },
 };
 
 const OPERATORS = {
@@ -1905,27 +1921,52 @@ const OPERATORS = {
     color: '#ff5a3c', glow: '#ff2a12',
     desc: '破门手。先用烟把走廊糊上，再用手炮把烟里的人炸出来；外骨骼一开，这一分钟就是你的。',
     g: {
-      name: '突破型烟雾弹', short: '烟雾弹', tag: '战术道具',
+      name: '突破型烟雾弹', short: '烟雾弹', tag: '战术道具', kind: 'smoke',
       desc: '朝准星抛出一枚快速成烟的烟雾弹（射程 340），落点立刻起烟：0.3 秒铺满、持续 8 秒、最后 1.2 秒收干净。烟里烟外互相看不见 —— 烟里的敌人睁眼也望不到外面。储备 2 枚可以连放，放掉一枚后按冷却 45 秒回充下一枚。',
       cd: 45, charges: 2,
     },
     v: {
-      name: '三联装手炮', sub: '三头犬', short: '三头犬', tag: '小技能',
+      name: '三联装手炮', sub: '三头犬', short: '三头犬', tag: '小技能', kind: 'gl',
       desc: '一次打出三发榴弹（间隔 0.11 秒），榴弹穿透敌人、只在撞墙时反弹（最多 3 次），2.2 秒固定引信起爆 —— 不会碰到敌人就炸，所以要算好提前量与反弹。爆炸半径 100、中心 52 伤：被炸到的敌人眩晕 1.6 秒并骨折（移速 -40%，持续 6 秒）。自炸只有一半伤害。储备 2 组可连放，打掉一组按冷却 70 秒回充。',
       cd: 70, charges: 2, shots: 3,
     },
     x: {
-      name: '动力外骨骼', short: '外骨骼', tag: '大招',
+      name: '动力外骨骼', short: '外骨骼', tag: '大招', kind: 'exo',
       desc: '外骨骼撑起 25 秒：移速 +22%、滑铲更远更快，免疫骨折、腿断了也能跑。期间每击倒一名敌人延长 5 秒，并回 30 血、回满体力。冷却从启动那刻开始算。',
       cd: 90, dur: 25, killExtend: 5, killHeal: 30,
     },
     passive: {
-      name: '战术滑铲', short: '战术滑铲', tag: '被动',
+      name: '战术滑铲', short: '战术滑铲', tag: '被动', kind: 'slide',
       desc: '奔跑途中按 C 滑铲：0.45 秒的低身位突进（约 1.6 个身位），没有冷却，只吃 10 点体力。外骨骼期间滑得更远、不耗体力。',
     },
   },
+
+  weilong: {
+    id: 'weilong', name: '威龙', role: '突击', en: 'WYVERN',
+    color: '#4ad1ff', glow: '#1f9fe0',
+    desc: '推进手。磁吸炸弹先贴到墙或人身上，动力推进把自己塞进缺口，虎蹲炮把整间屋按在地上 —— 代价是自己也别站在爆炸里。',
+    g: {
+      name: '磁吸炸弹', short: '磁吸弹', tag: '战术道具', kind: 'magbomb',
+      desc: '朝准星抛出磁吸炸弹（最远 20 米）：吸附在墙面或敌人身上，贴附 3 秒后引爆。爆炸 130 伤、半径 6.7 米，还会把护甲炸掉一大截（贴脸的敌人直接裸甲）。长按 G 边瞄边选落点，短按直接按上次的距离扔（初始 5 米）。储备 2 颗可连放，打掉一颗按冷却 55 秒回充。',
+      cd: 55, charges: 2,
+    },
+    v: {
+      name: '动力推进', short: '推进', tag: '小技能', kind: 'dash',
+      desc: '朝指定方向喷气突进：正前方约 10 米，侧向、向后更短。突进过程不能开火、也不能开镜 —— 这是位移，不是冲锋枪。CD 20 秒；每击杀一名敌人直接扣 10 秒冷却。',
+      cd: 20, charges: 1,
+    },
+    x: {
+      name: '虎蹲炮', short: '虎蹲炮', tag: '大招', kind: 'shock',
+      desc: '发射一枚可反弹的压缩空气弹，飞行 2.5 秒后起爆（最远约 65 米）。半径 5 米内的敌人被强制击倒，倒地硬控 3 秒（BOSS 1 秒），期间无法操作。自己在爆炸范围内同样会被击倒 —— 别贴着自己打。',
+      cd: 70, charges: 1,
+    },
+    passive: {
+      name: '动能辅助系统', short: '动能辅助', tag: '被动', kind: 'kinetic',
+      desc: '使用技能、被爆炸掀翻时会回收动能：2.6 秒内移速 +18%。爆炸类伤害对自己只吃 55%，也有 75% 概率直接免掉骨裂。没有冷却。',
+    },
+  },
 };
-const OP_ORDER = ['redwolf'];
+const OP_ORDER = ['redwolf', 'weilong'];
 
 function opDef() { return OPERATORS[SAVE.operator] || null; }
 function exoOn() { return !!(P.op && P.op.x && P.op.x.on); }
@@ -2191,6 +2232,34 @@ const mouse = { x: VW / 2, y: VH / 2, wx: 0, wy: 0, down: false, pressed: false,
 const MED_SEL = { down: false, hold: 0, open: false, idx: 0, wheel: 0, list: [] };
 const MED_HOLD_T = 0.34;   // 按住超过这个时长就算长按
 
+/* 磁吸炸弹的投掷预瞄：按住 G 时按鼠标离人多远选落点，松手才扔。
+   短按（< 0.28s）不预瞄，直接按上次的距离扔。 */
+const MAG_AIM = { down: false, hold: 0, on: false };
+const MAG_HOLD_T = 0.28;
+
+function magAimDist() { return Math.hypot(mouse.wx - P.x, mouse.wy - P.y); }
+
+function skillGDown() {
+  if (G.scene !== 'playing') return;
+  const op = opDef();
+  if (!op || !P.alive || (op.g.kind !== 'magbomb')) { useTactic(); return; }
+  MAG_AIM.down = true;
+  MAG_AIM.hold = 0;
+  MAG_AIM.on = false;
+}
+
+function skillGUp() {
+  if (!MAG_AIM.down) return;
+  const held = MAG_AIM.hold;
+  MAG_AIM.down = false;
+  MAG_AIM.on = false;
+  MAG_AIM.hold = 0;
+  if (G.scene !== 'playing') return;
+  const op = opDef();
+  if (!op || op.g.kind !== 'magbomb') return;
+  useTactic(held >= MAG_HOLD_T ? magAimDist() : null);
+}
+
 window.addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
   if ([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) e.preventDefault();
@@ -2204,8 +2273,8 @@ window.addEventListener('keydown', e => {
   if (G.scene !== 'playing') return;
   if (k === 'f' && !e.repeat) searchInteract();   // 点一下开箱，不用长按
   if (k === 'r') startReload();
-  /* 干员技能：G 战术道具 / V 小技能 / X 大招 / C 被动滑铲 */
-  if (k === 'g' && !e.repeat) useTactic();
+/* 干员技能：G 战术道具 / V 小技能 / X 大招 / C 被动滑铲 */
+  if (k === 'g' && !e.repeat) skillGDown();
   if (k === 'v' && !e.repeat) useSkill();
   if (k === 'x' && !e.repeat) useUlt();
   if (k === 'c' && !e.repeat) trySlide();
@@ -2218,6 +2287,7 @@ window.addEventListener('keydown', e => {
 window.addEventListener('keyup', e => {
   const k = e.key.toLowerCase();
   keys[k] = false;
+  if (k === 'g') skillGUp();
   if (k !== '5') return;
   if (G.scene === 'playing') medPressUp();
   else { MED_SEL.down = false; MED_SEL.open = false; }
@@ -2226,6 +2296,7 @@ window.addEventListener('blur', () => {
   for (const k in keys) keys[k] = false;
   mouse.down = false; mouse.right = false;
   MED_SEL.down = false; MED_SEL.open = false;
+  MAG_AIM.down = false; MAG_AIM.on = false; MAG_AIM.hold = 0;
 });
 
 canvas.addEventListener('mousemove', e => {
@@ -2297,6 +2368,8 @@ const G = {
   frosts: [],       // 冰弹 / 霜瓶 / 冷雾炸开后留下的霜区
   smokes: [],       // 干员烟雾弹留下的烟幕（挡敌人视线）
   gls: [],          // 玩家三联装手炮的榴弹（会弹墙）
+  magbombs: [],     // 威龙的磁吸炸弹（飞行 / 吸附 / 倒计时）
+  shocks: [],       // 威龙虎蹲炮的压缩空气弹（会弹墙）
   units: [],        // 地图里布置的敌人（兵种 + 驻地）
   bossSpawned: false, // 本局是否已有 BOSS（避免增援重复刷）
   bossBarBottom: false, // BOSS 血条是否临时挪到屏幕底部
@@ -2997,9 +3070,17 @@ function initOperatorSkills() {
     x: { cd: 0, on: false, t: 0 },
     volley: null,          // 三连发的排程：{ left, t }
     slide: 0,              // 滑铲剩余时间
+    slideDur: 0,           // 这一下滑铲的总时长（算衰减用）
     slideA: 0,             // 滑铲锁定的方向
+    dash: 0,               // 动力推进剩余时间
+    dashDur: 0,            // 这一下推进的总时长
+    dashA: 0,              // 推进锁定的方向
+    dashSpd: 0,            // 推进速度（按正/侧/后打过的折）
+    kine: 0,               // 动能辅助剩余时间
+    lastMag: SKILL.mag.def,// 磁吸炸弹上次的投掷距离（短按沿用）
   };
   P.concuss = 0;
+  P.kd = 0;                // 被虎蹲炮掀翻的剩余时间
 }
 
 function resetPlayer() {
@@ -3039,6 +3120,9 @@ function resetPlayer() {
   MED_SEL.open = false;
   MED_SEL.hold = 0;
   MED_SEL.wheel = 0;
+  MAG_AIM.down = false;
+  MAG_AIM.on = false;
+  MAG_AIM.hold = 0;
   P.burnT = 0;
   P.burnTick = 0;
   P.hurtDir = 0;
@@ -3326,6 +3410,11 @@ function addDebuff(kind, n, label) {
     txt = label || (kind === 'arm' ? '手臂骨折' : '腿部骨折');
   } else if (kind === 'fissure') {
     if (exoOn()) return;                        // 同上：外骨骼期间不吃骨裂
+    /* 动能辅助卸力：冲击被系统吃掉大半，多半摔不出骨裂 */
+    if (kineOn() && Math.random() < SKILL.kine.fissureDodge) {
+      popup(P.x + rand(-8, 8), P.y - 46, '动能卸力 · 无骨裂', '#8fe0ff', 12);
+      return;
+    }
     const before = d.fissure;
     d.fissure = Math.min(2, d.fissure + k);
     if (d.fissure === before) return;
@@ -3529,7 +3618,7 @@ function cycleSlot(dir) {
 
 /* 挥刀：身前扇形内所有敌人一起吃伤害，静音、不吃盾、不耗弹药 */
 function swingMelee() {
-  if (!P.alive || P.meleeCd > 0) return;
+  if (!P.alive || P.meleeCd > 0 || knockOn()) return;
   const M = MELEES[P.melee] || MELEES[STARTER_MELEE];
   P.meleeCd = M.rate;
   P.swingT = 0.22;
@@ -3587,6 +3676,7 @@ function finishReload() {
 /* 扣扳机：全自动按住就连，半自动每发都要重新按，点射一次打三发 */
 function tryFire(edge) {
   if (!P.weapon || !P.owned[P.weapon]) return;
+  if (dashOn() || knockOn()) return;          // 推进中不能开火，倒地更不能
   const W = weaponStats(P.weapon);
   const a = currentAmmo();
   if (P.reloading > 0 || a.mag <= 0 || P.fireCd > 0) return;
@@ -3955,6 +4045,7 @@ function updateMedHeal(dt) {
    已经在跑的人可以一直跑到 0，重新起跑要 >= resumeAt，避免在 0 附近反复抖。 */
 function updateSprint(dt, il) {
   const load = P.armorLoad || 0;
+  if (dashOn() || knockOn()) { P.sprinting = false; return; }   // 推进 / 倒地时不算跑
   const ready = P.alive && il > 0 && P.ads < 0.3 && P.reloading <= 0 &&
                 P.medOn === null && !legBroken() && P.exhaust <= 0;
   const run = ready && !!keys['shift'] &&
@@ -4001,6 +4092,9 @@ function updatePlayer(dt) {
   const il = Math.hypot(ix, iy);
   if (il > 0) { ix /= il; iy /= il; }
 
+  /* 被虎蹲炮掀翻：站不起来也开不了枪，只能等这 2 秒过去 */
+  if (knockOn()) { ix = 0; iy = 0; }
+
   /* ── 跑步：这一步要排在开镜之前，跑起来就没法开镜 ── */
   updateSprint(dt, il);
 
@@ -4008,7 +4102,8 @@ function updatePlayer(dt) {
   const wNow = weaponStats(P.weapon);
   const aCfg = adsOf(wNow);
   const gunOut = P.curSlot !== 'melee' && P.curSlot !== 'medkit';
-  const adsOn = mouse.right && gunOut && P.alive && P.reloading <= 0 && !P.sprinting && P.concuss <= 0;
+  const adsOn = mouse.right && gunOut && P.alive && P.reloading <= 0 && !P.sprinting
+                && P.concuss <= 0 && !dashOn() && !knockOn();
   /* 手臂断了抬枪又慢又抖，止痛之后能压住 */
   const adsTime = aCfg.time * (armHurt() ? DEBUFF.armAds : 1) * (1 + 0.12 * P.chill);
   P.ads = clamp(P.ads + (adsOn ? dt / adsTime : -dt / (adsTime * 0.75)), 0, 1);
@@ -4033,6 +4128,7 @@ function updatePlayer(dt) {
   if (P.fireCd > 0.02) spd *= 0.94;
   spd *= 1 - P.ads * (1 - aCfg.move);            // 开镜走得慢（重枪更慢）
   if (exoOn()) spd *= SKILL.exo.move;            // 外骨骼推着人往前走
+  if (P.op && P.op.kine > 0) spd *= SKILL.kine.move;   // 动能辅助：技能后那一小段加速
   if (P.concuss > 0) spd *= 0.65;                // 被自己的榴弹震懵了，脚下发飘
 
   /* 滑铲：方向锁死、速度按剩余时间衰减 —— 会盖掉上面所有移速修正 */
@@ -4043,6 +4139,21 @@ function updatePlayer(dt) {
     ix = Math.cos(P.op.slideA);
     iy = Math.sin(P.op.slideA);
   }
+
+  /* 动力推进：方向与速度全锁，位移结束后才把控制权还给你 */
+  if (dashOn()) {
+    spd = P.op.dashSpd;
+    ix = Math.cos(P.op.dashA);
+    iy = Math.sin(P.op.dashA);
+    if (Math.random() < dt * 60) {
+      addParticle(P.x - Math.cos(P.op.dashA) * (P.r + 4) + rand(-5, 5),
+                  P.y - Math.sin(P.op.dashA) * (P.r + 4) + rand(-5, 5), {
+        vx: rand(-40, 40), vy: rand(-40, 40), life: rand(0.15, 0.3), r: rand(2, 4),
+        color: pick(['#ffffff', '#8fe0ff', '#4ad1ff']), drag: 0.88, glow: true,
+      });
+    }
+  }
+  if (knockOn()) spd = 0;
   P.walkPhase += dt * (il > 0 ? (P.sprinting ? 16 : 11) : 0);
 
   /* 跑动扬尘：给「正在跑」一点视觉回馈，也让脚步看得出来 */
@@ -4701,15 +4812,29 @@ function updateSmokes(dt) {
   G.smokeBlind += (target - G.smokeBlind) * clamp(dt * rate, 0, 1);
 }
 
-/* ── G：突破型烟雾弹 ── */
-function useTactic() {
+/* ── G：战术道具总入口。dist 只在磁吸炸弹「长按」时传进来 ── */
+function useTactic(dist) {
   const op = opDef();
   if (!op) { uiToast('没有出战干员 · 去大厅挑一个', 'small warn'); return; }
   if (!P.alive) return;
+  if (!P.op) initOperatorSkills();
   const S = P.op.g;
-  if (S.cd > 0) { uiToast('烟雾弹装填中', 'small'); return; }
-  if (S.use <= 0) { uiToast('烟雾弹回充中 · ' + Math.ceil(S.recharge) + 's', 'small'); return; }
+  const label = op.g.short;
+  if (S.cd > 0) { uiToast(label + '装填中', 'small'); return; }
+  if (S.use <= 0) { uiToast(label + '回充中 · ' + Math.ceil(S.recharge) + 's', 'small'); return; }
 
+  S.use--;
+  S.cd = 0.55;                                  // 出弹间隔：防连按双发，不是大 CD
+  if (S.use < op.g.charges && S.recharge <= 0) S.recharge = op.g.cd;
+
+  if (op.g.kind === 'magbomb') throwMagBomb(dist);
+  else throwSmoke();
+
+  kineticKick();                                // 动能辅助：放技能就给一档移速
+}
+
+/* ── G（红狼）：突破型烟雾弹 ── */
+function throwSmoke() {
   const SM = SKILL.smoke;
   const dx = mouse.wx - P.x, dy = mouse.wy - P.y;
   const d = Math.hypot(dx, dy) || 1;
@@ -4722,13 +4847,123 @@ function useTactic() {
     ty -= (dy / d) * 24;
   }
 
-  S.use--;
-  S.cd = 0.55;                                  // 出弹间隔：防连按双发，不是大 CD
-  if (S.use < op.g.charges && S.recharge <= 0) S.recharge = op.g.cd;
   G.smokes.push({ x: tx, y: ty, t: 0, r: 0, seed: rand(0, 100) });
   popup(P.x, P.y - 46, '烟 雾 弹', '#c8d6de', 12);
   Sfx.dash();
   burst(tx, ty, 12, { color: ['#e8eef2', '#aab8c2'], life: 0.4, r: 6, spdMin: 20, spdMax: 120, drag: 0.88 });
+}
+
+/* ── G（威龙）：磁吸炸弹 —— 抛物线飞出去，贴到墙/人身上，3 秒后引爆 ──
+   dist 为 null 表示「短按」：直接按上一次的距离扔（初始 5 米）。 */
+function throwMagBomb(dist) {
+  const M = SKILL.mag;
+  const d = clamp(dist == null ? P.op.lastMag : dist, M.min, M.range);
+  P.op.lastMag = d;
+  const a = P.aim;
+  const tx = clamp(P.x + Math.cos(a) * d, 24, WORLD.w - 24);
+  const ty = clamp(P.y + Math.sin(a) * d, 24, WORLD.h - 24);
+
+  G.magbombs.push({
+    x: P.x, y: P.y, sx: P.x, sy: P.y, tx, ty, h: 0,
+    t: 0, dur: clamp(d / M.speed, 0.10, 0.85),
+    st: 'fly', fuse: 0, host: null, ax: tx, ay: ty, spin: rand(0, TAU),
+  });
+
+  popup(P.x, P.y - 46, '磁 吸 炸 弹', '#8fe0ff', 12);
+  Sfx.dash();
+  burst(P.x + Math.cos(a) * (P.r + 12), P.y + Math.sin(a) * (P.r + 12), 10, {
+    angle: a, spread: 0.5, spdMin: 60, spdMax: 220,
+    color: ['#cdf3ff', '#4ad1ff'], life: 0.3, r: 3, glow: true,
+  });
+}
+
+/* 磁吸炸弹结算：高伤 + 炸护甲（把 armorHp 直接削掉一大块） */
+function magBombBlast(x, y) {
+  const M = SKILL.mag;
+  blastFX(x, y, M.radius);
+  Sfx.explode();
+  shake(16);
+  emitNoise(x, y, 1500, 1.0);
+  burst(x, y, 30, {
+    color: ['#ffffff', '#8fe0ff', '#4ad1ff', '#ffb347'],
+    life: 0.7, r: 5, spdMin: 80, spdMax: 420, glow: true, drag: 0.9,
+  });
+
+  for (let j = G.enemies.length - 1; j >= 0; j--) {
+    const e = G.enemies[j];
+    if (!e.alive) continue;
+    const d = dist(x, y, e.x, e.y);
+    if (d > M.radius + e.r) continue;
+    const fall = 1 - clamp((d - e.r) / M.radius, 0, 1);
+    const ddx = (e.x - x) / (d || 1), ddy = (e.y - y) / (d || 1);
+    damageEnemy(e, M.dmg * (0.35 + fall * 0.65), ddx, ddy, 520);
+    /* 磁吸弹的药型是冲着甲去的：护甲耐久直接砍，砍穿就裸着挨炸 */
+    if (e.armorHp > 0) {
+      e.armorHp = Math.max(0, e.armorHp - M.armorBreak * (0.5 + fall * 0.5));
+      e.armorFlash = 1;
+      if (e.armorHp <= 0) popup(e.x, e.y - e.r - 16, '护甲炸穿', '#8fe0ff', 11);
+    }
+    e.stun = Math.max(e.stun || 0, 0.45);
+    e.stagger = 0.45;
+  }
+
+  if (!P.alive) return;
+  const dp = dist(x, y, P.x, P.y);
+  if (dp > M.radius + P.r) return;
+  const fall = 1 - clamp((dp - P.r) / M.radius, 0, 1);
+  let mul = M.selfMul;
+  if (kineOn()) mul *= SKILL.kine.blastMul;      // 动能辅助：爆炸对自己再打一折
+  damagePlayer(M.dmg * (0.35 + fall * 0.65) * mul, x, y, 0.5);
+  P.concuss = Math.max(P.concuss, 0.8);
+  if (Math.random() < 0.3) addDebuff('fissure', 1);
+  kineticKick();
+}
+
+function updateMagbombs(dt) {
+  const M = SKILL.mag;
+  for (let i = G.magbombs.length - 1; i >= 0; i--) {
+    const b = G.magbombs[i];
+
+    if (b.st === 'fly') {
+      b.t += dt;
+      const k = Math.min(1, b.t / b.dur);
+      b.x = b.sx + (b.tx - b.sx) * k;
+      b.y = b.sy + (b.ty - b.sy) * k;
+      b.h = Math.sin(Math.PI * k) * M.arc;
+      b.spin += dt * 10;
+
+      /* 磁吸：途中蹭到谁就粘谁，不等人落地 */
+      for (let k2 = 0; k2 < G.enemies.length; k2++) {
+        const e = G.enemies[k2];
+        if (!e.alive) continue;
+        if (dist2(b.x, b.y, e.x, e.y) < (e.r + 14) * (e.r + 14)) {
+          b.st = 'stuck'; b.host = e; b.fuse = M.fuse;
+          popup(e.x, e.y - e.r - 20, '贴在身上了', '#8fe0ff', 12);
+          Sfx.tone(760, 0.08, 0.05, 'square', 520);
+          break;
+        }
+      }
+      if (b.st === 'fly' && k >= 1) {
+        b.st = 'stuck';
+        b.host = null;
+        b.ax = b.x; b.ay = b.y;
+        b.fuse = M.fuse;
+        Sfx.tone(680, 0.08, 0.05, 'square', 460);
+      }
+      continue;
+    }
+
+    /* 吸住了：跟着宿主走（敌人会把它带走），引信到点就炸 */
+    if (b.host) {
+      if (!b.host.alive) { b.host = null; b.ax = b.x; b.ay = b.y; }
+      else { b.x = b.host.x; b.y = b.host.y; }
+    }
+    b.fuse -= dt;
+    if (b.fuse <= 0) {
+      magBombBlast(b.x, b.y);
+      G.magbombs.splice(i, 1);
+    }
+  }
 }
 
 /* ── V：三联装手炮（三头犬）—— 一次三发、间隔 0.11s，撞墙反弹 ── */
@@ -4757,16 +4992,82 @@ function useSkill() {
   const op = opDef();
   if (!op) { uiToast('没有出战干员 · 去大厅挑一个', 'small warn'); return; }
   if (!P.alive) return;
+  if (!P.op) initOperatorSkills();
   const S = P.op.v;
-  if (S.cd > 0) { uiToast('三头犬装填中', 'small'); return; }
-  if (S.use <= 0) { uiToast('手炮回充中 · ' + Math.ceil(S.recharge) + 's', 'small'); return; }
+  const label = op.v.short;
+  if (S.cd > 0) { uiToast(label + '冷却 ' + Math.ceil(S.cd) + 's', 'small'); return; }
+  if (S.use <= 0) { uiToast(label + '回充中 · ' + Math.ceil(S.recharge) + 's', 'small'); return; }
 
   S.use--;
   S.cd = 0.55;                                  // 出弹间隔：防连按双发，不是大 CD
   if (S.use < op.v.charges && S.recharge <= 0) S.recharge = op.v.cd;
-  fireGL();
-  P.op.volley = { left: Math.max(0, (op.v.shots || 3) - 1), t: 0.11 };
-  popup(P.x, P.y - 46, '三 头 犬', '#ffd66b', 12);
+
+  if (op.v.kind === 'dash') {
+    dashForward();
+  } else {
+    fireGL();
+    P.op.volley = { left: Math.max(0, (op.v.shots || 3) - 1), t: 0.11 };
+    popup(P.x, P.y - 46, '三 头 犬', '#ffd66b', 12);
+  }
+  kineticKick();
+}
+
+/* ── V（威龙）：动力推进 —— 朝输入方向喷气，正前 10 米、侧后打 0.62 折 ── */
+function dashForward() {
+  const D = SKILL.dash;
+  let ix = 0, iy = 0;
+  if (keys['a'] || keys['arrowleft']) ix -= 1;
+  if (keys['d'] || keys['arrowright']) ix += 1;
+  if (keys['w'] || keys['arrowup']) iy -= 1;
+  if (keys['s'] || keys['arrowdown']) iy += 1;
+  let ang = P.aim;
+  if (ix || iy) ang = Math.atan2(iy, ix);
+
+  /* 和准星夹角越大越短：正前 1.0，侧向 / 正后 0.62 */
+  const diff = Math.abs(angleDiff(ang, P.aim));
+  const mul = D.sideMul + (1 - D.sideMul) * Math.max(0, Math.cos(diff));
+  const dist = D.dist * mul;
+  const dur = D.dur * (0.8 + 0.2 * mul);
+
+  P.op.dash = dur;
+  P.op.dashDur = dur;
+  P.op.dashA = ang;
+  P.op.dashSpd = dist / dur;
+  P.ads = 0;
+  P.sprinting = false;
+  P.stamina = Math.max(0, P.stamina - D.cost);
+  Sfx.dash();
+  shake(4);
+
+  /* 喷口在后、气浪往前推 */
+  const bx = P.x - Math.cos(ang) * (P.r + 6);
+  const by = P.y - Math.sin(ang) * (P.r + 6);
+  burst(bx, by, 18, {
+    angle: ang + Math.PI, spread: 0.55, spdMin: 90, spdMax: 300,
+    color: ['#ffffff', '#8fe0ff', '#4ad1ff'], life: 0.4, r: 4, drag: 0.86, glow: true,
+  });
+  popup(P.x, P.y - 48, '动 力 推 进', '#8fe0ff', 12);
+}
+
+function dashOn() { return !!(P.op && P.op.dash > 0); }
+
+/* ── 动能辅助（威龙被动）──
+   本作没有真正的"高度差"，所以把「高处下落」折算成「被爆炸掀翻」：
+   放技能、吃爆炸都回收动能，给一段短加速。 */
+function kineOn() {
+  const op = opDef();
+  return !!(op && op.passive && op.passive.kind === 'kinetic');
+}
+function kineticKick() {
+  if (!kineOn() || !P.op) return;
+  const was = P.op.kine;
+  P.op.kine = SKILL.kine.dur;
+  if (was <= 0.05) {
+    popup(P.x, P.y - 62, '动能辅助', '#8fe0ff', 11);
+    burst(P.x, P.y + 6, 8, {
+      color: ['#8fe0ff', '#ffffff'], life: 0.35, r: 3, spdMin: 30, spdMax: 120, drag: 0.9, glow: true,
+    });
+  }
 }
 
 function glBlast(x, y) {
@@ -4845,14 +5146,22 @@ function updateGls(dt) {
   }
 }
 
-/* ── X：动力外骨骼 ── */
+/* ── X：大招总入口（外骨骼 / 虎蹲炮） ── */
 function useUlt() {
   const op = opDef();
   if (!op) { uiToast('没有出战干员 · 去大厅挑一个', 'small warn'); return; }
   if (!P.alive) return;
+  if (!P.op) initOperatorSkills();
   const S = P.op.x;
-  if (S.on) { uiToast('外骨骼已经在跑了', 'small'); return; }
-  if (S.cd > 0) { uiToast('外骨骼冷却 ' + Math.ceil(S.cd) + 's', 'small'); return; }
+  if (S.on) { uiToast(op.x.short + '正在生效', 'small'); return; }
+  if (S.cd > 0) { uiToast(op.x.short + '冷却 ' + Math.ceil(S.cd) + 's', 'small'); return; }
+
+  if (op.x.kind === 'shock') {
+    fireShock();
+    S.cd = op.x.cd;
+    kineticKick();
+    return;
+  }
 
   S.on = true;
   S.t = op.x.dur;
@@ -4867,7 +5176,105 @@ function useUlt() {
   Sfx.adsIn();
   shake(8);
   burst(P.x, P.y, 26, { color: ['#ff8a4c', '#ffd66b', '#ffffff'], life: 0.6, r: 4, spdMin: 60, spdMax: 300, glow: true });
+  kineticKick();
 }
+
+/* ── X（威龙）：虎蹲炮 —— 压缩空气弹，2.5 秒引信、撞墙反弹、半径内强制击倒 ── */
+function fireShock() {
+  const K = SKILL.shock;
+  const a = P.aim;
+  const mx = P.x + Math.cos(a) * (P.r + 18);
+  const my = P.y + Math.sin(a) * (P.r + 18);
+  G.shocks.push({
+    x: mx, y: my, px: mx, py: my,
+    vx: Math.cos(a) * K.speed, vy: Math.sin(a) * K.speed,
+    r: 10, fuse: K.life, spin: rand(0, TAU), bounce: 0,
+  });
+  P.recoil = Math.max(P.recoil, 8);
+  P.x -= Math.cos(a) * 4.5;
+  P.y -= Math.sin(a) * 4.5;
+  Sfx.shoot('shotgun');
+  Sfx.noiseBurst(0.3, 1200, 0.7, 0.2, 'bandpass');
+  shake(6);
+  burst(mx, my, 16, {
+    angle: a, spread: 0.3, spdMin: 100, spdMax: 320,
+    color: ['#ffffff', '#cdf3ff', '#8fe0ff'], life: 0.35, r: 4, glow: true,
+  });
+  popup(P.x, P.y - 50, '虎 蹲 炮', '#8fe0ff', 13);
+}
+
+function updateShocks(dt) {
+  const K = SKILL.shock;
+  for (let i = G.shocks.length - 1; i >= 0; i--) {
+    const s = G.shocks[i];
+    s.fuse -= dt;
+    s.spin += dt * 12;
+    s.px = s.x; s.py = s.y;
+
+    const step = Math.hypot(s.vx, s.vy) * dt;
+    const n = Math.max(1, Math.ceil(step / 8));
+    for (let k = 0; k < n; k++) {
+      const dtt = dt / n;
+      let nx = s.x + s.vx * dtt;
+      let ny = s.y + s.vy * dtt;
+      /* 压缩空气弹会弹墙：撞一下就折一次，弹几次都不炸（只认引信） */
+      if (nx < 12 || nx > WORLD.w - 12) { nx = clamp(nx, 12, WORLD.w - 12); s.vx *= -0.86; s.bounce++; }
+      if (ny < 12 || ny > WORLD.h - 12) { ny = clamp(ny, 12, WORLD.h - 12); s.vy *= -0.86; s.bounce++; }
+      if (pointInObstacle(nx, s.y)) { nx = s.x; s.vx *= -0.86; s.bounce++; }
+      if (pointInObstacle(s.x, ny)) { ny = s.y; s.vy *= -0.86; s.bounce++; }
+      s.x = nx; s.y = ny;
+    }
+
+    if (Math.random() < 0.85) {
+      addParticle(s.x, s.y, {
+        vx: rand(-24, 24), vy: rand(-24, 24), life: rand(0.18, 0.36), r: rand(3, 6),
+        color: pick(['#ffffff', '#cdf3ff', '#8fe0ff']), drag: 0.88, glow: true,
+      });
+    }
+
+    if (s.fuse <= 0) { shockBlast(s.x, s.y); G.shocks.splice(i, 1); }
+  }
+}
+
+/* 虎蹲炮起爆：低伤、强制击倒。BOSS 只跪 1 秒，杂兵跪 3 秒 —— 这 3 秒够你换弹或跑路 */
+function shockBlast(x, y) {
+  const K = SKILL.shock;
+  blastFX(x, y, K.radius);
+  Sfx.explode();
+  shake(18);
+  emitNoise(x, y, 1300, 1.0);
+  burst(x, y, 34, {
+    color: ['#ffffff', '#cdf3ff', '#8fe0ff'], life: 0.6, r: 5,
+    spdMin: 80, spdMax: 460, glow: true, drag: 0.88,
+  });
+
+  for (let j = G.enemies.length - 1; j >= 0; j--) {
+    const e = G.enemies[j];
+    if (!e.alive) continue;
+    const d = dist(x, y, e.x, e.y);
+    if (d > K.radius + e.r) continue;
+    const kd = e.type === 'boss' ? K.bossKd : K.kd;
+    damageEnemy(e, K.dmg, (e.x - x) / (d || 1), (e.y - y) / (d || 1), K.knock);
+    e.stun = Math.max(e.stun || 0, kd);       // stun 就是"不能操作"的总闸
+    e.kd = Math.max(e.kd || 0, kd);           // kd 只负责倒地表现
+    e.stagger = 0.5;
+    popup(e.x, e.y - e.r - 18, e.type === 'boss' ? '击倒 1s' : '击倒 3s', '#8fe0ff', 12);
+  }
+
+  if (P.alive) {
+    const dp = dist(x, y, P.x, P.y);
+    if (dp < K.radius + P.r) {
+      P.kd = Math.max(P.kd, K.selfKd);
+      P.concuss = Math.max(P.concuss, 1.0);
+      popup(P.x, P.y - 56, '被自己的气浪掀翻', '#ff8fa3', 13);
+      Sfx.hurt();
+      kineticKick();                          // 落地回收动能：站起来就跑
+    }
+  }
+}
+
+/* 被击倒（虎蹲炮自炸）：站着不能动也不能打，画面压一层灰 */
+function knockOn() { return P.kd > 0; }
 
 function endExo() {
   if (!P.op) return;
@@ -4892,7 +5299,7 @@ function exoOnKill() {
 /* ── 被动：战术滑铲（奔跑中按 C，无冷却） ── */
 function trySlide() {
   const op = opDef();
-  if (!op || !op.passive) return;
+  if (!op || !op.passive || op.passive.kind !== 'slide') return;   // 只有带滑铲的干员吃 C
   if (!P.alive) return;
   const S = P.op;
   if (S.slide > 0) return;                          // 这一下滑完再说
@@ -4934,7 +5341,7 @@ function updateOperatorSkills(dt) {
       if (sk.recharge <= 0) {
         sk.use++;
         sk.recharge = sk.use < def.charges ? def.cd : 0;
-        popup(P.x, P.y - 58, (k === 'g' ? '烟雾弹' : '手炮') + ' +1', '#9fd0e8', 11);
+        popup(P.x, P.y - 58, (def.short || '战术道具') + ' +1', '#9fd0e8', 11);
       }
     }
   }
@@ -4957,6 +5364,18 @@ function updateOperatorSkills(dt) {
   }
 
   if (S.slide > 0) S.slide = Math.max(0, S.slide - dt);
+  if (S.dash > 0) S.dash = Math.max(0, S.dash - dt);
+  if (S.kine > 0) S.kine = Math.max(0, S.kine - dt);
+  P.kd = Math.max(0, (P.kd || 0) - dt);
+
+  /* 长按 G 的预瞄计时：超过阈值才开始画轨迹 */
+  if (MAG_AIM.down) {
+    MAG_AIM.hold += dt;
+    if (!MAG_AIM.on && MAG_AIM.hold >= MAG_HOLD_T) {
+      MAG_AIM.on = true;
+      Sfx.adsIn();
+    }
+  } else MAG_AIM.on = false;
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -5436,6 +5855,7 @@ function updateEnemies(dt) {
     e.meleeHit = Math.max(0, e.meleeHit - dt * 2);
     e.stagger = Math.max(0, e.stagger - dt);
     e.stun = Math.max(0, (e.stun || 0) - dt);        // 三头犬震晕：不吃不减，纯粹站着发呆
+    e.kd = Math.max(0, (e.kd || 0) - dt);            // 虎蹲炮击倒：只负责"趴着"的画面
     e.cripple = Math.max(0, (e.cripple || 0) - dt);  // 骨折：移速打折
     e.invuln = Math.max(0, e.invuln - dt);
     e.walkPhase += dt * 8;
@@ -6187,6 +6607,14 @@ function killEnemy(e) {
   G.combo++;
   G.comboTimer = 2.6;
   exoOnKill();                  // 外骨骼期间：每倒一个都续 5 秒 + 回 30 血 + 满体力
+  /* 威龙：动力推进每倒一个直接扣 10 秒冷却 */
+  if (P.op && P.op.v.cd > 0) {
+    const od = opDef();
+    if (od && od.v.kind === 'dash') {
+      P.op.v.cd = Math.max(0, P.op.v.cd - SKILL.dash.killCd);
+      popup(e.x, e.y - e.r - 46, '推进 -' + SKILL.dash.killCd + 's', '#8fe0ff', 11);
+    }
+  }
   const mult = 1 + Math.min(G.combo, 20) * 0.06;
   const gain = Math.round(e.score * mult);
   G.score += gain;
@@ -8855,13 +9283,31 @@ function drawEnemy(e) {
     ctx.restore();
     ctx.globalAlpha = 1;
   }
+
+  /* 虎蹲炮把人掀翻：脚下一圈气浪残影 + 剩余倒地秒数 */
+  if (e.kd > 0) {
+    ctx.save();
+    ctx.globalAlpha = 0.35 + 0.22 * Math.sin(G.time * 9);
+    ctx.strokeStyle = '#8fe0ff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(e.x, e.y + e.r * 0.5, e.r * 1.4, e.r * 0.55, 0, 0, TAU);
+    ctx.stroke();
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = '#8fe0ff';
+    ctx.font = '700 10px ui-monospace, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('击倒 ' + e.kd.toFixed(1) + 's', e.x, e.y + e.r + 24);
+    ctx.restore();
+    ctx.textAlign = 'left';
+  }
+
   if (e.cripple > 0) {
     ctx.globalAlpha = 0.55;
     ctx.strokeStyle = '#ff8a3a';
     ctx.lineWidth = 1.6;
     ctx.beginPath();
-    ctx.moveTo(e.x - 7, e.y + e.r + 6);
-    ctx.lineTo(e.x - 2.5, e.y + e.r + 2);
+    ctx.moveTo(e.x - 7, e.y + e.r + 6);    ctx.lineTo(e.x - 2.5, e.y + e.r + 2);
     ctx.lineTo(e.x + 1.5, e.y + e.r + 7);
     ctx.lineTo(e.x + 6, e.y + e.r + 3);
     ctx.stroke();
@@ -9175,6 +9621,125 @@ function drawGls() {
     ctx.stroke();
     ctx.restore();
   }
+}
+
+/* 磁吸炸弹：飞行时带青色尾焰；吸住之后闪红灯，越接近引爆闪得越快 */
+function drawMagbombs() {
+  for (const b of G.magbombs) {
+    if (!fogVisibleAt(b.x, b.y)) continue;
+    const yy = b.y - b.h;
+
+    /* 地面投影：飞得越高影子越淡，吸住了就没有 */
+    if (b.st === 'fly' && b.h > 1) {
+      ctx.globalAlpha = 0.22;
+      ctx.fillStyle = '#000';
+      ctx.beginPath(); ctx.ellipse(b.x, b.y + 4, 8, 4, 0, 0, TAU); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    const glow = ctx.createRadialGradient(b.x, yy, 0, b.x, yy, 22);
+    const hot = b.st === 'stuck' ? 0.8 : 0.45;
+    glow.addColorStop(0, 'rgba(143,224,255,' + hot + ')');
+    glow.addColorStop(1, 'rgba(74,209,255,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(b.x, yy, 22, 0, TAU); ctx.fill();
+
+    ctx.save();
+    ctx.translate(b.x, yy);
+    ctx.rotate(b.spin * 0.4);
+    ctx.fillStyle = '#16333f';
+    drawRoundRect(-6, -5, 12, 10, 3); ctx.fill();
+    ctx.strokeStyle = '#8fe0ff'; ctx.lineWidth = 1.5; ctx.stroke();
+    /* 四条磁吸爪 */
+    ctx.strokeStyle = 'rgba(143,224,255,0.75)';
+    ctx.lineWidth = 1.2;
+    for (let i = 0; i < 4; i++) {
+      const a = i * TAU / 4 + Math.PI / 4;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * 5.5, Math.sin(a) * 5.5);
+      ctx.lineTo(Math.cos(a) * 9.5, Math.sin(a) * 9.5);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    if (b.st === 'stuck') {
+      /* 红灯：剩余时间越少，闪得越急 */
+      const M = SKILL.mag;
+      const left = clamp(b.fuse / M.fuse, 0, 1);
+      const rate = 3 + (1 - left) * 16;
+      const on = Math.sin(G.time * rate) > 0;
+      ctx.fillStyle = on ? '#ff4d5e' : 'rgba(255,77,94,0.22)';
+      ctx.beginPath(); ctx.arc(b.x, yy - 1, 2.6, 0, TAU); ctx.fill();
+      if (on) {
+        const rg = ctx.createRadialGradient(b.x, yy, 0, b.x, yy, 16);
+        rg.addColorStop(0, 'rgba(255,77,94,0.35)');
+        rg.addColorStop(1, 'rgba(255,77,94,0)');
+        ctx.fillStyle = rg;
+        ctx.beginPath(); ctx.arc(b.x, yy, 16, 0, TAU); ctx.fill();
+      }
+    }
+  }
+}
+
+/* 虎蹲炮的压缩空气弹：一团卷着白气的球，后面拖着螺旋气纹 */
+function drawShocks() {
+  for (const s of G.shocks) {
+    if (!fogVisibleAt(s.x, s.y)) continue;
+    const glow = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, 26);
+    glow.addColorStop(0, 'rgba(255,255,255,0.85)');
+    glow.addColorStop(0.45, 'rgba(143,224,255,0.45)');
+    glow.addColorStop(1, 'rgba(74,209,255,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(s.x, s.y, 26, 0, TAU); ctx.fill();
+
+    for (let i = 0; i < 3; i++) {
+      const a = s.spin + i * TAU / 3;
+      ctx.strokeStyle = 'rgba(205,243,255,' + (0.35 + i * 0.12) + ')';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, 9 + i * 4, a, a + 1.6);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#eafaff';
+    ctx.beginPath(); ctx.arc(s.x, s.y, 5.5, 0, TAU); ctx.fill();
+  }
+}
+
+/* 长按 G：从人指到落点的虚线 + 落点爆炸圈 + 距离读数 */
+function drawMagAim() {
+  if (!MAG_AIM.on || !P.alive) return;
+  const M = SKILL.mag;
+  const d = clamp(magAimDist(), M.min, M.range);
+  const a = P.aim;
+  const tx = clamp(P.x + Math.cos(a) * d, 24, WORLD.w - 24);
+  const ty = clamp(P.y + Math.sin(a) * d, 24, WORLD.h - 24);
+
+  ctx.save();
+  ctx.setLineDash([7, 7]);
+  ctx.lineWidth = 1.6;
+  ctx.strokeStyle = 'rgba(143,224,255,0.65)';
+  ctx.beginPath();
+  ctx.moveTo(P.x, P.y);
+  ctx.lineTo(tx, ty);
+  ctx.stroke();
+
+  /* 落点：虚线爆炸圈 + 一圈实心小点 */
+  ctx.setLineDash([5, 5]);
+  ctx.strokeStyle = 'rgba(255,120,90,0.75)';
+  ctx.beginPath(); ctx.arc(tx, ty, M.radius, 0, TAU); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = 'rgba(255,120,90,0.55)';
+  ctx.beginPath(); ctx.arc(tx, ty, 3, 0, TAU); ctx.fill();
+  ctx.restore();
+
+  /* 距离读数：按米显示，一眼看得出「够不够得着」 */
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.font = '800 12px ui-monospace, monospace';
+  ctx.fillStyle = 'rgba(205,243,255,0.92)';
+  ctx.fillText((d / METER).toFixed(1) + ' m', tx, ty - M.radius - 8);
+  ctx.restore();
+  ctx.textAlign = 'left';
 }
 
 /* 冰弹：一颗带尾迹的冰蓝碎晶 */
@@ -10246,9 +10811,9 @@ function drawSkillBar(mono) {
   const y0 = VH - 84;
 
   const rows = [
-    { k: 'G', cn: '烟雾', col: '#c8d6de', cd: S.g.cd, max: op.g.cd, use: S.g.use, cap: op.g.charges, rech: S.g.recharge },
-    { k: 'V', cn: '手炮', col: '#ffd66b', cd: S.v.cd, max: op.v.cd, use: S.v.use, cap: op.v.charges, rech: S.v.recharge },
-    { k: 'X', cn: '外骨骼', col: '#ff8a4c', cd: S.x.on ? S.x.t : S.x.cd,
+    { k: 'G', cn: op.g.short, col: '#c8d6de', cd: S.g.cd, max: op.g.cd, use: S.g.use, cap: op.g.charges, rech: S.g.recharge },
+    { k: 'V', cn: op.v.short, col: '#ffd66b', cd: S.v.cd, max: op.v.cd, use: S.v.use, cap: op.v.charges, rech: S.v.recharge },
+    { k: 'X', cn: op.x.short, col: '#ff8a4c', cd: S.x.on ? S.x.t : S.x.cd,
       max: S.x.on ? op.x.dur : op.x.cd, use: S.x.on ? 1 : 0, cap: 1, on: S.x.on },
   ];
 
@@ -10654,6 +11219,8 @@ function update(dt) {
   updateNades(dt);
   updateSmokes(dt);
   updateGls(dt);
+  updateMagbombs(dt);
+  updateShocks(dt);
   updateIceBolts(dt);
   updateIcePots(dt);
   updateMolotovs(dt);
@@ -11025,7 +11592,10 @@ function render() {
   drawIcePots();
   drawNades();
   drawGls();
+  drawMagbombs();
+  drawShocks();
   drawSmokes();
+  drawMagAim();          // 长按 G 的投掷预瞄（画在烟上面，别被自己烟挡住）
   drawMolotovs();
   drawRockets();
   drawFlameCones();
@@ -11043,7 +11613,34 @@ function render() {
     drawOffscreenMarkers();
     drawHUD();
     drawDebuffOverlay();
+    drawKnockOverlay();
   }
+}
+
+/* 被虎蹲炮掀翻：画面压一层灰、四角收紧，中间一行字告诉你「现在动不了」 */
+function drawKnockOverlay() {
+  if (!knockOn() || !P.alive) return;
+  const k = clamp(P.kd / SKILL.shock.selfKd, 0, 1);
+  ctx.save();
+  ctx.fillStyle = 'rgba(10,16,22,' + (0.42 * k).toFixed(3) + ')';
+  ctx.fillRect(0, 0, VW, VH);
+
+  const cx = VW / 2, cy = VH / 2;
+  const g = ctx.createRadialGradient(cx, cy, Math.min(VW, VH) * 0.22, cx, cy, Math.max(VW, VH) * 0.72);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(1, 'rgba(0,0,0,' + (0.55 * k).toFixed(3) + ')');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, VW, VH);
+
+  ctx.textAlign = 'center';
+  ctx.font = '800 20px ui-monospace, monospace';
+  ctx.fillStyle = 'rgba(255,200,205,' + (0.55 + 0.35 * Math.sin(G.time * 9)).toFixed(2) + ')';
+  ctx.fillText('被 掀 翻  ·  ' + P.kd.toFixed(1) + 's', cx, cy + 96);
+  ctx.font = '700 11px ui-monospace, monospace';
+  ctx.fillStyle = 'rgba(200,220,235,0.7)';
+  ctx.fillText('自己也在爆炸范围里', cx, cy + 116);
+  ctx.restore();
+  ctx.textAlign = 'left';
 }
 
 /* 贯穿伤的黑边 / 失血的压边。
@@ -11195,17 +11792,20 @@ function renderOpsPanel() {
     '<div class="skillbody"><b>' + title + '</b><span class="meta">' + meta + '</span><p>' + desc + '</p></div></div>';
 
   const onDuty = SAVE.operator === op.id;
+  const gMeta = '战术道具 · CD ' + op.g.cd + 's' + (op.g.charges > 1 ? ' · 储备 ' + op.g.charges + (op.g.kind === 'magbomb' ? ' 颗' : ' 枚') : '');
+  const vMeta = '小技能 · CD ' + op.v.cd + 's' + (op.v.charges > 1 ? ' · 储备 ' + op.v.charges + ' 组' : '');
+  const xMeta = '大招 · CD ' + op.x.cd + 's' + (op.x.dur ? ' · 持续 ' + op.x.dur + 's' : '');
+  const pKey = op.passive.kind === 'slide' ? 'C' : '被动';
   det.innerHTML =
     '<div class="ops-head"><div class="opavatar">' + op.name.slice(-1) + '</div>' +
       '<div><div class="ops-name">' + op.name + '</div>' +
       '<div class="ops-role">' + op.role + ' · ' + op.en + ' · 4 项能力</div></div>' +
     '</div>' +
     '<div class="ops-desc">' + op.desc + '</div>' +
-    row('G', '', op.g.name, '战术道具 · CD ' + op.g.cd + 's · 储备 ' + op.g.charges, op.g.desc) +
-    row('V', '', op.v.name + (op.v.sub ? ' · ' + op.v.sub : ''),
-        '小技能 · CD ' + op.v.cd + 's · 储备 ' + op.v.charges + ' 组', op.v.desc) +
-    row('X', '', op.x.name, '大招 · CD ' + op.x.cd + 's · 持续 ' + op.x.dur + 's', op.x.desc) +
-    row('C', 'pas', op.passive.name, '被动 · 无冷却', op.passive.desc) +
+    row('G', '', op.g.name, gMeta, op.g.desc) +
+    row('V', '', op.v.name + (op.v.sub ? ' · ' + op.v.sub : ''), vMeta, op.v.desc) +
+    row('X', '', op.x.name, xMeta, op.x.desc) +
+    row(pKey, 'pas', op.passive.name, '被动 · 无冷却', op.passive.desc) +
     '<div class="ops-foot"><button class="btn primary" id="opDeploy"' + (onDuty ? ' disabled' : '') + '>' +
       (onDuty ? '当 前 出 战' : '设 为 出 战 干 员') + '</button></div>';
 
@@ -12542,6 +13142,8 @@ function startRaid() {
   G.smokes = [];
   G.smokeBlind = 0;      // 玩家被自己丢的烟糊住的强度（0..1，屏幕遮罩用）
   G.gls = [];
+  G.magbombs = [];
+  G.shocks = [];
   G.icepots = [];
   G.fires = [];
   G.molotovs = [];
