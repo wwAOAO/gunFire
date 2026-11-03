@@ -1265,8 +1265,9 @@ function freshAmmo() {
 }
 
 /* 弹药清洗：补齐所有口径 × 8 个弹级。
-   老档（没有 ammo 字段）按拥有的枪各补 3 个弹匣的 1 级白弹，
-   当年买的「手枪弹盒」按一盒 51 发折算成 9×19 白弹，不白没收。 */
+   老档（没有 ammo 字段）按拥有的枪各补 3 个弹匣的起步弹（该口径上架的最便宜弹级），
+   当年买的「手枪弹盒」按一盒 51 发折算成 9×19 白弹，不白没收。
+   老档里买过「现在不上架」的弹级（比如 9×19 的金弹）：折进最近的上架级，不白没收。 */
 function cleanAmmo(raw, owned, legacyPistolBoxes) {
   const out = emptyAmmo();
   const has = raw && typeof raw === 'object';
@@ -1276,14 +1277,19 @@ function cleanAmmo(raw, owned, legacyPistolBoxes) {
       if (!src || typeof src !== 'object') continue;
       for (let lv = 0; lv <= AMMO_LV_MAX; lv++) {
         const n = Math.floor(Number(src[lv]) || 0);
-        out[cal][lv] = n > 0 ? Math.min(n, 9999) : 0;
+        if (n <= 0) continue;
+        if (calHasTier(cal, lv)) out[cal][lv] = Math.min(n, 9999);
+        else {
+          const t = foldTierOf(cal, lv);
+          if (t >= 0) out[cal][t] = Math.min(9999, out[cal][t] + n);
+        }
       }
     }
   } else {
     for (const id in owned) {
       if (!owned[id]) continue;
       const cal = CAL_OF_WEAPON[id];
-      if (cal && STARTER_AMMO[cal]) out[cal][1] += STARTER_AMMO[cal];
+      if (cal && STARTER_AMMO[cal]) out[cal][defaultTierOf(cal)] += STARTER_AMMO[cal];
     }
   }
   const boxes = Math.max(0, legacyPistolBoxes | 0);
@@ -1293,13 +1299,14 @@ function cleanAmmo(raw, owned, legacyPistolBoxes) {
 
 function cleanAmmoPick(raw) {
   const out = {};
-  for (const cal of CAL_ORDER) out[cal] = 1;
+  for (const cal of CAL_ORDER) out[cal] = defaultTierOf(cal);
   if (!raw || typeof raw !== 'object') return out;
   for (const cal of CAL_ORDER) {
     const lv = raw[cal];
     if (lv == null) continue;
     const n = Math.floor(Number(lv));
-    if (Number.isFinite(n) && n >= 0 && n <= AMMO_LV_MAX) out[cal] = n;
+    if (!Number.isFinite(n) || n < 0 || n > AMMO_LV_MAX) continue;
+    out[cal] = calHasTier(cal, n) ? n : (foldTierOf(cal, n) >= 0 ? foldTierOf(cal, n) : out[cal]);
   }
   return out;
 }
@@ -1506,23 +1513,23 @@ function slotAllowed(wid, slotId) {
    ══════════════════════════════════════════════════════════ */
 const CALIBERS = {
   '919': { id:'919', name:'9×19mm 帕拉贝鲁姆', short:'9×19', full:'9×19mm', box:50, base:4,
-           desc:'最通用的手枪弹，G17 / 93R / G18 共用。' },
+           desc:'最通用的手枪弹，G17 / 93R / G18 共用。只上架到 4 级紫弹。' },
   '918': { id:'918', name:'9×18mm 马卡洛夫', short:'9×18', full:'9×18mm', box:50, base:3,
-           desc:'野牛冲锋枪的螺旋弹鼓装的就是它，便宜量大。' },
+           desc:'野牛冲锋枪的螺旋弹鼓装的就是它，便宜量大。只上架到 4 级紫弹。' },
   '762x39': { id:'762x39', name:'7.62×39mm 苏制中间威力弹', short:'7.62×39', full:'7.62×39mm', box:30, base:6,
-           desc:'AKM 的短弹：弹头重、存速低，近距离一发顶两发，出了两百米掉得厉害。' },
+           desc:'AKM 的短弹：弹头重、存速低，近距离一发顶两发，出了两百米掉得厉害。最高上架 5 级金弹。' },
   '545': { id:'545', name:'5.45×39mm 苏制小口径弹', short:'5.45×39', full:'5.45×39mm', box:30, base:6,
-           desc:'AK-12 的小口径弹：弹道平、后坐小，靠射速和连发精度吃饭。' },
+           desc:'AK-12 的小口径弹：弹道平、后坐小，靠射速和连发精度吃饭。最高上架 5 级金弹。' },
   '58': { id:'58', name:'5.8×42mm 国造步枪弹', short:'5.8×42', full:'5.8×42mm', box:30, base:8,
-           desc:'QBZ 系列的制式弹：初速高、弹形细长，远距离存速比 5.45 更稳。' },
+           desc:'QBZ 系列的制式弹：初速高、弹形细长，远距离存速比 5.45 更稳。最高上架 5 级金弹。' },
   '12g': { id:'12g', name:'12 号霰弹', short:'12Ga', full:'12 Gauge', box:25, base:9,
-           desc:'M870 一次喷 8 枚弹丸，每颗单独结算。' },
+           desc:'M870 一次喷 8 枚弹丸，每颗单独结算。只上架到 4 级紫弹。' },
   '556': { id:'556', name:'5.56×45mm NATO', short:'5.56×45', full:'5.56×45mm', box:30, base:7,
-           desc:'M4A1 的制式步枪弹，穿甲与手感最均衡。' },
+           desc:'M4A1 的制式步枪弹，穿甲与手感最均衡。最高上架 5 级金弹。' },
   '762': { id:'762', name:'7.62×51mm NATO', short:'7.62×51', full:'7.62×51mm', box:20, base:12,
-           desc:'全威力步枪弹：SR9 拿它打半自动，R93 拿它拉栓，同一盒弹喂两把枪。' },
+           desc:'全威力步枪弹：SR9 拿它打半自动，R93 拿它拉栓，同一盒弹喂两把枪。不卖白弹绿弹，上架从蓝弹起步，最高 6 级红弹。' },
   '338': { id:'338', name:'.338 Lapua Magnum', short:'.338 LM', full:'.338 Lapua Magnum', box:10, base:25,
-           desc:'AWM 的远程重弹，一发就是一笔钱。' },
+           desc:'AWM 的远程重弹，一发就是一笔钱。全游戏唯一上架 7 级顶级弹的口径。' },
 };
 const CAL_ORDER = ['919', '918', '762x39', '545', '58', '12g', '556', '762', '338'];
 
@@ -1546,6 +1553,41 @@ const AMMO_TIERS = [
     desc:'实验性顶级弹。打 6 级甲仍有 75% 肉伤，最贵也最不讲道理。' },
 ];
 const AMMO_LV_MAX = AMMO_TIERS.length - 1;
+
+/* ── 各口径上架的弹级 ──
+   没列进来的级别：军火库不卖、老档库存折算、选用自动跳过。
+   逻辑是「弹越贵越只给大口径」：
+     手枪 / 霰弹（9×19、9×18、12Ga）     → 0~4 级，最多到紫
+     中间威力 / 小口径步枪（39 系、556、58）→ 0~5 级，到金为止
+     全威力 7.62×51                        → 0、3~6 级（不卖白绿，起步就是蓝弹）
+     .338 LM                               → 全弹级 0~7（7 级顶级弹是 AWM 专属） */
+const CAL_TIERS = {
+  '919':    [0, 1, 2, 3, 4],
+  '918':    [0, 1, 2, 3, 4],
+  '12g':    [0, 1, 2, 3, 4],
+  '762x39': [0, 1, 2, 3, 4, 5],
+  '545':    [0, 1, 2, 3, 4, 5],
+  '58':     [0, 1, 2, 3, 4, 5],
+  '556':    [0, 1, 2, 3, 4, 5],
+  '762':    [0, 3, 4, 5, 6],
+  '338':    [0, 1, 2, 3, 4, 5, 6, 7],
+};
+function calHasTier(cal, lv) {
+  const t = CAL_TIERS[cal];
+  return !!t && t.indexOf(lv | 0) >= 0;
+}
+/* 这个口径默认装填的弹级：上架里最便宜的一级（≥1 级，没有就 0 级） */
+function defaultTierOf(cal) {
+  const t = (CAL_TIERS[cal] || []).filter(lv => lv >= 1);
+  return t.length ? Math.min.apply(null, t) : 0;
+}
+/* 老档里买过「现在不上架」的弹级：先往上调到最近的上架级，调不动再往下调 */
+function foldTierOf(cal, lv) {
+  const tiers = CAL_TIERS[cal] || [];
+  for (let t = lv; t <= AMMO_LV_MAX; t++) if (tiers.indexOf(t) >= 0) return t;
+  for (let t = lv; t >= 0; t--) if (tiers.indexOf(t) >= 0) return t;
+  return -1;
+}
 /* 1~6 级甲的颜色，敌人血条外圈用 */
 const ARMOR_LV_COLOR = ['#5a6b78', '#dfe9f2', '#63d68a', '#4fa8ff', '#b782ff', '#ffcc4d', '#ff5d5d'];
 
@@ -1558,7 +1600,8 @@ const CAL_OF_WEAPON = {
   qbz95: '58', qbz191: '58', qbz192: '58',
   m4a1: '556', sr9: '762', r93: '762', awm: '338',
 };
-/* 老档迁移时按「3 个弹匣」补的 1 级白弹（新档只送 9×19） */
+/* 老档迁移时按「3 个弹匣」补的起步弹（发数按口径定；弹级取该口径上架的最便宜一级，
+   7.62×51 不卖白绿，所以补的是 3 级蓝弹） */
 const STARTER_AMMO = { '919': 51, '918': 64, '762x39': 90, '545': 90, '58': 90,
                        '12g': 21, '556': 90, '762': 54, '338': 15 };
 
@@ -1829,6 +1872,7 @@ function takeAmmoStock(cal, lv, n) {
 }
 function addAmmoStock(cal, lv, n) {
   if (!CALIBERS[cal] || lv < 0 || lv > AMMO_LV_MAX) return 0;
+  if (!calHasTier(cal, lv)) return 0;   // 不上架的级别进不了库存
   if (!SAVE.ammo) SAVE.ammo = {};
   if (!SAVE.ammo[cal]) SAVE.ammo[cal] = {};
   const add = Math.max(0, Math.round(n));
@@ -1849,12 +1893,15 @@ function ammoPrice(cal, lv) {
 /* 这个口径现在实际会装进枪里的弹级：
    优先用玩家选的；那一级没货，就找最近的有货的级别，差得最少的那一档。 */
 function ammoPickOf(cal) {
-  const pick = (SAVE.ammoPick && SAVE.ammoPick[cal] != null) ? clamp(SAVE.ammoPick[cal] | 0, 0, AMMO_LV_MAX) : 1;
+  const pick = (SAVE.ammoPick && SAVE.ammoPick[cal] != null &&
+                calHasTier(cal, SAVE.ammoPick[cal] | 0))
+    ? clamp(SAVE.ammoPick[cal] | 0, 0, AMMO_LV_MAX) : defaultTierOf(cal);
   if (ammoStock(cal, pick) > 0) return pick;
+  /* 没货就找最近的有货弹级 —— 只在上架的级别里找，不上架的直接跳过 */
   for (let d = 1; d <= AMMO_LV_MAX; d++) {
     const lo = pick - d, hi = pick + d;
-    if (lo >= 0 && ammoStock(cal, lo) > 0) return lo;
-    if (hi <= AMMO_LV_MAX && ammoStock(cal, hi) > 0) return hi;
+    if (lo >= 0 && calHasTier(cal, lo) && ammoStock(cal, lo) > 0) return lo;
+    if (hi <= AMMO_LV_MAX && calHasTier(cal, hi) && ammoStock(cal, hi) > 0) return hi;
   }
   return pick;
 }
@@ -14734,6 +14781,10 @@ function refreshShop() {
       const CC = CALIBERS[cal];
       const guns = WEAPON_ORDER.filter(id => SAVE.owned[id] && calOfWeapon(id) === cal).map(id => WEAPONS[id].short);
       const pick = ammoPickOf(cal);
+      const onSale = AMMO_TIERS.filter(T => calHasTier(cal, T.lv));
+      const rangeTxt = onSale.length > 1
+        ? ('上架 ' + onSale[0].grade + ' ~ ' + onSale[onSale.length - 1].grade)
+        : ('仅 ' + onSale[0].grade);
 
       const sec = document.createElement('div');
       sec.className = 'wsec';
@@ -14742,13 +14793,13 @@ function refreshShop() {
       head.className = 'whead';
       head.innerHTML = '<span class="cn">' + CC.name + '</span>' +
         '<span class="en">' + CC.short + '</span>' +
-        '<span class="mk">' + guns.join(' / ') + ' · 库存 ' + ammoTotalOf(cal) + ' 发 · 每盒 ' + CC.box + ' 发</span>';
+        '<span class="mk">' + guns.join(' / ') + ' · 库存 ' + ammoTotalOf(cal) + ' 发 · 每盒 ' + CC.box + ' 发 · ' + rangeTxt + '</span>';
       sec.appendChild(head);
 
       const sub = document.createElement('div');
       sub.className = 'grid';
 
-      for (const T of AMMO_TIERS) {
+      for (const T of onSale) {
         const stock = ammoStock(cal, T.lv);
         const price = ammoPrice(cal, T.lv);
         const canAfford = SAVE.credits >= price;
@@ -15096,6 +15147,7 @@ function buySurg(id) {
 function buyAmmo(cal, lv) {
   const C = CALIBERS[cal], T = ammoTier(lv);
   if (!C || !T) return;
+  if (!calHasTier(cal, lv)) { uiToast(C.short + ' 不上架这一级弹', 'small warn'); return; }
   const price = ammoPrice(cal, lv);
   if (SAVE.credits < price) return;
   SAVE.credits -= price;
@@ -15112,6 +15164,7 @@ function buyAmmo(cal, lv) {
 /* 把某一级设为这个口径的默认装填 */
 function selectAmmo(cal, lv) {
   if (!CALIBERS[cal]) return;
+  if (!calHasTier(cal, lv)) { uiToast(CALIBERS[cal].short + ' 不上架这一级弹', 'small warn'); return; }
   if (ammoStock(cal, lv) <= 0) { uiToast('这一级还没货 · 先买一盒', 'small warn'); return; }
   if (!SAVE.ammoPick) SAVE.ammoPick = {};
   SAVE.ammoPick[cal] = lv;
