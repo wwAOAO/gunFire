@@ -1969,7 +1969,7 @@ const OPERATORS = {
     },
     passive: {
       name: '战术滑铲', short: '战术滑铲', tag: '被动', kind: 'slide',
-      desc: '奔跑途中按 C 滑铲：0.45 秒的低身位突进（约 1.6 个身位），没有冷却，只吃 10 点体力。外骨骼期间滑得更远、不耗体力。',
+      desc: '奔跑途中按 C 滑铲：0.45 秒的低身位突进（约 5 个身位，比纯跑步远 1/3），没有冷却，只吃 10 点体力。外骨骼期间滑得更远、不耗体力。',
     },
   },
 
@@ -4444,12 +4444,17 @@ function updatePlayer(dt) {
   else if (P.curSlot === 'medkit' && activeMedPerk() !== 'move') spd *= 0.92;   // 一边包扎一边走，慢一点
   /* 创伤：流血越多越虚；腿断了直接掉一半多；骨裂再叠一层，止痛都救不回来 */
   if (P.deb.bleed > 0) spd *= 1 - Math.min(0.20, 0.05 * P.deb.bleed);
-  const toughK = toughOn() ? SKILL.tough.legMul : 1;
-  if (P.deb.leg > 0) spd *= 1 - (1 - DEBUFF.legMove) * toughK;
-  if (P.deb.fissure > 0) spd *= 1 - DEBUFF.fissureMove * P.deb.fissure * toughK;
+  /* 久经沙场：腿断 / 骨裂 / 冻伤三条减速各按自己的抗性打折（改 SKILL.tough 即刻生效）
+     以前三处都读 legMul，fissureMul / chillMul 是死字段，改配置不生效 */
+  const tough = toughOn();
+  const legK = tough ? SKILL.tough.legMul : 1;
+  const fissK = tough ? SKILL.tough.fissureMul : 1;
+  const chillK = tough ? SKILL.tough.chillMul : 1;
+  if (P.deb.leg > 0) spd *= 1 - (1 - DEBUFF.legMove) * legK;
+  if (P.deb.fissure > 0) spd *= 1 - DEBUFF.fissureMove * P.deb.fissure * fissK;
   if (armHurt()) spd *= 0.96;                        // 一只手挂着，跑起来也别扭
   /* 冻伤：每层再慢 7%，霜区里叠满三层基本挪不动 */
-  if (P.chill > 0) spd *= 1 - 0.07 * P.chill * (toughOn() ? 0.6 : 1);
+  if (P.chill > 0) spd *= 1 - 0.07 * P.chill * chillK;
   /* 手上拿着技能装置：脚步放慢一点 */
   if (modeOn()) spd *= 0.9;
   if (P.reloading > 0) spd *= 0.82;
