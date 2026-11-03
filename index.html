@@ -2039,8 +2039,8 @@ const OPERATORS = {
     },
     x: {
       name: '激素枪', short: '激素枪', tag: '大招', kind: 'healgun',
-      desc: '按 X 切出激素枪：左键射出追踪激素针 —— 命中烟雾把它染成治疗场，命中敌人按 0 级弹算伤害。右键抬枪收束。长按 X 直接给自己来一针：立刻 +34 血，之后 8 秒内再回 4.2/秒。充能 30 秒发一发、最多存 3 发（不是冷却，是弹匣）。',
-      cd: 0, charges: 3, dur: 0,
+      desc: '按 X 切出激素枪：左键射出追踪激素针 —— 命中烟雾把它染成治疗场，命中敌人按 0 级弹算伤害。右键抬枪收束。长按 X 直接给自己来一针：立刻 +34 血，之后 8 秒内再回 4.2/秒。充能 30 秒发一发、最多存 3 发（不是冷却，是弹匣）；开局没有存量，先等第一发充能。',
+      cd: SKILL.heal.recharge, charges: 3, dur: 0,
     },
     passive: {
       name: '专业救援', short: '专业救援', tag: '被动', kind: 'rescue',
@@ -2410,7 +2410,10 @@ function modeAvailable(k) {
     if (S.use <= 0) { uiToast('激素枪充能中 · ' + Math.ceil(S.recharge) + 's', 'small'); return false; }
     return true;
   }
-  if (S.cd > 0) { uiToast(def.short + '装填中', 'small'); return false; }
+  if (S.cd > 0) {
+    uiToast(def.short + (def.tag === '大招' ? '冷却 ' + Math.ceil(S.cd) + 's' : '装填中'), 'small');
+    return false;
+  }
   if (S.use <= 0) { uiToast(def.short + '回充中 · ' + Math.ceil(S.recharge) + 's', 'small'); return false; }
   return true;
 }
@@ -2422,9 +2425,10 @@ function consumeOp(k) {
   const S = P.op[k], def = op[k];
   S.use--;
   S.cd = 0.55;                                  // 出弹间隔：防连按双发
-  /* 充能型大招（激素枪）没有 CD，回充间隔就按「每发 30 秒」算 */
-  const gap = def.kind === 'healgun' ? SKILL.heal.recharge : def.cd;
-  if (S.use < def.charges && S.recharge <= 0) S.recharge = gap;
+  /* 回充间隔：每层按自己的冷却算；激素枪没有大 CD，cd 字段就是「每发 30 秒」 */
+  const cap = def.charges || 1;
+  const gap = Math.max(0.5, def.cd || 0);
+  if (S.use < cap && S.recharge <= 0) S.recharge = gap;
 }
 
 function magAimDist() { return Math.hypot(mouse.wx - P.x, mouse.wy - P.y); }
@@ -3345,12 +3349,19 @@ function pickSpawnPoint() {
 /* 每局开局把干员技能重置：储备按表回满、冷却归零、外骨骼一定关着 */
 function initOperatorSkills() {
   const op = opDef();
+  /* 开局状态：G / V 不压初始冷却，满储备、落地就能用；X 是大招，开局就带着
+     一整段冷却转起来（充能型的激素枪等价成「0 发、等一个充能周期」），
+     所以谁都不能一落地就把大招甩出去。 */
+  const xCd = op ? Math.max(0, op.x.cd || 0) : 0;
+  const xCharge = !!(op && (op.x.charges || 1) > 1);
   P.op = {
     /* 储备制：use 是还能连放几层；recharge 是下一层的回充倒计时。
        打掉一层后立刻开始回充，回满一层接着回下一层 —— 手上有余量就能连放 */
     g: { cd: 0, use: op ? op.g.charges : 0, recharge: 0 },
     v: { cd: 0, use: op ? op.v.charges : 0, recharge: 0 },
-    x: { cd: 0, on: false, t: 0, use: op ? (op.x.charges || 1) : 0, recharge: 0 },
+    x: { cd: xCharge ? 0 : xCd, on: false, t: 0,
+         use: op ? (xCharge ? 0 : (op.x.charges || 1)) : 0,
+         recharge: xCharge ? xCd : 0 },
     /* 技能手持模式：拿出来的雷 / 弓 / 装置 / 发射器。有 mode 时左键右键都归技能管，
        枪是收起来的。结构见 enterMode() */
     mode: null,
@@ -5199,9 +5210,7 @@ function useTactic(dist) {
   if (S.cd > 0) { uiToast(label + '装填中', 'small'); return; }
   if (S.use <= 0) { uiToast(label + '回充中 · ' + Math.ceil(S.recharge) + 's', 'small'); return; }
 
-  S.use--;
-  S.cd = 0.55;                                  // 出弹间隔：防连按双发，不是大 CD
-  if (S.use < op.g.charges && S.recharge <= 0) S.recharge = op.g.cd;
+  consumeOp('g');                               // 扣层 + 出弹间隔 + 开始回充下一层
 
   if (op.g.kind === 'magbomb') throwMagBomb(dist);
   else if (op.g.kind === 'beesmoke') throwBeeSmoke();
@@ -5375,9 +5384,7 @@ function useSkill() {
   if (S.cd > 0) { uiToast(label + '冷却 ' + Math.ceil(S.cd) + 's', 'small'); return; }
   if (S.use <= 0) { uiToast(label + '回充中 · ' + Math.ceil(S.recharge) + 's', 'small'); return; }
 
-  S.use--;
-  S.cd = 0.55;                                  // 出弹间隔：防连按双发，不是大 CD
-  if (S.use < op.v.charges && S.recharge <= 0) S.recharge = op.v.cd;
+  consumeOp('v');                               // 扣层 + 出弹间隔 + 开始回充下一层
 
   if (op.v.kind === 'dash') {
     dashForward();
@@ -6443,16 +6450,19 @@ function updateOperatorSkills(dt) {
   S.x.cd = Math.max(0, S.x.cd - dt);
   P.concuss = Math.max(0, P.concuss - dt);
 
-  /* 储备回充：打掉一层就开始计时，回满一层接着回下一层 */
-  for (const k of ['g', 'v']) {
+  /* 储备回充：打掉一层就开始计时，回满一层接着回下一层。
+     G / V / X 走同一套；激素枪是按「充能」发的，在下面单独处理 */
+  for (const k of ['g', 'v', 'x']) {
     const sk = S[k], def = op ? op[k] : null;
-    if (!def) continue;
-    if (sk.use < def.charges && sk.recharge > 0) {
+    if (!def || def.kind === 'healgun') continue;
+    const cap = def.charges || 1;
+    if (sk.use < cap && sk.recharge > 0) {
       sk.recharge -= dt;
       if (sk.recharge <= 0) {
         sk.use++;
-        sk.recharge = sk.use < def.charges ? def.cd : 0;
-        popup(P.x, P.y - 58, (def.short || '战术道具') + ' +1', '#9fd0e8', 11);
+        sk.recharge = sk.use < cap ? def.cd : 0;
+        popup(P.x, P.y - 58, k === 'x' ? (def.short + ' 就绪') : (def.short || '战术道具') + ' +1',
+              k === 'x' ? '#ffb27a' : '#9fd0e8', 11);
       }
     }
   }
@@ -6480,12 +6490,12 @@ function updateOperatorSkills(dt) {
   P.kd = Math.max(0, (P.kd || 0) - dt);
   if (P.op.rescueCd > 0) P.op.rescueCd = Math.max(0, P.op.rescueCd - dt);
 
-  /* 蜂医激素枪：按「充能」回，不是冷却 */
+  /* 蜂医激素枪：按「充能」回，不是冷却 —— 每充满一格就是一发（op.x.cd = 30s） */
   if (op && op.x.kind === 'healgun' && S.x.use < op.x.charges) {
     S.x.recharge = Math.max(0, S.x.recharge - dt);
     if (S.x.recharge <= 0) {
       S.x.use++;
-      S.x.recharge = S.x.use < op.x.charges ? SKILL.heal.recharge : 0;
+      S.x.recharge = S.x.use < op.x.charges ? op.x.cd : 0;
       popup(P.x, P.y - 58, '激素针 +1 · ' + S.x.use + '/' + op.x.charges, '#8dffc0', 11);
     }
   }
@@ -7737,12 +7747,14 @@ function killEnemy(e) {
   G.combo++;
   G.comboTimer = 2.6;
   exoOnKill();                  // 外骨骼期间：每倒一个都续 5 秒 + 回 30 血 + 满体力
-  /* 威龙：动力推进每倒一个直接扣 10 秒冷却 */
-  if (P.op && P.op.v.cd > 0) {
+  /* 威龙：动力推进每倒一个直接扣 10 秒冷却（冷却在 recharge 上，cd 只剩出弹间隔） */
+  if (P.op && (P.op.v.cd > 0 || P.op.v.recharge > 0)) {
     const od = opDef();
     if (od && od.v.kind === 'dash') {
-      P.op.v.cd = Math.max(0, P.op.v.cd - SKILL.dash.killCd);
-      popup(e.x, e.y - e.r - 46, '推进 -' + SKILL.dash.killCd + 's', '#8fe0ff', 11);
+      const cut = SKILL.dash.killCd;
+      if (P.op.v.recharge > 0) P.op.v.recharge = Math.max(0, P.op.v.recharge - cut);
+      else P.op.v.cd = Math.max(0, P.op.v.cd - cut);
+      popup(e.x, e.y - e.r - 46, '推进 -' + cut + 's', '#8fe0ff', 11);
     }
   }
   const mult = 1 + Math.min(G.combo, 20) * 0.06;
@@ -12249,11 +12261,14 @@ function drawSkillBar(mono) {
     { k: 'V', cn: op.v.short, col: '#ffd66b', cd: S.v.cd, max: op.v.cd, use: S.v.use, cap: op.v.charges, rech: S.v.recharge },
     xCharged
       ? { k: 'X', cn: op.x.short, col: '#8dffc0',
-          cd: S.x.use <= 0 ? S.x.recharge : 0, max: SKILL.heal.recharge,
+          cd: S.x.use <= 0 ? S.x.recharge : 0, max: op.x.cd,
           use: S.x.use, cap: op.x.charges,
           rech: S.x.use < op.x.charges ? S.x.recharge : 0 }
-      : { k: 'X', cn: op.x.short, col: '#ff8a4c', cd: S.x.on ? S.x.t : S.x.cd,
-          max: S.x.on ? op.x.dur : op.x.cd, use: S.x.on ? 1 : 0, cap: 1, on: S.x.on },
+      : { k: 'X', cn: op.x.short, col: '#ff8a4c',
+          /* 没存货时显示的是「回充还有多久」，不是那个 0.55 秒的出弹间隔 */
+          cd: S.x.on ? S.x.t : (S.x.use <= 0 ? S.x.recharge : S.x.cd),
+          max: S.x.on ? op.x.dur : op.x.cd,
+          use: S.x.on ? 1 : S.x.use, cap: 1, on: S.x.on },
   ];
 
   ctx.save();
@@ -13331,8 +13346,8 @@ function renderOpsPanel() {
   const vUnit = op.v.kind === 'drone' ? '台' : '组';
   const vMeta = '小技能 · CD ' + op.v.cd + 's' + (op.v.charges > 1 ? ' · 储备 ' + op.v.charges + ' ' + vUnit : '');
   const xMeta = (op.x.charges || 1) > 1
-    ? '大招 · 充能 ' + (SKILL.heal.recharge) + 's / 发 · 上限 ' + op.x.charges + ' 发'
-    : '大招 · CD ' + op.x.cd + 's' + (op.x.dur ? ' · 持续 ' + op.x.dur + 's' : '');
+    ? '大招 · 充能 ' + op.x.cd + 's / 发 · 上限 ' + op.x.charges + ' 发 · 开局 0 发'
+    : '大招 · CD ' + op.x.cd + 's' + (op.x.dur ? ' · 持续 ' + op.x.dur + 's' : '') + ' · 开局转 CD';
   const pKey = op.passive.kind === 'slide' ? 'C' : '被动';
   det.innerHTML =
     '<div class="ops-head"><div class="opavatar">' + op.name.slice(-1) + '</div>' +
