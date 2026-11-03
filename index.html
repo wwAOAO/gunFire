@@ -3626,7 +3626,9 @@ function addStop(id, n) {
   const key = SURGERIES[id] ? id : SURG_ORDER[0];
   if (!P.surgs) P.surgs = {};
   const s = P.surgs[key] || (P.surgs[key] = { uses: 0 });
-  s.uses = Math.min(SURGERIES[key].uses, (s.uses | 0) + Math.max(1, n | 0));
+  const before = s.uses | 0;
+  s.uses = Math.min(SURGERIES[key].uses, before + Math.max(1, n | 0));
+  return s.uses - before;            // 0 = 本来就带满了，这件带不走
 }
 
 /* 大厅里查存档的那一套（与局内的 medCount / medTotal 对应） */
@@ -8346,7 +8348,8 @@ function layoutLoot(items, speed) {
 function updateSearch(dt) {
   let best = null, bestD = 1e9;
   for (const c of G.crates) {
-    if (c.opened) continue;
+    /* 翻过但没拿干净的箱子仍然算目标：能回来接着翻 */
+    if (c.opened && !crateLeft(c)) continue;
     const d = dist(P.x, P.y, c.x, c.y);
     if (d < 76 && d < bestD) { best = c; bestD = d; }
   }
@@ -8620,15 +8623,21 @@ function addAmmo(mags) {
   return n;
 }
 
-/* 翻到某一件时才真正入账 */
+/* 翻到某一件时才真正入账。
+   返回 false = 这件带不走（没枪能用 / 器械已满）—— 它会被留在箱子里，下次还能拿。 */
 function applyLootItem(it, c) {
+  let ok = true;
   if (it.kind === 'relic') addRelic(it.id, 1);
   else if (it.kind === 'med') addMed(it.med || STARTER_MEDKIT, it.n || 1);
   else if (it.kind === 'stop') addStop(it.stop || 'bandage', it.n || 1);
-  else if (it.kind === 'surg') addSurg(it.surg || SURG_ORDER[0], it.n || 1);
+  else if (it.kind === 'surg') {
+    const got = addSurg(it.surg || SURG_ORDER[0], it.n || 1);
+    if (got <= 0) { ok = false; it.blocked = '器械已带满'; }
+  }
   else if (it.kind === 'ammo') {
     const got = addAmmo(it.mags || 1);
     it.got = got;                       // 只用于飘字，面板上仍显示「×2 匣」
+    if (got <= 0) { ok = false; it.blocked = '没有能用的枪'; }
   }
   else if (it.kind === 'weapon') {
     const w = it.weapon;
@@ -8653,29 +8662,59 @@ function applyLootItem(it, c) {
     G.foundMods.push(it.mod);
   }
   if (c) {
-    const txt = it.got !== undefined
-      ? (it.got > 0 ? it.name + ' +' + it.got : it.name + ' 无枪可用')
-      : it.name + ' ' + it.val;
-    popup(c.x, c.y - 26, txt, it.color, 14);
+    const txt = !ok
+      ? (it.name + ' · ' + it.blocked + '，留在箱里')
+      : (it.got !== undefined
+        ? (it.got > 0 ? it.name + ' +' + it.got : it.name + ' 无枪可用')
+        : it.name + ' ' + it.val);
+    popup(c.x, c.y - 26, txt, ok ? it.color : '#ff6b8a', 14);
     burst(c.x + rand(-12, 12), c.y + rand(-8, 8), 4, {
-      color: [it.color, '#ffffff'], life: 0.4, r: 2.5, spdMin: 30, spdMax: 130, glow: true,
+      color: ok ? [it.color, '#ffffff'] : ['#ff6b8a', '#ffffff'], life: 0.4, r: 2.5, spdMin: 30, spdMax: 130, glow: true,
     });
   }
+  return ok;
+}
+
+/* 箱子第一次被翻开时才掷骰子，之后一直记着里面有什么 ——
+   「没拿走的东西」会留在原地，可以回来接着拿。 */
+function crateItems(c) {
+  if (!c.items) {
+    c.items = rollContainer(containerOf(c.kind).id);
+    for (const it of c.items) { it.taken = false; it.blocked = ''; }
+  }
+  return c.items;
+}
+/* 还没拿到手的件数。没搜过的箱子按「不知道几件」处理，返回 0 */
+function crateLeft(c) {
+  if (!c || !c.items) return 0;
+  let n = 0;
+  for (const it of c.items) if (!it.taken) n++;
+  return n;
 }
 
 function startLoot(c) {
-  if (!c || c.opened) return;
+  if (!c || G.lootPanel) return false;
   const C = containerOf(c.kind);
+  const left = crateItems(c).filter(it => !it.taken);
+  if (!left.length) { uiToast(C.name + ' · 已经搜空了', 'small'); return false; }
+
+  const again = !!c.opened;              // 第二次翻：不再重掷、不再吵到敌人
   c.opened = true;
   c.hover = 1;
-  const items = rollContainer(C.id);
-  const total = layoutLoot(items, C.speed);
-  G.lootPanel = { items, t: 0, shown: 0, closeT: 0, crate: c, total, col: C };
+  for (const it of left) it.blocked = '';
+  const total = layoutLoot(left, again ? Math.min(C.speed, 0.7) : C.speed);
+  G.lootPanel = { items: left, t: 0, shown: 0, closeT: 0, crate: c, total, col: C, again };
   Sfx.loot();
+
+  if (again) {
+    popup(c.x, c.y - 40, '接着翻 · 还剩 ' + left.length + ' 件', C.color, 12);
+    return true;
+  }
   burst(c.x, c.y, 18, { color: [C.color, '#ffffff', C.color], life: 0.6, r: 4, spdMin: 40, spdMax: 240, glow: true });
   // 铁柜、军械箱开起来是有动静的：附近的敌人会过来看看
   if (C.loud) emitNoise(c.x, c.y, C.loud, 0.34);
   if (C.speed > 1.2) popup(c.x, c.y - 40, C.loud ? C.name + ' · 翻得慢、动静大' : C.name + ' · 翻找较慢', C.color, 12);
+  return true;
 }
 
 function updateLootPanel(dt) {
@@ -8687,33 +8726,53 @@ function updateLootPanel(dt) {
   while (L.shown < L.items.length) {
     const it = L.items[L.shown];
     if (L.t < it.ready) break;
-    applyLootItem(it, L.crate);
-    const hi = it.tier === 'myth' || it.tier === 'legend' || it.tier === 'epic';
-    Sfx.tone(620 + L.shown * 70 + (hi ? 220 : 0), 0.06, hi ? 0.11 : 0.07, 'square');
-    if (hi) shake(it.tier === 'myth' ? 4.5 : (it.tier === 'legend' ? 3 : 1.5));
+    const ok = applyLootItem(it, L.crate);
+    if (ok) {
+      it.taken = true;
+      const hi = it.tier === 'myth' || it.tier === 'legend' || it.tier === 'epic';
+      Sfx.tone(620 + L.shown * 70 + (hi ? 220 : 0), 0.06, hi ? 0.11 : 0.07, 'square');
+      if (hi) shake(it.tier === 'myth' ? 4.5 : (it.tier === 'legend' ? 3 : 1.5));
+    } else {
+      Sfx.tone(200, 0.09, 0.05, 'square');       // 带不走的闷响
+    }
     L.shown++;
   }
 
+  // 走开就收手：没翻出来的留在箱子里，回来还能接着翻
+  if (dist(P.x, P.y, L.crate.x, L.crate.y) > 160) { closeLootPanel(false); return; }
+
   if (L.shown >= L.items.length) {
     L.closeT += dt;
-    if (L.closeT > 1.15) { closeLootPanel(); return; }
+    if (L.closeT > 1.15) closeLootPanel(false);
   }
-  // 走开就收手，别让面板挂在那里
-  if (dist(P.x, P.y, L.crate.x, L.crate.y) > 160) closeLootPanel();
 }
 
-function closeLootPanel() {
+/* collect=true ：按 F / 面板里的「收下」—— 剩下的全收，等于跳过动画
+   collect=false：走开 / 自然结束 —— 已经翻出来的进了包，没翻出来的留在箱里 */
+function closeLootPanel(collect) {
   const L = G.lootPanel;
   if (!L) return;
-  while (L.shown < L.items.length) { applyLootItem(L.items[L.shown], null); L.shown++; }
+  const crate = L.crate;
+  if (collect) {
+    for (let i = 0; i < L.items.length; i++) {
+      const it = L.items[i];
+      if (it.taken) continue;
+      if (applyLootItem(it, null) !== false) it.taken = true;
+    }
+    L.shown = L.items.length;
+  }
   G.lootPanel = null;
+  if (!collect && crate) {
+    const left = crateLeft(crate);
+    if (left > 0) uiToast('箱里还剩 ' + left + ' 件 · 回来按 F 接着翻', 'small');
+  }
 }
 
-/* E 键：没开箱就开箱，正在翻就直接收下 */
+/* F 键：没开箱就开箱，正在翻就直接收下，搜空的箱子给一句提示 */
 function searchInteract() {
-  if (G.lootPanel) { closeLootPanel(); return; }
+  if (G.lootPanel) { closeLootPanel(true); return; }
   const c = G.searchTarget;
-  if (c && !c.opened && dist(P.x, P.y, c.x, c.y) < LOOT_RANGE) startLoot(c);
+  if (c && dist(P.x, P.y, c.x, c.y) < LOOT_RANGE) startLoot(c);
 }
 
 function updateExtract(dt) {
@@ -8908,11 +8967,17 @@ function drawExtracts() {
   }
 }
 
-/* 容器外形：六种各不相同，远远看一眼就知道值不值得绕路 */
+/* 容器外形：六种各不相同，远远看一眼就知道值不值得绕路。
+   翻过的箱子壳体转灰 —— 但里面还有东西时会亮一圈琥珀边，跟「搜空了」区分开。 */
 function drawContainerBody(c, C, isTarget) {
+  const spent = c.opened && !crateLeft(c);       // 翻过、而且拿干净了
   const body = c.opened ? '#141c24' : C.body;
-  const line = c.opened ? 'rgba(90,110,130,0.5)' : C.dim + (isTarget ? '1)' : '0.78)');
-  const inner = c.opened ? 'rgba(80,100,120,0.32)' : C.dim + '0.40)';
+  const line = spent
+    ? 'rgba(90,110,130,0.5)'
+    : (c.opened ? 'rgba(255,190,120,' + (isTarget ? '0.95)' : '0.72)') : C.dim + (isTarget ? '1)' : '0.78)'));
+  const inner = spent
+    ? 'rgba(80,100,120,0.32)'
+    : (c.opened ? 'rgba(180,140,90,0.45)' : C.dim + '0.40)');
   const lw = isTarget ? 2 : 1.5;
 
   const frame = (w, h, r) => {
@@ -8932,8 +8997,8 @@ function drawContainerBody(c, C, isTarget) {
     }
     case 'med': {
       frame(28, 24, 2);
-      ctx.fillStyle = c.opened ? 'rgba(80,100,120,0.22)' : C.dim + '0.58)';
-      drawRoundRect(-8, -2, 16, 4, 1); ctx.fill();             // 十字
+      ctx.fillStyle = inner;                                  // 十字
+      drawRoundRect(-8, -2, 16, 4, 1); ctx.fill();
       drawRoundRect(-2, -8, 4, 16, 1); ctx.fill();
       break;
     }
@@ -8981,16 +9046,19 @@ function drawCrates() {
   for (const c of G.crates) {
     const C = containerOf(c.kind);
     const bob = Math.sin(t * 2.2 + c.phase) * 1.8;
-    const isTarget = G.searchTarget === c && !c.opened;
+    const isTarget = G.searchTarget === c;
+    const spent = c.opened && !crateLeft(c);
 
     ctx.save();
     ctx.translate(c.x, c.y + bob);
 
-    if (!c.opened) {
+    if (!spent) {
       const pulse = 0.55 + Math.sin(t * 3 + c.phase) * 0.45;
+      /* 没翻过的用容器本色；翻过还剩东西的一律转琥珀色，和角标对上 */
+      const gc = c.opened ? 'rgba(255,190,120,' : C.dim;
       const g = ctx.createRadialGradient(0, 0, 4, 0, 0, 50);
-      g.addColorStop(0, C.dim + (0.24 * pulse).toFixed(3) + ')');
-      g.addColorStop(1, C.dim + '0)');
+      g.addColorStop(0, gc + (0.24 * pulse).toFixed(3) + ')');
+      g.addColorStop(1, gc + '0)');
       ctx.fillStyle = g;
       ctx.beginPath(); ctx.arc(0, 0, 50, 0, TAU); ctx.fill();
     }
@@ -9003,15 +9071,34 @@ function drawCrates() {
     ctx.shadowBlur = 0;
     ctx.shadowOffsetY = 0;
 
+    /* 翻过但没拿干净：右上角挂一个琥珀色小角标，写还剩几件 —— 
+       一眼就能看出「这箱还能回去翻」，不用凭记忆 */
+    if (c.opened && !spent) {
+      const left = crateLeft(c);
+      const pulse = 0.55 + Math.sin(t * 3.4 + c.phase) * 0.45;
+      ctx.save();
+      ctx.translate(C.r * 0.62, -C.r * 0.62);
+      ctx.fillStyle = 'rgba(10,16,22,0.9)';
+      ctx.strokeStyle = 'rgba(255,190,120,' + (0.5 + pulse * 0.5).toFixed(2) + ')';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(0, 0, 7, 0, TAU); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#ffce8a';
+      ctx.font = '800 9px ui-monospace, Consolas, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(String(Math.min(left, 9)), 0, 3.2);
+      ctx.restore();
+    }
+
     if (isTarget) {
       // 不再画长按进度环，只做一圈呼吸光提示「按 F 就能开」
       const pulse = 0.5 + Math.sin(t * 4.6) * 0.5;
-      ctx.strokeStyle = C.dim + (0.28 + pulse * 0.55).toFixed(2) + ')';
+      const tc = c.opened ? 'rgba(255,190,120,' : C.dim;
+      ctx.strokeStyle = tc + (0.28 + pulse * 0.55).toFixed(2) + ')';
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.arc(0, 0, C.r + 6 + pulse * 3, 0, TAU);
       ctx.stroke();
-      ctx.fillStyle = C.dim + (0.10 + pulse * 0.12).toFixed(2) + ')';
+      ctx.fillStyle = tc + (0.10 + pulse * 0.12).toFixed(2) + ')';
       ctx.beginPath();
       ctx.arc(0, 0, C.r + 5, 0, TAU);
       ctx.fill();
@@ -12251,18 +12338,20 @@ function drawHUD() {
   ctx.restore();
 
   // ── 搜刮提示 ──
-  if (G.searchTarget && !G.searchTarget.opened && !G.lootPanel) {
+  if (G.searchTarget && !G.lootPanel) {
     const c = G.searchTarget;
     const CC = containerOf(c.kind);
+    const left = crateLeft(c);
+    const again = c.opened && left > 0;
     const sx = (c.x - G.cam.x) * ZOOM, sy = (c.y - G.cam.y) * ZOOM;
     ctx.save();
     ctx.textAlign = 'center';
     ctx.font = '700 12px ' + mono;
-    ctx.fillStyle = CC.dim + '0.95)';
-    ctx.fillText('[F] 搜刮' + CC.name, sx, sy + 46);
+    ctx.fillStyle = again ? 'rgba(255,206,138,0.95)' : CC.dim + '0.95)';
+    ctx.fillText(again ? ('[F] 接着翻 · 还剩 ' + left + ' 件') : ('[F] 搜刮' + CC.name), sx, sy + 46);
     ctx.font = '600 9px ' + mono;
     ctx.fillStyle = 'rgba(150,185,210,0.55)';
-    ctx.fillText(CC.hint, sx, sy + 60);
+    ctx.fillText(again ? '上次没拿完' : CC.hint, sx, sy + 60);
     ctx.restore();
     ctx.textAlign = 'left';
   }
@@ -12679,6 +12768,9 @@ function drawLootPanel(mono) {
     if (flipping) {
       ctx.fillStyle = 'rgba(170,200,220,' + (0.35 + holdK * 0.30).toFixed(2) + ')';
       ctx.fillText('\u00b7\u00b7\u00b7', x + w - 18, ry + 4);
+    } else if (it.blocked) {
+      ctx.fillStyle = '#ff6b8a';
+      ctx.fillText('带不走', x + w - 18, ry + 4);
     } else {
       ctx.fillStyle = it.color;
       ctx.fillText(it.val, x + w - 18, ry + 4);
@@ -12706,9 +12798,10 @@ function drawLootPanel(mono) {
   ctx.textAlign = 'center';
   ctx.font = '700 10px ' + mono;
   if (done) {
+    const stuck = L.items.filter(it => it.blocked && !it.taken).length;
     const pulse = 0.6 + Math.sin(G.time * 7) * 0.4;
     ctx.fillStyle = dim + (0.5 + pulse * 0.5).toFixed(2) + ')';
-    ctx.fillText('[F] 收 下', x + w / 2, y + h - 12);
+    ctx.fillText(stuck ? ('[F] 收下 · ' + stuck + ' 件带不走，留在箱里') : '[F] 收 下', x + w / 2, y + h - 12);
   } else {
     // 显示当前正在翻的这一档，让「翻得慢」有解释
     let cur = null;
