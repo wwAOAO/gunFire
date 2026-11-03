@@ -1041,37 +1041,37 @@ const STARTER_MELEE = 'knife_tactical';
 const MEDKITS = {
   inject_s: {
     name: '简易注射器', short: '简易针', code: 'SIMPLE INJECTOR',
-    dur: 30, hps: 5, wind: 3.5, price: 280, color: '#7fe3a8', size: 0.55,
+    dur: 30, hps: 5, wind: 3.5, price: 50, color: '#7fe3a8', size: 0.55,
     desc: '30 点耐久，5 血/秒，启动 3.5s。便宜、随身，扎一针先止血，量小但随时能续。',
     perk: '',
   },
   inject_m: {
     name: '强效注射器', short: '强效针', code: 'COMBAT INJECTOR',
-    dur: 60, hps: 12, wind: 3, price: 900, color: '#46e08a', size: 0.62,
+    dur: 60, hps: 12, wind: 3, price: 100, color: '#46e08a', size: 0.62,
     desc: '60 点耐久，12 血/秒，启动 3s。打架首选：读条最短，五秒灌满一管血。',
     perk: '',
   },
   kit_vehicle: {
     name: '车载急救包', short: '车载包', code: 'VEHICLE FIRST AID',
-    dur: 90, hps: 6, wind: 5, price: 1000, color: '#58c4d8', size: 0.82,
+    dur: 90, hps: 6, wind: 5, price: 20, color: '#58c4d8', size: 0.82,
     desc: '90 点耐久，6 血/秒，启动 5s。回血最慢，但挂水时照样跑得动——被追着撤的时候唯一能用的一支。',
     perk: 'move',
   },
   kit_field: {
     name: '野战急救包', short: '野战包', code: 'FIELD TRAUMA KIT',
-    dur: 220, hps: 20, wind: 4, price: 1900, color: '#9ef2c8', size: 1.02,
+    dur: 220, hps: 20, wind: 4, price: 300, color: '#9ef2c8', size: 1.02,
     desc: '220 点耐久，20 血/秒，启动 4s。四秒起效、二十血一秒，一支顶好几条命，配着掩体用。',
     perk: '',
   },
   box_outdoor: {
     name: '户外医疗箱', short: '户外箱', code: 'OUTDOOR MED BOX',
-    dur: 350, hps: 20, wind: 4, price: 3200, color: '#7fd4ff', size: 1.32,
+    dur: 350, hps: 20, wind: 4, price: 500, color: '#7fd4ff', size: 1.32,
     desc: '350 点耐久，20 血/秒，启动 4s。开箱即处理伤口、注射止痛剂（30 秒减伤 10%）。',
     perk: 'cure', pain: 30,
   },
   box_battle: {
     name: '战地医疗箱', short: '战地箱', code: 'BATTLEFIELD MED CRATE',
-    dur: 800, hps: 30, wind: 3.5, price: 6000, color: '#ffd66b', size: 1.66,
+    dur: 800, hps: 30, wind: 3.5, price: 800, color: '#ffd66b', size: 1.66,
     desc: '800 点耐久，30 血/秒，启动 3.5s。顶级大箱，治伤口 + 60 秒止痛，一支撑满一个据点。',
     perk: 'cure', pain: 60,
   },
@@ -1088,27 +1088,27 @@ const WOUND_HEAL_K = 0.75; // 带伤口时包扎效率
 const STOPS = {
   bandage: {
     name: '弹力绷带', short: '绷带', code: 'ELASTIC BANDAGE',
-    grade: '白', uses: 1, sec: 1.8, price: 140, layers: 1, color: '#cfe6f2',
+    grade: '白', uses: 1, sec: 1.8, price: 10, layers: 1, color: '#cfe6f2',
     desc: '一次性。压迫包扎一处创口，止住 1 层流血。便宜，多带几卷。',
   },
   tourniquet: {
     name: '止血带', short: '止血带', code: 'TOURNIQUET',
-    grade: '绿', uses: 1, sec: 2.6, price: 320, layers: 99, color: '#ff9b6b',
+    grade: '绿', uses: 1, sec: 2.6, price: 20, layers: 99, color: '#ff9b6b',
     desc: '一次性。扎紧近心端，一次压住全部流血层。失血太多时这是保命的东西。',
   },
   pain_release: {
     name: '缓释止痛片', short: '缓释片', code: 'SUSTAINED RELEASE',
-    grade: '白', uses: 1, sec: 4, price: 320, pain: 200, color: '#e8eef4',
+    grade: '白', uses: 1, sec: 4, price: 50, pain: 200, color: '#e8eef4',
     desc: '1 次。含服后药效慢慢铺开，200 秒里受伤 -10%，臂折的负面被压住、贯穿伤黑边淡下去。压不住流血。',
   },
   pain_antibio: {
     name: '瓶装抗生素', short: '抗生素', code: 'BOTTLED ANTIBIOTICS',
-    grade: '绿', uses: 3, sec: 4, price: 1200, pain: 240, color: '#46e08a',
+    grade: '绿', uses: 3, sec: 4, price: 80, pain: 240, color: '#46e08a',
     desc: '3 次。抗生素把炎症压下去，疼痛跟着退：单次 240 秒止痛。一瓶三片，一片一片吃。',
   },
   pain_dve: {
     name: 'DVE 止疼片', short: 'DVE 片', code: 'DVE ANALGESIC',
-    grade: '紫', uses: 5, sec: 3, price: 3200, pain: 360, color: '#b46bff',
+    grade: '紫', uses: 5, sec: 3, price: 200, pain: 360, color: '#b46bff',
     desc: '5 次。DEK 的战地止疼片，单次 360 秒，读条只要 3 秒 —— 打完一波蹲下就能含一片。',
   },
 };
@@ -1122,17 +1122,17 @@ const STOP_PAINS = ['pain_release', 'pain_antibio', 'pain_dve'];
 const SURGERIES = {
   surg_simple: {
     name: '简易手术包', short: '简易手术', code: 'SIMPLE SURGERY KIT',
-    grade: '白', uses: 2, sec: 10, price: 1600, color: '#e8eef4',
+    grade: '白', uses: 2, sec: 10, price: 80, color: '#e8eef4',
     desc: '2 次 · 单次读条 10 秒。缝合与正骨的基础器械，慢，但能把命拼回来。',
   },
   surg_tactical: {
     name: '战术快拆手术包', short: '战术手术', code: 'TACTICAL SURGERY KIT',
-    grade: '绿', uses: 4, sec: 7, price: 3200, color: '#46e08a',
+    grade: '绿', uses: 4, sec: 7, price: 150, color: '#46e08a',
     desc: '4 次 · 单次读条 7 秒。预拆封的快取器械，摊开就能动刀，适合边打边处理。',
   },
   surg_dek: {
     name: 'DEK 野战手术包', short: 'DEK 手术', code: 'DEK FIELD SURGERY',
-    grade: '紫', uses: 7, sec: 5, price: 6400, color: '#b46bff',
+    grade: '紫', uses: 7, sec: 5, price: 300, color: '#b46bff',
     desc: '7 次 · 单次读条 5 秒。DEK 的野战外科箱，五次呼吸就能缝完一道贯穿伤。',
   },
 };
@@ -1900,8 +1900,9 @@ const METER = 18;
 const SKILL = {
   /* 烟雾弹：落点即起烟，0.3s 铺满、8s 总时长、最后 1.2s 收烟（起烟快、散得也快） */
   smoke: { r: 118, life: 8.0, grow: 0.30, fade: 1.2, range: 340 },
-  /* 三联装手炮：一组三发、0.11s 间隔；榴弹撞墙反弹最多 3 次再炸 */
-  gl: { dmg: 52, radius: 100, speed: 640, bounce: 3, fuse: 2.2, stun: 1.6, cripple: 6.0, selfMul: 0.5 },
+  /* 三联装手炮：打的是"准星那个点"，100 米封顶，飞到点就炸（撞墙也炸），不再靠引信瞎飘 */
+  gl: { dmg: 52, radius: 100, speed: 900, range: 100 * 18, spread: 26, maxFlight: 2.1,
+        stun: 1.6, cripple: 6.0, selfMul: 0.5 },
   /* 滑铲：奔跑中才能起手，0.45s 位移，无冷却（只吃一点体力） */
   slide: { dur: 0.45, mul: 2.6, cost: 10 },
   /* 动力外骨骼：移速与滑铲距离同时抬一档 */
@@ -1964,7 +1965,7 @@ const OPERATORS = {
     },
     v: {
       name: '三联装手炮', sub: '三头犬', short: '三头犬', tag: '小技能', kind: 'gl',
-      desc: '一次打出三发榴弹（间隔 0.11 秒），榴弹穿透敌人、只在撞墙时反弹（最多 3 次），2.2 秒固定引信起爆 —— 不会碰到敌人就炸，所以要算好提前量与反弹。爆炸半径 100、中心 52 伤：被炸到的敌人眩晕 1.6 秒并骨折（移速 -40%，持续 6 秒）。自炸只有一半伤害。储备 2 组可连放，打掉一组按冷却 70 秒回充。',
+      desc: '朝准星位置打出三发榴弹（左右各偏 26px，间隔 0.11s），落点就是爆点 —— 打多远就炸多远，最远 100 米；撞到墙或掩体就在墙上炸。飞行时间随距离走，最远 2.1 秒，所以要打移动目标得留提前量。爆炸半径 100、中心 52 伤：被炸到的敌人眩晕 1.6 秒并骨折（移速 -40%，持续 6 秒）。自炸只有一半伤害。储备 2 组可连放，打掉一组按冷却 70 秒回充。',
       cd: 70, charges: 2, shots: 3,
     },
     x: {
@@ -5385,21 +5386,45 @@ function updateMagbombs(dt) {
   }
 }
 
-/* ── V：三联装手炮（三头犬）—— 一次三发、间隔 0.11s，撞墙反弹 ── */
-function fireGL() {
-  const a = P.aim + rand(-0.025, 0.025);
-  const mx = P.x + Math.cos(a) * (P.r + 16);
-  const my = P.y + Math.sin(a) * (P.r + 16);
+/* ── V：三联装手炮（三头犬）—— 飞到准星落点炸，一次三发横着排开 ── */
+
+/* 准星落点：鼠标指向的世界坐标，最远 100 米；太近就推出去，别在脚面起爆 */
+function glAimPoint() {
+  const L = SKILL.gl;
+  let dx = mouse.x / ZOOM + G.cam.x - P.x;
+  let dy = mouse.y / ZOOM + G.cam.y - P.y;
+  let d = Math.hypot(dx, dy) || 1;
+  const far = d > L.range;
+  if (far) { dx *= L.range / d; dy *= L.range / d; d = L.range; }
+  if (d < 44) { dx *= 44 / d; dy *= 44 / d; d = 44; }
+  return { x: P.x + dx, y: P.y + dy, d, far };
+}
+
+function fireGL(tg, side) {
+  const L = SKILL.gl;
+  const t = tg || glAimPoint();
+  const base = Math.atan2(t.y - P.y, t.x - P.x);
+  /* 三发横向排开：落点是一小片而不是一个点，免得三发全叠在同一个人身上 */
+  const off = (side || 0) * L.spread;
+  const tx = t.x - Math.sin(base) * off;
+  const ty = t.y + Math.cos(base) * off;
+
+  const a = Math.atan2(ty - P.y, tx - P.x) + rand(-0.01, 0.01);
+  const mx = P.x + Math.cos(a) * (P.r + 10);
+  const my = P.y + Math.sin(a) * (P.r + 10);
+  const d = Math.max(24, Math.hypot(tx - mx, ty - my));
+  const flight = Math.min(L.maxFlight, d / L.speed);   // 到点就炸：飞行时间只跟距离有关
+
   G.gls.push({
     x: mx, y: my, px: mx, py: my,
-    vx: Math.cos(a) * SKILL.gl.speed,
-    vy: Math.sin(a) * SKILL.gl.speed,
-    r: 5, fuse: SKILL.gl.fuse, bounces: SKILL.gl.bounce,
+    vx: (tx - mx) / flight,
+    vy: (ty - my) / flight,
+    tx, ty, r: 5, fuse: flight + 0.12,
     travel: 0, spin: rand(0, TAU),
   });
-  P.recoil = Math.max(P.recoil, 3);
-  P.x -= Math.cos(a) * 3.2;
-  P.y -= Math.sin(a) * 3.2;
+  P.recoil = Math.max(P.recoil, 2.4);
+  P.x -= Math.cos(a) * 1.8;
+  P.y -= Math.sin(a) * 1.8;
   burst(mx, my, 9, {
     angle: a, spread: 0.42, spdMin: 80, spdMax: 280,
     color: ['#ffd66b', '#fff3c4'], life: 0.26, r: 3.2, glow: true,
@@ -5422,8 +5447,10 @@ function useSkill() {
   if (op.v.kind === 'dash') {
     dashForward();
   } else if (op.v.kind === 'gl') {
-    fireGL();
-    P.op.volley = { left: Math.max(0, (op.v.shots || 3) - 1), t: 0.11 };
+    /* 三发共用一个落点：按下那一刻锁定准星位置，之后动鼠标不会把弹撒出去 */
+    const tg = glAimPoint();
+    fireGL(tg, 0);
+    P.op.volley = { left: Math.max(0, (op.v.shots || 3) - 1), t: 0.11, tg, n: 1 };
     popup(P.x, P.y - 46, '三 头 犬', '#ffd66b', 12);
   }
   kineticKick();
@@ -5528,27 +5555,26 @@ function updateGls(dt) {
     g.spin += dt * 14;
     g.px = g.x; g.py = g.y;
 
-    const step = Math.hypot(g.vx, g.vy) * dt;
+    const spd = Math.hypot(g.vx, g.vy);
+    const step = spd * dt;
     const n = Math.max(1, Math.ceil(step / 8));
     let boom = false;
 
     for (let s = 0; s < n; s++) {
       const dtt = dt / n;
-      let nx = g.x + g.vx * dtt;
-      let ny = g.y + g.vy * dtt;
+      const nx = g.x + g.vx * dtt;
+      const ny = g.y + g.vy * dtt;
 
-      if (nx < 12 || nx > WORLD.w - 12) { nx = clamp(nx, 12, WORLD.w - 12); g.vx *= -0.62; g.bounces--; }
-      if (ny < 12 || ny > WORLD.h - 12) { ny = clamp(ny, 12, WORLD.h - 12); g.vy *= -0.62; g.bounces--; }
-      if (pointInObstacle(nx, g.y)) { nx = g.x; g.vx *= -0.62; g.bounces--; }
-      if (pointInObstacle(g.x, ny)) { ny = g.y; g.vy *= -0.62; g.bounces--; }
+      /* 撞到实体 / 撞出地图：就地起爆 —— 打墙上就在墙上炸，不再弹走 */
+      if (!pointInObstacle(g.x, g.y) &&
+          (pointInObstacle(nx, g.y) || pointInObstacle(g.x, ny))) { boom = true; break; }
+      if (nx < 12 || nx > WORLD.w - 12 || ny < 12 || ny > WORLD.h - 12) { boom = true; break; }
 
       g.x = nx; g.y = ny;
       g.travel += step / n;
 
-      /* 弹药用完了就一头撞死在墙上 */
-      if (g.bounces < 0) { boom = true; break; }
-
-      /* 不碰敌人就炸：榴弹穿透人群，只认 2.2s 固定引信和墙面反弹 */
+      /* 飞到准星落点就炸：不靠引信硬等，落点就是爆点 */
+      if (Math.hypot(g.tx - g.x, g.ty - g.y) <= 9) { g.x = g.tx; g.y = g.ty; boom = true; break; }
     }
 
     if (Math.random() < 0.8) {
@@ -5558,7 +5584,7 @@ function updateGls(dt) {
       });
     }
 
-    if (g.fuse <= 0) boom = true;
+    if (g.fuse <= 0) boom = true;      // 兜底：万一卡在什么刁钻角落，时间到也炸
     if (boom) { glBlast(g.x, g.y); G.gls.splice(i, 1); }
   }
 }
@@ -6559,7 +6585,9 @@ function updateOperatorSkills(dt) {
     S.volley.t -= dt;
     if (S.volley.t <= 0) {
       if (S.volley.left > 0) {
-        fireGL();
+        /* 左右交替排开（第一发正中，第二发偏左，第三发偏右） */
+        fireGL(S.volley.tg, (S.volley.n & 1) ? -1 : 1);
+        S.volley.n = (S.volley.n || 1) + 1;
         S.volley.left--;
         S.volley.t = 0.11;
       }
@@ -11188,6 +11216,75 @@ function drawGls() {
   }
 }
 
+/* 弹道会在哪儿被墙截断：预览用，和弹丸同一套判定（8px 步进） */
+function glImpact(t) {
+  const a = Math.atan2(t.y - P.y, t.x - P.x);
+  let x = P.x + Math.cos(a) * (P.r + 10);
+  let y = P.y + Math.sin(a) * (P.r + 10);
+  const dx = t.x - x, dy = t.y - y;
+  const d = Math.hypot(dx, dy);
+  const steps = Math.max(1, Math.ceil(d / 8));
+  const ux = dx / steps, uy = dy / steps;
+  for (let i = 0; i < steps; i++) {
+    const nx = x + ux, ny = y + uy;
+    if (!pointInObstacle(x, y) && (pointInObstacle(nx, y) || pointInObstacle(x, ny)))
+      return { x, y, blocked: true };
+    x = nx; y = ny;
+  }
+  return { x: t.x, y: t.y, blocked: false };
+}
+
+/* 手炮落点预览：准星指着哪儿，三发就落在哪儿 —— 超过 100 米打不到，圈变红。
+   画在迷雾之上（屏幕坐标）：不然远处那个圈会被黑糊掉，等于没有提示。 */
+function drawGlAim() {
+  if (G.scene !== 'playing' || !P.alive || isDowned() || modeOn()) return;
+  const op = opDef();
+  if (!op || !op.v || op.v.kind !== 'gl') return;
+  if (!P.op || P.op.v.use <= 0) return;          // 没货就别画，免得当成常驻准星
+
+  const t = glAimPoint();
+  const im = glImpact(t);                        // 墙挡在中间时，圈画在撞墙处
+  const L = SKILL.gl;
+  const col = t.far ? '255,86,72' : '255,190,110';
+  const sx = (im.x - G.cam.x) * ZOOM + G.shakeX;
+  const sy = (im.y - G.cam.y) * ZOOM + G.shakeY;
+  const px = (P.x - G.cam.x) * ZOOM + G.shakeX;
+  const py = (P.y - G.cam.y) * ZOOM + G.shakeY;
+  const rr = L.radius * ZOOM;
+
+  ctx.save();
+  ctx.lineCap = 'round';
+
+  ctx.strokeStyle = 'rgba(' + col + ',0.22)';
+  ctx.lineWidth = 1.3;
+  ctx.setLineDash([9, 10]);
+  ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(sx, sy); ctx.stroke();
+  ctx.setLineDash([]);
+
+  /* 爆炸范围：这一圈的边界就是能炸到的边界 */
+  ctx.strokeStyle = 'rgba(' + col + ',0.5)';
+  ctx.lineWidth = 1.6;
+  ctx.setLineDash([7, 7]);
+  ctx.beginPath(); ctx.arc(sx, sy, rr, 0, TAU); ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.strokeStyle = 'rgba(' + col + ',0.95)';
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.moveTo(sx - 9, sy); ctx.lineTo(sx + 9, sy);
+  ctx.moveTo(sx, sy - 9); ctx.lineTo(sx, sy + 9);
+  ctx.stroke();
+
+  const label = Math.round(Math.hypot(im.x - P.x, im.y - P.y) / 18) + 'm' +
+    (im.blocked ? ' · 撞墙' : (t.far ? ' · 超出 100m' : ''));
+  ctx.textAlign = 'center';
+  ctx.font = '700 10px ui-monospace, "Consolas", monospace';
+  ctx.fillStyle = 'rgba(' + col + ',0.95)';
+  ctx.fillText(label, sx, sy - rr - 9);
+  ctx.textAlign = 'left';
+  ctx.restore();
+}
+
 /* 磁吸炸弹：飞行时带青色尾焰；吸住之后闪红灯，越接近引爆闪得越快 */
 function drawMagbombs() {
   for (const b of G.magbombs) {
@@ -13313,6 +13410,7 @@ function render() {
   drawMarkedOverlays();      // 被标记的敌人重画在雾上面：隔着迷雾也看得见
   drawSniperBeams();
   drawLighting();
+  drawGlAim();               // 红狼手炮：准星落点 + 爆炸范围（画在迷雾之上才看得见）
   drawSmokeBlind();          // 自己在烟里：先糊住世界，再画 HUD
   if (G.scene === 'playing' || G.scene === 'paused') {
     drawOffscreenMarkers();
