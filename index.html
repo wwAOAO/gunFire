@@ -1392,23 +1392,23 @@ function slotAllowed(wid, slotId) {
    这张表必须排在 loadSave 之前 —— 老档清洗要用它。
    ══════════════════════════════════════════════════════════ */
 const CALIBERS = {
-  '919': { id:'919', name:'9×19mm 帕拉贝鲁姆', short:'9×19', box:50, base:4,
+  '919': { id:'919', name:'9×19mm 帕拉贝鲁姆', short:'9×19', full:'9×19mm', box:50, base:4,
            desc:'最通用的手枪弹，G17 / 93R / G18 共用。' },
-  '918': { id:'918', name:'9×18mm 马卡洛夫', short:'9×18', box:50, base:3,
+  '918': { id:'918', name:'9×18mm 马卡洛夫', short:'9×18', full:'9×18mm', box:50, base:3,
            desc:'野牛冲锋枪的螺旋弹鼓装的就是它，便宜量大。' },
-  '762x39': { id:'762x39', name:'7.62×39mm 苏制中间威力弹', short:'7.62×39', box:30, base:6,
+  '762x39': { id:'762x39', name:'7.62×39mm 苏制中间威力弹', short:'7.62×39', full:'7.62×39mm', box:30, base:6,
            desc:'AKM 的短弹：弹头重、存速低，近距离一发顶两发，出了两百米掉得厉害。' },
-  '545': { id:'545', name:'5.45×39mm 苏制小口径弹', short:'5.45×39', box:30, base:6,
+  '545': { id:'545', name:'5.45×39mm 苏制小口径弹', short:'5.45×39', full:'5.45×39mm', box:30, base:6,
            desc:'AK-12 的小口径弹：弹道平、后坐小，靠射速和连发精度吃饭。' },
-  '58': { id:'58', name:'5.8×42mm 国造步枪弹', short:'5.8×42', box:30, base:8,
+  '58': { id:'58', name:'5.8×42mm 国造步枪弹', short:'5.8×42', full:'5.8×42mm', box:30, base:8,
            desc:'QBZ 系列的制式弹：初速高、弹形细长，远距离存速比 5.45 更稳。' },
-  '12g': { id:'12g', name:'12 号霰弹', short:'12Ga', box:25, base:9,
+  '12g': { id:'12g', name:'12 号霰弹', short:'12Ga', full:'12 Gauge', box:25, base:9,
            desc:'M870 一次喷 8 枚弹丸，每颗单独结算。' },
-  '556': { id:'556', name:'5.56×45mm NATO', short:'5.56', box:30, base:7,
+  '556': { id:'556', name:'5.56×45mm NATO', short:'5.56×45', full:'5.56×45mm', box:30, base:7,
            desc:'M4A1 的制式步枪弹，穿甲与手感最均衡。' },
-  '762': { id:'762', name:'7.62×51mm NATO', short:'7.62', box:20, base:12,
+  '762': { id:'762', name:'7.62×51mm NATO', short:'7.62×51', full:'7.62×51mm', box:20, base:12,
            desc:'全威力步枪弹：SR9 拿它打半自动，R93 拿它拉栓，同一盒弹喂两把枪。' },
-  '338': { id:'338', name:'.338 Lapua Magnum', short:'.338', box:10, base:25,
+  '338': { id:'338', name:'.338 Lapua Magnum', short:'.338 LM', full:'.338 Lapua Magnum', box:10, base:25,
            desc:'AWM 的远程重弹，一发就是一笔钱。' },
 };
 const CAL_ORDER = ['919', '918', '762x39', '545', '58', '12g', '556', '762', '338'];
