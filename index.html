@@ -1110,8 +1110,9 @@ const DEFAULT_SAVE = () => ({
   carePick: 'med:' + STARTER_MEDKIT,   // 上次用的那种 —— 短按 5 直接掏它
   grenades: 1,
   /* 弹药库存：按口径 × 弹级存「还剩几发」。新档只送 68 发 9×19 一级白弹
-     （正好 4 个 G17 弹匣），别的口径自己买。 */
-  ammo: { '919': { 1: 68 } },
+     （正好 4 个 G17 弹匣），别的口径自己买。整张表按 CAL_ORDER 铺满，
+     免得新口径上架后存档里缺桶、写库存时踩 undefined。 */
+  ammo: freshAmmo(),
   ammoPick: { '919': 1 },     // 每个口径选用哪一级弹
   ammoPacks: 0,               // 弹药包：出击备弹上限 +50%
   pistolAmmo: 0,              // 已废弃：老档的「手枪弹盒」，迁移时折算成 9×19 白弹
@@ -1126,20 +1127,35 @@ const DEFAULT_SAVE = () => ({
    但老档既然曾经白拿，就保留这份所有权，不要凭空没收。
    注意：这里不能引用 WEAPONS —— 存档在数据表之前就加载了。 */
 const WEAPON_ID_MIGRATE = { smg: 'bizon', shotgun: 'm870', rifle: 'm4a1', sniper: 'r93', pistol: '93r' };
-const KNOWN_WEAPON_IDS = { g17: 1, '93r': 1, g18: 1, bizon: 1, m870: 1, m4a1: 1, sr9: 1, r93: 1 };
+const KNOWN_WEAPON_IDS = { g17: 1, '93r': 1, g18: 1, bizon: 1, m870: 1,
+                           akm: 1, ak12: 1, qbz95: 1, qbz191: 1, qbz192: 1,
+                           m4a1: 1, sr9: 1, r93: 1, awm: 1 };
 /* 手枪不能装枪托 —— 存档加载时就要判断，同样不能等 WEAPONS 表。
    以后加手枪，这里和 KNOWN_WEAPON_IDS 都要补上。 */
 const PISTOL_IDS = { g17: 1, '93r': 1, g18: 1 };
 
-/* 弹药清洗：补齐 6 个口径 × 8 个弹级。
-   老档（没有 ammo 字段）按拥有的枪各补 3 个弹匣的 1 级白弹，
-   当年买的「手枪弹盒」按一盒 51 发折算成 9×19 白弹，不白没收。 */
-function cleanAmmo(raw, owned, legacyPistolBoxes) {
+/* 空弹药表：CAL_ORDER 个口径 × 8 个弹级，全 0。
+   新档和清洗共用一份，加口径时不用再改两处。 */
+function emptyAmmo() {
   const out = {};
   for (const cal of CAL_ORDER) {
     out[cal] = {};
     for (let lv = 0; lv <= AMMO_LV_MAX; lv++) out[cal][lv] = 0;
   }
+  return out;
+}
+/* 新档：整张空表 + 68 发 9×19 一级白弹（4 个 G17 弹匣） */
+function freshAmmo() {
+  const a = emptyAmmo();
+  a['919'][1] = 68;
+  return a;
+}
+
+/* 弹药清洗：补齐所有口径 × 8 个弹级。
+   老档（没有 ammo 字段）按拥有的枪各补 3 个弹匣的 1 级白弹，
+   当年买的「手枪弹盒」按一盒 51 发折算成 9×19 白弹，不白没收。 */
+function cleanAmmo(raw, owned, legacyPistolBoxes) {
+  const out = emptyAmmo();
   const has = raw && typeof raw === 'object';
   if (has) {
     for (const cal of CAL_ORDER) {
@@ -1380,16 +1396,22 @@ const CALIBERS = {
            desc:'最通用的手枪弹，G17 / 93R / G18 共用。' },
   '918': { id:'918', name:'9×18mm 马卡洛夫', short:'9×18', box:50, base:3,
            desc:'野牛冲锋枪的螺旋弹鼓装的就是它，便宜量大。' },
+  '762x39': { id:'762x39', name:'7.62×39mm 苏制中间威力弹', short:'7.62×39', box:30, base:6,
+           desc:'AKM 的短弹：弹头重、存速低，近距离一发顶两发，出了两百米掉得厉害。' },
+  '545': { id:'545', name:'5.45×39mm 苏制小口径弹', short:'5.45×39', box:30, base:6,
+           desc:'AK-12 的小口径弹：弹道平、后坐小，靠射速和连发精度吃饭。' },
+  '58': { id:'58', name:'5.8×42mm 国造步枪弹', short:'5.8×42', box:30, base:8,
+           desc:'QBZ 系列的制式弹：初速高、弹形细长，远距离存速比 5.45 更稳。' },
   '12g': { id:'12g', name:'12 号霰弹', short:'12Ga', box:25, base:9,
            desc:'M870 一次喷 8 枚弹丸，每颗单独结算。' },
   '556': { id:'556', name:'5.56×45mm NATO', short:'5.56', box:30, base:7,
            desc:'M4A1 的制式步枪弹，穿甲与手感最均衡。' },
   '762': { id:'762', name:'7.62×51mm NATO', short:'7.62', box:20, base:12,
-           desc:'SR9 的全威力步枪弹，单发很重。' },
+           desc:'全威力步枪弹：SR9 拿它打半自动，R93 拿它拉栓，同一盒弹喂两把枪。' },
   '338': { id:'338', name:'.338 Lapua Magnum', short:'.338', box:10, base:25,
-           desc:'R93 的远程重弹，一发就是一笔钱。' },
+           desc:'AWM 的远程重弹，一发就是一笔钱。' },
 };
-const CAL_ORDER = ['919', '918', '12g', '556', '762', '338'];
+const CAL_ORDER = ['919', '918', '762x39', '545', '58', '12g', '556', '762', '338'];
 
 /* 0~7 级：颜色 / 伤害倍率 / 价格倍率（价格 = 口径基价 × 倍率 × 每盒发数） */
 const AMMO_TIERS = [
@@ -1414,13 +1436,18 @@ const AMMO_LV_MAX = AMMO_TIERS.length - 1;
 /* 1~6 级甲的颜色，敌人血条外圈用 */
 const ARMOR_LV_COLOR = ['#5a6b78', '#dfe9f2', '#63d68a', '#4fa8ff', '#b782ff', '#ffcc4d', '#ff5d5d'];
 
-/* 枪 → 口径。以后加枪，这里必须补一条，否则默认按 9×19 算。 */
+/* 枪 → 口径。以后加枪，这里必须补一条，否则默认按 9×19 算。
+   R93 改成 7.62×51 之后，.338 就是 AWM 专属的重弹。 */
 const CAL_OF_WEAPON = {
   g17: '919', '93r': '919', g18: '919',
-  bizon: '918', m870: '12g', m4a1: '556', sr9: '762', r93: '338',
+  bizon: '918', m870: '12g',
+  akm: '762x39', ak12: '545',
+  qbz95: '58', qbz191: '58', qbz192: '58',
+  m4a1: '556', sr9: '762', r93: '762', awm: '338',
 };
 /* 老档迁移时按「3 个弹匣」补的 1 级白弹（新档只送 9×19） */
-const STARTER_AMMO = { '919': 51, '918': 64, '12g': 21, '556': 90, '762': 54, '338': 15 };
+const STARTER_AMMO = { '919': 51, '918': 64, '762x39': 90, '545': 90, '58': 90,
+                       '12g': 21, '556': 90, '762': 54, '338': 15 };
 
 /* 存档必须等 KNOWN_WEAPON_IDS / MODS 都就位之后再读，
    否则旧档会在 TDZ 里被 catch 吞掉，等于每次刷新都重置。 */
@@ -1490,6 +1517,15 @@ const WEAPONS = {
     color: '#ffab5e', range: 520, knock: 170, sound: 'shotgun', noise: 860,
     bars: { dmg: .90, rate: .22, mag: .22, acc: .12 },
   },
+  akm: {
+    cat: 'rifle', label: '步枪 · AKM', short: 'AKM', name: 'AKM', code: 'KALASHNIKOV AKM', price: 3600, cal: '762x39',
+    desc: '7.62×39 的老家伙。单发 40 点、两枪就能把小兵按在地上，但后坐大、散布也大 —— 中距离得靠点射，别一直按着。',
+    dmg: 40, rate: 0.118, spread: 0.030, count: 1, mode: 'auto',
+    bspeed: 1650, mag: 30, reload: 2.3, recoil: 4.6, size: 3.7, reserveMul: 5,
+        ads: { spread: 0.52, move: 0.58, time: 0.19 },
+    color: '#ff8f5e', range: 1250, knock: 130, sound: 'ak', pierce: 1, noise: 960,
+    bars: { dmg: .55, rate: .70, mag: .60, acc: .72 },
+  },
   m4a1: {
     cat: 'rifle', label: '步枪 · M4A1', short: 'M4A1', name: 'M4A1', code: 'COLT M4A1', price: 4000, cal: '556',
     desc: '全自动主力步枪。射速、精度、手感都在中上，子弹能穿透一名敌人——据点里最稳的一把。',
@@ -1498,6 +1534,42 @@ const WEAPONS = {
         ads: { spread: 0.42, move: 0.62, time: 0.18 },
     color: '#c9a3ff', range: 1500, knock: 100, sound: 'rifle', pierce: 1, noise: 900,
     bars: { dmg: .52, rate: .74, mag: .60, acc: .82 },
+  },
+  qbz95: {
+    cat: 'rifle', label: '步枪 · QBZ-95', short: 'QBZ-95', name: 'QBZ-95', code: 'NORINCO QBZ-95', price: 4400, cal: '58',
+    desc: '无托结构的 5.8mm 制式步枪。重心压在握把后面，抬枪比同价位都快，机匣短、换弹顺手；缺点是加装配件的余地小。',
+    dmg: 32, rate: 0.094, spread: 0.020, count: 1, mode: 'auto',
+    bspeed: 1800, mag: 30, reload: 1.80, recoil: 3.2, size: 3.4, reserveMul: 5,
+        ads: { spread: 0.44, move: 0.64, time: 0.15 },
+    color: '#b6f07a', range: 1400, knock: 95, sound: 'rifle', pierce: 1, noise: 880,
+    bars: { dmg: .51, rate: .75, mag: .60, acc: .83 },
+  },
+  ak12: {
+    cat: 'rifle', label: '步枪 · AK-12', short: 'AK-12', name: 'AK-12', code: 'KALASHNIKOV AK-12', price: 4600, cal: '545',
+    desc: '5.45×39 的新一代 AK。射速快、后坐被压得比 AKM 小得多，连续点射很稳；单发只有 30 点，靠弹速和节奏补伤害。',
+    dmg: 30, rate: 0.086, spread: 0.019, count: 1, mode: 'auto',
+    bspeed: 1750, mag: 30, reload: 1.90, recoil: 2.9, size: 3.5, reserveMul: 5,
+        ads: { spread: 0.42, move: 0.62, time: 0.17 },
+    color: '#8fd4ff', range: 1450, knock: 95, sound: 'rifle', pierce: 1, noise: 900,
+    bars: { dmg: .50, rate: .79, mag: .60, acc: .84 },
+  },
+  qbz192: {
+    cat: 'rifle', label: '步枪 · QBZ-192', short: 'QBZ-192', name: 'QBZ-192', code: 'NORINCO QBZ-192', price: 5000, cal: '58',
+    desc: '短管卡宾型。抬枪最快、走位最灵活，室内和拐角最好用；枪管短，出了百米伤害掉得明显，散布也比长管型号大一圈。',
+    dmg: 27, rate: 0.082, spread: 0.026, count: 1, mode: 'auto',
+    bspeed: 1650, mag: 30, reload: 1.70, recoil: 2.7, size: 3.2, reserveMul: 5,
+        ads: { spread: 0.50, move: 0.66, time: 0.13 },
+    color: '#f2b8ff', range: 1000, knock: 78, sound: 'rifle', pierce: 1, noise: 860,
+    bars: { dmg: .46, rate: .82, mag: .60, acc: .76 },
+  },
+  qbz191: {
+    cat: 'rifle', label: '步枪 · QBZ-191', short: 'QBZ-191', name: 'QBZ-191', code: 'NORINCO QBZ-191', price: 5400, cal: '58',
+    desc: 'QBZ 三代的长管型。5.8mm 的高初速在这个管长上最吃得开，精度和远距离存速是全系步枪里最好的，代价是抬枪稍慢。',
+    dmg: 34, rate: 0.096, spread: 0.016, count: 1, mode: 'auto',
+    bspeed: 1900, mag: 30, reload: 1.95, recoil: 3.1, size: 3.6, reserveMul: 5,
+        ads: { spread: 0.40, move: 0.62, time: 0.19 },
+    color: '#7af0d8', range: 1600, knock: 100, sound: 'rifle', pierce: 1, noise: 910,
+    bars: { dmg: .54, rate: .74, mag: .60, acc: .86 },
   },
   sr9: {
     cat: 'dmr', label: '精确射手步枪 · SR9', short: 'SR9', name: 'SR9', code: 'SR-9 DMR', price: 5200, cal: '762',
@@ -1509,13 +1581,22 @@ const WEAPONS = {
     bars: { dmg: .72, rate: .46, mag: .42, acc: .94 },
   },
   r93: {
-    cat: 'sniper', label: '狙击枪 · R93', short: 'R93', name: 'R93', code: 'BLASER R93', price: 6800, cal: '338',
-    desc: '栓动狙击枪。单发 310 点，一枪一个重甲兵，子弹能穿三名目标；代价是每发都要拉一次栓。',
+    cat: 'sniper', label: '狙击枪 · R93', short: 'R93', name: 'R93', code: 'BLASER R93', price: 6800, cal: '762',
+    desc: '栓动狙击枪，吃 7.62×51 全威力弹 —— 和 SR9 共用一盒弹，养起来比大口径便宜一半。单发 310 点，一枪一个重甲兵，子弹能穿三名目标。',
     dmg: 310, rate: 1.35, spread: 0.003, count: 1, mode: 'semi',
     bspeed: 2800, mag: 5, reload: 2.7, recoil: 16, size: 4.2, reserveMul: 5,
         ads: { spread: 0.18, move: 0.44, time: 0.30 },
     color: '#9fd4ff', range: 2600, knock: 260, sound: 'sniper', pierce: 3, noise: 1250,
-    bars: { dmg: 1.0, rate: .10, mag: .14, acc: 1.0 },
+    bars: { dmg: .95, rate: .10, mag: .14, acc: 1.0 },
+  },
+  awm: {
+    cat: 'sniper', label: '狙击枪 · AWM', short: 'AWM', name: 'AWM', code: 'ACCURACY INT. AWM', price: 8800, cal: '338',
+    desc: '.338 拉普马格南的顶级栓动。单发 400 点，能穿四名目标、隔着大半个图点人 —— 一发白弹就要 ¥25，打空一个弹匣比挨一枪更心疼。',
+    dmg: 400, rate: 1.62, spread: 0.002, count: 1, mode: 'semi',
+    bspeed: 2900, mag: 5, reload: 3.0, recoil: 18, size: 4.4, reserveMul: 5,
+        ads: { spread: 0.15, move: 0.40, time: 0.33 },
+    color: '#e8f4ff', range: 2800, knock: 300, sound: 'sniper', pierce: 4, noise: 1300,
+    bars: { dmg: 1.0, rate: .09, mag: .14, acc: 1.0 },
   },
 };
 
@@ -1524,8 +1605,13 @@ function adsOf(w) {
   return (w && w.ads) || { spread: 0.5, move: 0.6, time: 0.18 };
 }
 
-/* 军火库 / 改装台 / 掉落池的枚举顺序（不直接等于快捷栏） */
-const WEAPON_ORDER = ['g17', '93r', 'g18', 'bizon', 'm870', 'm4a1', 'sr9', 'r93'];
+/* 军火库 / 改装台 / 掉落池的枚举顺序（不直接等于快捷栏）
+   同一类里按价格从低到高排，军火库一行读下来就是升级路线。 */
+const WEAPON_ORDER = ['g17', '93r', 'g18',
+                      'bizon', 'm870',
+                      'akm', 'm4a1', 'qbz95', 'ak12', 'qbz192', 'qbz191',
+                      'sr9',
+                      'r93', 'awm'];
 
 
 /* 装备槽：数字键 1~5 一一对应 */
@@ -1872,6 +1958,8 @@ const Sfx = {
       case 'smg':     this.noiseBurst(0.07, 2200, 1.0, 0.20); this.tone(240, 0.05, 0.10, 'square', 120); break;
       case 'shotgun': this.noiseBurst(0.26, 900, 0.8, 0.42);  this.tone(110, 0.20, 0.26, 'sawtooth', 42); break;
       case 'rifle':   this.noiseBurst(0.14, 3000, 1.4, 0.28); this.tone(320, 0.09, 0.14, 'square', 90); break;
+      /* 7.62×39：比 5.56 闷一档，尾巴长一点 —— AKM 一响就知道是谁在打 */
+      case 'ak':      this.noiseBurst(0.19, 2100, 1.2, 0.34); this.tone(200, 0.13, 0.18, 'square', 62); break;
       case 'sniper':  this.noiseBurst(0.40, 2600, 1.6, 0.50); this.tone(150, 0.30, 0.30, 'sawtooth', 38); break;
        case 'enemy':   this.noiseBurst(0.09, 900, 1.0, 0.10);  this.tone(150, 0.07, 0.06, 'sawtooth', 80); break;
       case 'tap':     this.noiseBurst(0.05, 1700, 1.2, 0.055); this.tone(215, 0.04, 0.045, 'square', 120); break;
@@ -2699,8 +2787,6 @@ function resetPlayer() {
   P.vy = 0;
   P.ads = 0;
   P.adsPrev = 0;
-  popup(P.x, P.y - 46, P.curSlot === 'melee' ? '只有刀 · 1~5 切换装备'
-    : (P.curSlot === 'pistol' ? '只有手枪 · 1~5 切换装备' : '右键开镜 · 1~5 切换装备'), '#8ef2ff', 13);
   P.fireCd = 0;
   P.burstLeft = 0;
   P.triggerPrev = false;
@@ -2742,6 +2828,9 @@ function resetPlayer() {
   P.curSlot = P.slots.primary ? 'primary' : (P.slots.secondary ? 'secondary'
     : (P.slots.pistol ? 'pistol' : 'melee'));
   P.weapon = P.slots[P.curSlot] || null;
+  /* 出生飘字要等配装结算完再说 —— 放在这里才知道手里到底有没有枪 */
+  popup(P.x, P.y - 46, P.curSlot === 'melee' ? '只有刀 · 1~5 切换装备'
+    : (P.curSlot === 'pistol' ? '只有手枪 · 1~5 切换装备' : '右键开镜 · 1~5 切换装备'), '#8ef2ff', 13);
 
   P.melee = (SAVE.ownedMelee && SAVE.ownedMelee[SAVE.equippedMelee]) ? SAVE.equippedMelee : STARTER_MELEE;
   P.meleeCd = 0;
