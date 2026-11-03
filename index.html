@@ -1906,12 +1906,12 @@ const OPERATORS = {
     desc: '破门手。先用烟把走廊糊上，再用手炮把烟里的人炸出来；外骨骼一开，这一分钟就是你的。',
     g: {
       name: '突破型烟雾弹', short: '烟雾弹', tag: '战术道具',
-      desc: '朝准星抛出一枚快速成烟的烟雾弹（射程 340），落点立刻起烟：0.3 秒铺满、持续 8 秒、最后 1.2 秒收干净。烟里的敌人看不见你，突进、拉人、脱身都靠它。',
+      desc: '朝准星抛出一枚快速成烟的烟雾弹（射程 340），落点立刻起烟：0.3 秒铺满、持续 8 秒、最后 1.2 秒收干净。烟里烟外互相看不见 —— 烟里的敌人睁眼也望不到外面。储备 2 枚可以连放，放掉一枚后按冷却 45 秒回充下一枚。',
       cd: 45, charges: 2,
     },
     v: {
       name: '三联装手炮', sub: '三头犬', short: '三头犬', tag: '小技能',
-      desc: '一次打出三发榴弹（间隔 0.11 秒），榴弹撞墙会反弹（最多 3 次）、2.2 秒自爆。爆炸半径 100、中心 52 伤：被炸到的敌人眩晕 1.6 秒并骨折（移速 -40%，持续 6 秒）。自炸只有一半伤害。',
+      desc: '一次打出三发榴弹（间隔 0.11 秒），榴弹穿透敌人、只在撞墙时反弹（最多 3 次），2.2 秒固定引信起爆 —— 不会碰到敌人就炸，所以要算好提前量与反弹。爆炸半径 100、中心 52 伤：被炸到的敌人眩晕 1.6 秒并骨折（移速 -40%，持续 6 秒）。自炸只有一半伤害。储备 2 组可连放，打掉一组按冷却 70 秒回充。',
       cd: 70, charges: 2, shots: 3,
     },
     x: {
@@ -2990,8 +2990,10 @@ function pickSpawnPoint() {
 function initOperatorSkills() {
   const op = opDef();
   P.op = {
-    g: { cd: 0, use: op ? op.g.charges : 0 },
-    v: { cd: 0, use: op ? op.v.charges : 0 },
+    /* 储备制：use 是还能连放几层；recharge 是下一层的回充倒计时。
+       打掉一层后立刻开始回充，回满一层接着回下一层 —— 手上有余量就能连放 */
+    g: { cd: 0, use: op ? op.g.charges : 0, recharge: 0 },
+    v: { cd: 0, use: op ? op.v.charges : 0, recharge: 0 },
     x: { cd: 0, on: false, t: 0 },
     volley: null,          // 三连发的排程：{ left, t }
     slide: 0,              // 滑铲剩余时间
@@ -4203,6 +4205,8 @@ function canSeePlayer(e) {
   const dx = P.x - e.x, dy = P.y - e.y;
   const d = Math.hypot(dx, dy);
   if (d > e.sight) return false;
+  /* 自己站在烟里：除了贴脸（64px 内）什么都看不见 */
+  if (d > 64 && pointInSmoke(e.x, e.y)) return false;
   if (d > 54 && Math.abs(angleDiff(Math.atan2(dy, dx), e.facing)) > e.fov) return false;
   if (!losClear(e.x, e.y, P.x, P.y)) return false;
   /* 烟幕：线段穿过成形后的烟圈就看不见 —— 这就是烟雾弹的全部价值 */
@@ -4610,8 +4614,9 @@ function updateRockets(dt) {
    9.4 干员技能：烟雾 / 三联手炮 / 外骨骼 / 滑铲
    ──────────────────────────────────────────────────────────
    G 战术道具（烟雾）· V 小技能（三头犬）· X 大招（外骨骼）· 被动（滑铲）
-   三条主动各自独立冷却，储备按「每局」算 —— 花完就没了，冷却只决定
-   下一颗什么时候能用。所以别攒，该扔就扔。
+   储备制：use 是"现在手上有几层"，打掉一层就按 CD 回充下一层。
+   所以余量在手上时可以连放两层；放空之后才需要等回充。
+   cd 只做 0.55s 的出弹间隔（防连按双发），不再是"用一次锁 45 秒"。
    ══════════════════════════════════════════════════════════ */
 
 /* ── 烟雾：半径随时间长大 / 最后一段收缩 ── */
@@ -4643,6 +4648,17 @@ function smokeBlocks(x1, y1, x2, y2) {
   return false;
 }
 
+/* 一个点是否泡在成形烟里：站在烟里的人睁眼也白睁 —— 烟里烟外互相看不见 */
+function pointInSmoke(x, y) {
+  for (let i = 0; i < G.smokes.length; i++) {
+    const s = G.smokes[i];
+    if (s.r < 14) continue;
+    const rr = s.r * 0.82;
+    if (dist2(x, y, s.x, s.y) < rr * rr) return true;
+  }
+  return false;
+}
+
 function updateSmokes(dt) {
   for (let i = G.smokes.length - 1; i >= 0; i--) {
     const s = G.smokes[i];
@@ -4668,6 +4684,21 @@ function updateSmokes(dt) {
       });
     }
   }
+
+  /* 玩家自己也一样：站在烟里只看得见身边一小圈，外面全是白的。
+     进烟快、出烟慢，免得边打边蹭烟时屏幕一直闪。 */
+  let target = 0;
+  if (P.alive) {
+    for (const s of G.smokes) {
+      if (s.r < 14) continue;
+      const rr = s.r * 0.82;
+      const d = dist(P.x, P.y, s.x, s.y);
+      if (d < rr) target = Math.max(target, clamp(1.25 - d / rr, 0, 1));
+    }
+  }
+  const rate = target > G.smokeBlind ? 9 : 2.6;
+  if (G.smokeBlind == null || !isFinite(G.smokeBlind)) G.smokeBlind = 0;
+  G.smokeBlind += (target - G.smokeBlind) * clamp(dt * rate, 0, 1);
 }
 
 /* ── G：突破型烟雾弹 ── */
@@ -4676,8 +4707,8 @@ function useTactic() {
   if (!op) { uiToast('没有出战干员 · 去大厅挑一个', 'small warn'); return; }
   if (!P.alive) return;
   const S = P.op.g;
-  if (S.cd > 0) { uiToast('烟雾弹冷却 ' + Math.ceil(S.cd) + 's', 'small'); return; }
-  if (S.use <= 0) { uiToast('本局烟雾弹用完了', 'small warn'); return; }
+  if (S.cd > 0) { uiToast('烟雾弹装填中', 'small'); return; }
+  if (S.use <= 0) { uiToast('烟雾弹回充中 · ' + Math.ceil(S.recharge) + 's', 'small'); return; }
 
   const SM = SKILL.smoke;
   const dx = mouse.wx - P.x, dy = mouse.wy - P.y;
@@ -4692,7 +4723,8 @@ function useTactic() {
   }
 
   S.use--;
-  S.cd = op.g.cd;
+  S.cd = 0.55;                                  // 出弹间隔：防连按双发，不是大 CD
+  if (S.use < op.g.charges && S.recharge <= 0) S.recharge = op.g.cd;
   G.smokes.push({ x: tx, y: ty, t: 0, r: 0, seed: rand(0, 100) });
   popup(P.x, P.y - 46, '烟 雾 弹', '#c8d6de', 12);
   Sfx.dash();
@@ -4726,11 +4758,12 @@ function useSkill() {
   if (!op) { uiToast('没有出战干员 · 去大厅挑一个', 'small warn'); return; }
   if (!P.alive) return;
   const S = P.op.v;
-  if (S.cd > 0) { uiToast('三头犬冷却 ' + Math.ceil(S.cd) + 's', 'small'); return; }
-  if (S.use <= 0) { uiToast('手炮储备用完了', 'small warn'); return; }
+  if (S.cd > 0) { uiToast('三头犬装填中', 'small'); return; }
+  if (S.use <= 0) { uiToast('手炮回充中 · ' + Math.ceil(S.recharge) + 's', 'small'); return; }
 
   S.use--;
-  S.cd = op.v.cd;
+  S.cd = 0.55;                                  // 出弹间隔：防连按双发，不是大 CD
+  if (S.use < op.v.charges && S.recharge <= 0) S.recharge = op.v.cd;
   fireGL();
   P.op.volley = { left: Math.max(0, (op.v.shots || 3) - 1), t: 0.11 };
   popup(P.x, P.y - 46, '三 头 犬', '#ffd66b', 12);
@@ -4797,12 +4830,7 @@ function updateGls(dt) {
       /* 弹药用完了就一头撞死在墙上 */
       if (g.bounces < 0) { boom = true; break; }
 
-      for (let k = 0; k < G.enemies.length; k++) {
-        const e = G.enemies[k];
-        if (!e.alive) continue;
-        if (dist2(g.x, g.y, e.x, e.y) < (e.r + g.r) * (e.r + g.r)) { boom = true; break; }
-      }
-      if (boom) break;
+      /* 不碰敌人就炸：榴弹穿透人群，只认 2.2s 固定引信和墙面反弹 */
     }
 
     if (Math.random() < 0.8) {
@@ -4891,10 +4919,25 @@ function trySlide() {
 function updateOperatorSkills(dt) {
   if (!P.op) initOperatorSkills();
   const S = P.op;
+  const op = opDef();
   S.g.cd = Math.max(0, S.g.cd - dt);
   S.v.cd = Math.max(0, S.v.cd - dt);
   S.x.cd = Math.max(0, S.x.cd - dt);
   P.concuss = Math.max(0, P.concuss - dt);
+
+  /* 储备回充：打掉一层就开始计时，回满一层接着回下一层 */
+  for (const k of ['g', 'v']) {
+    const sk = S[k], def = op ? op[k] : null;
+    if (!def) continue;
+    if (sk.use < def.charges && sk.recharge > 0) {
+      sk.recharge -= dt;
+      if (sk.recharge <= 0) {
+        sk.use++;
+        sk.recharge = sk.use < def.charges ? def.cd : 0;
+        popup(P.x, P.y - 58, (k === 'g' ? '烟雾弹' : '手炮') + ' +1', '#9fd0e8', 11);
+      }
+    }
+  }
 
   if (S.volley) {
     S.volley.t -= dt;
@@ -9052,6 +9095,59 @@ function drawSmokes() {
   }
 }
 
+/* ── 玩家在烟里的屏幕遮蔽：只留身边一小圈，外面一律糊白 ──
+   烟雾对内对外一视同仁：敌人看不见你，你也看不见外面。 */
+let SMOKE_GRAIN = null, SMOKE_PATTERN = null;
+function smokePattern() {
+  if (SMOKE_PATTERN) return SMOKE_PATTERN;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 128;
+  const c = cv.getContext('2d');
+  for (let i = 0; i < 240; i++) {
+    const x = Math.random() * 128, y = Math.random() * 128, r = 3 + Math.random() * 8;
+    const lum = (206 + Math.random() * 40) | 0;
+    const g = c.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, 'rgba(' + lum + ',' + lum + ',' + (lum + 4) + ',0.55)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = g;
+    c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill();
+  }
+  SMOKE_GRAIN = cv;
+  SMOKE_PATTERN = ctx.createPattern(cv, 'repeat');
+  return SMOKE_PATTERN;
+}
+
+function drawSmokeBlind() {
+  const k = G.smokeBlind;
+  if (k <= 0.02 || !P.alive) return;
+  const px = P.x - G.cam.x + G.shakeX;
+  const py = P.y - G.cam.y + G.shakeY;
+
+  ctx.save();
+
+  /* 烟墙：62px 内还看得见，230px 外基本全白 */
+  const g = ctx.createRadialGradient(px, py, 62, px, py, 230);
+  g.addColorStop(0, 'rgba(212,222,228,0)');
+  g.addColorStop(0.32, 'rgba(212,222,228,' + (0.52 * k).toFixed(3) + ')');
+  g.addColorStop(0.60, 'rgba(214,224,230,' + (0.86 * k).toFixed(3) + ')');
+  g.addColorStop(0.84, 'rgba(222,230,236,' + (0.95 * k).toFixed(3) + ')');
+  g.addColorStop(1, 'rgba(228,234,238,' + (0.98 * k).toFixed(3) + ')');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, VW, VH);
+
+  /* 一层慢慢飘的颗粒，让它像"烟"而不是"白玻璃" */
+  const pat = smokePattern();
+  if (pat) {
+    ctx.globalAlpha = 0.16 * k;
+    const ox = (G.time * 9) % 128, oy = (-G.time * 6) % 128;
+    ctx.translate(ox, oy);
+    ctx.fillStyle = pat;
+    ctx.fillRect(-128, -128, VW + 256, VH + 256);
+  }
+
+  ctx.restore();
+}
+
 /* 三头犬的榴弹：一颗带尾焰的胖子，弹过墙会留下火星 */
 function drawGls() {
   for (const g of G.gls) {
@@ -9340,6 +9436,7 @@ function drawPopups() {
 function drawOffscreenMarkers() {
   const pad = 40;
   const cx = VW / 2, cy = VH / 2;
+  if (G.smokeBlind > 0.5) return;      // 自己糊在烟里：连方位提示都别给
 
   for (const e of G.enemies) {
     // 迷雾里没被察觉的敌人不该给出方位提示
@@ -10149,8 +10246,8 @@ function drawSkillBar(mono) {
   const y0 = VH - 84;
 
   const rows = [
-    { k: 'G', cn: '烟雾', col: '#c8d6de', cd: S.g.cd, max: op.g.cd, use: S.g.use, cap: op.g.charges },
-    { k: 'V', cn: '手炮', col: '#ffd66b', cd: S.v.cd, max: op.v.cd, use: S.v.use, cap: op.v.charges },
+    { k: 'G', cn: '烟雾', col: '#c8d6de', cd: S.g.cd, max: op.g.cd, use: S.g.use, cap: op.g.charges, rech: S.g.recharge },
+    { k: 'V', cn: '手炮', col: '#ffd66b', cd: S.v.cd, max: op.v.cd, use: S.v.use, cap: op.v.charges, rech: S.v.recharge },
     { k: 'X', cn: '外骨骼', col: '#ff8a4c', cd: S.x.on ? S.x.t : S.x.cd,
       max: S.x.on ? op.x.dur : op.x.cd, use: S.x.on ? 1 : 0, cap: 1, on: S.x.on },
   ];
@@ -10181,13 +10278,30 @@ function drawSkillBar(mono) {
     ctx.font = '700 9px ' + mono;
     ctx.fillText(it.cn, x + size / 2, y0 + 39);
 
-    /* 储备点 */
+    /* 储备点：已备的实心；正在回充的那一层画扇形进度 + 右上角小秒数 */
     if (it.cap > 1) {
       for (let d = 0; d < it.cap; d++) {
+        const dx = x + size / 2 + (d - (it.cap - 1) / 2) * 10, dy = y0 + size - 9;
         ctx.beginPath();
-        ctx.arc(x + size / 2 + (d - (it.cap - 1) / 2) * 10, y0 + size - 9, 2.6, 0, TAU);
+        ctx.arc(dx, dy, 2.6, 0, TAU);
         ctx.fillStyle = d < it.use ? it.col : 'rgba(110,150,180,0.22)';
         ctx.fill();
+        if (d === it.use && it.rech > 0 && d < it.cap) {
+          const frac = clamp(1 - it.rech / it.max, 0, 1);
+          ctx.beginPath();
+          ctx.moveTo(dx, dy);
+          ctx.arc(dx, dy, 2.6, -Math.PI / 2, -Math.PI / 2 + frac * TAU);
+          ctx.closePath();
+          ctx.fillStyle = it.col;
+          ctx.globalAlpha = 0.75;
+          ctx.fill();
+          ctx.globalAlpha = 1;
+          ctx.fillStyle = 'rgba(210,235,250,0.75)';
+          ctx.font = '700 8px ' + mono;
+          ctx.textAlign = 'right';
+          ctx.fillText(Math.ceil(it.rech) + '', x + size - 3, y0 + 11);
+          ctx.textAlign = 'center';
+        }
       }
     }
 
@@ -10924,6 +11038,7 @@ function render() {
   drawFog();
   drawSniperBeams();
   drawLighting();
+  drawSmokeBlind();          // 自己在烟里：先糊住世界，再画 HUD
   if (G.scene === 'playing' || G.scene === 'paused') {
     drawOffscreenMarkers();
     drawHUD();
@@ -12425,6 +12540,7 @@ function startRaid() {
   G.icebolts = [];
   G.frosts = [];
   G.smokes = [];
+  G.smokeBlind = 0;      // 玩家被自己丢的烟糊住的强度（0..1，屏幕遮罩用）
   G.gls = [];
   G.icepots = [];
   G.fires = [];
