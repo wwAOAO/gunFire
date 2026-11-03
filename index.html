@@ -5785,7 +5785,9 @@ function updateModeInput(dt) {
     } else if (M.id === 'scanbow') {
       fireArrow('scan', false); consumeOp('x'); exitMode(); return;
     } else if (M.id === 'coverdev') {
-      placeCover(M.vert); consumeOp('v'); exitMode(); return;
+      /* 放不下就不扣储备、也不收起装置 —— 换个地方再来 */
+      if (placeCover(M.vert)) { consumeOp('v'); exitMode(); }
+      return;
     } else if (M.id === 'healgun') {
       fireHealDart();
     } else if (M.id === 'loiter') {
@@ -6275,32 +6277,85 @@ function igniteGround(x, y) {
 }
 
 /* ── 乌鲁鲁 V：速凝掩体 ── */
-function placeCover(vert) {
+/* 这块板能不能立：不能压在地形 / 别的掩体上，也不能把自己砌进去 */
+function coverFits(x, y, w, h) {
+  for (const o of G.obstacles) {
+    if (x < o.x + o.w && x + w > o.x && y < o.y + o.h && y + h > o.y) return false;
+  }
+  /* 圆心到矩形最近点的距离要留出一个身位 */
+  const nx = clamp(P.x, x, x + w), ny = clamp(P.y, y, y + h);
+  const dx = P.x - nx, dy = P.y - ny;
+  return dx * dx + dy * dy > (P.r + 10) * (P.r + 10);
+}
+
+/* 落点：以准星距离为准，压在墙上就沿射线朝两边找最近的空位；实在放不下 ok=false。
+   放置预览和真正浇筑都走这里，所以你瞄到哪儿就立在哪儿。 */
+function coverSpot(vert) {
   const C = SKILL.cover;
   const a = P.aim;
-  const d = clamp(magAimDist() || 120, 60, C.range);
-  const cx = clamp(P.x + Math.cos(a) * d, 40, WORLD.w - 40);
-  const cy = clamp(P.y + Math.sin(a) * d, 40, WORLD.h - 40);
+  const want = clamp(magAimDist() || 120, 60, C.range);
   const w = vert ? C.thin : C.long;
   const h = vert ? C.long : C.thin;
-  let x = cx - w / 2, y = cy - h / 2;
-  /* 别把玩家自己砌进去 */
-  if (P.x + P.r > x && P.x - P.r < x + w && P.y + P.r > y && P.y - P.r < y + h) {
-    x += Math.cos(a) * (P.r + 8);
-    y += Math.sin(a) * (P.r + 8);
+  const at = (d) => {
+    const x = clamp(P.x + Math.cos(a) * d - w / 2, 8, WORLD.w - w - 8);
+    const y = clamp(P.y + Math.sin(a) * d - h / 2, 8, WORLD.h - h - 8);
+    return { x, y };
+  };
+  for (let step = 0; step <= 400; step += 20) {
+    if (want + step <= C.range + 1) {
+      const p = at(want + step);
+      if (coverFits(p.x, p.y, w, h)) return { x: p.x, y: p.y, w, h, ok: true };
+    }
+    if (want - step >= 0) {
+      const p = at(want - step);
+      if (coverFits(p.x, p.y, w, h)) return { x: p.x, y: p.y, w, h, ok: true };
+    }
   }
-  x = clamp(x, 8, WORLD.w - w - 8);
-  y = clamp(y, 8, WORLD.h - h - 8);
-  const o = { x, y, w, h, tone: 0.78, cover: true };
+  const p = at(want);
+  return { x: p.x, y: p.y, w, h, ok: false };
+}
+
+function placeCover(vert) {
+  const C = SKILL.cover;
+  const spot = coverSpot(vert);
+  if (!spot.ok) {
+    uiToast('这里立不住掩体 · 换个位置', 'small warn');
+    Sfx.tone(180, 0.1, 0.05, 'square', 700);
+    return false;
+  }
+  const o = { x: spot.x, y: spot.y, w: spot.w, h: spot.h, tone: 0.78, cover: true };
   G.obstacles.push(o);
   G.covers.push({ o, t: C.life, max: C.life });
   rebuildFogBlock();
   Sfx.tone(300, 0.16, 0.06, 'square', 900);
   shake(3);
-  popup(x + w / 2, y - 14, '速 凝 掩 体', '#ffc98a', 12);
-  burst(x + w / 2, y + h / 2, 16, {
+  popup(spot.x + spot.w / 2, spot.y - 14, '速 凝 掩 体', '#ffc98a', 12);
+  burst(spot.x + spot.w / 2, spot.y + spot.h / 2, 16, {
     color: ['#ffd8a8', '#ffb457', '#ffffff'], life: 0.5, r: 4, spdMin: 40, spdMax: 220, drag: 0.88,
   });
+  return true;
+}
+
+/* 掩体顶上一条寿命条：最后 10 秒开始闪，免得它毫无预兆地化掉 */
+function drawCoverTimers() {
+  if (!G.covers.length) return;
+  ctx.save();
+  ctx.textAlign = 'center';
+  for (const c of G.covers) {
+    const o = c.o;
+    const cx = o.x + o.w / 2, top = o.y;
+    const frac = clamp(c.t / c.max, 0, 1);
+    const urgent = c.t <= 10;
+    const blink = urgent ? 0.4 + 0.6 * Math.abs(Math.sin(G.time * 6)) : 1;
+    ctx.fillStyle = 'rgba(6,10,14,0.65)';
+    ctx.fillRect(cx - 26, top - 9, 52, 4);
+    ctx.fillStyle = urgent ? 'rgba(255,110,90,' + blink.toFixed(2) + ')' : 'rgba(255,190,120,0.9)';
+    ctx.fillRect(cx - 26, top - 9, 52 * frac, 4);
+    ctx.fillStyle = 'rgba(255,225,190,' + (urgent ? blink.toFixed(2) : '0.62') + ')';
+    ctx.font = '700 9px ui-monospace, "Consolas", monospace';
+    ctx.fillText(Math.ceil(c.t) + 's', cx, top - 13);
+  }
+  ctx.restore();
 }
 
 function updateCovers(dt) {
@@ -11120,22 +11175,23 @@ function drawModeAim() {
     ctx.textAlign = 'center';
     ctx.fillText(Math.round(d / 18) + 'm', tx, ty - F.radius - 8);
   } else if (M.id === 'coverdev') {
-    const C = SKILL.cover;
-    const d = clamp(magAimDist() || 120, 60, C.range);
-    const cx = clamp(P.x + Math.cos(a) * d, 40, WORLD.w - 40);
-    const cy = clamp(P.y + Math.sin(a) * d, 40, WORLD.h - 40);
-    const w = M.vert ? C.thin : C.long, h = M.vert ? C.long : C.thin;
-    dash(P.x, P.y, cx, cy, 'rgba(255,190,120,0.5)');
-    ctx.strokeStyle = 'rgba(255,190,120,0.85)';
-    ctx.fillStyle = 'rgba(255,180,90,0.16)';
+    const S = coverSpot(M.vert);
+    const cx = S.x + S.w / 2, cy = S.y + S.h / 2;
+    const good = S.ok;
+    const lc = good ? '255,190,120' : '255,90,90';
+    dash(P.x, P.y, cx, cy, 'rgba(' + lc + ',0.5)');
+    ctx.strokeStyle = 'rgba(' + lc + ',0.85)';
+    ctx.fillStyle = 'rgba(' + lc + ',0.16)';
     ctx.lineWidth = 1.6;
     ctx.setLineDash([6, 5]);
-    ctx.beginPath(); ctx.rect(cx - w / 2, cy - h / 2, w, h); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.rect(S.x, S.y, S.w, S.h); ctx.fill(); ctx.stroke();
     ctx.setLineDash([]);
-    ctx.fillStyle = 'rgba(255,220,180,0.85)';
+    ctx.fillStyle = good ? 'rgba(255,220,180,0.85)' : 'rgba(255,150,150,0.9)';
     ctx.font = '700 10px ui-monospace, "Consolas", monospace';
     ctx.textAlign = 'center';
-    ctx.fillText(Math.round(d / 18) + 'm · ' + (M.vert ? '竖' : '横'), cx, cy - 12);
+    const d = Math.hypot(cx - P.x, cy - P.y) / 18;
+    ctx.fillText(good ? Math.round(d) + 'm · ' + (M.vert ? '竖' : '横') : '这里立不住',
+                 cx, S.y - 12);
   } else if (M.id === 'loiter') {
     if (M.controlling) return;                   // 镜头已经跟着导弹走了
     /* 直接发射：一条射向准星的示意线；右键瞄准：画出预测弹道 */
@@ -13076,6 +13132,7 @@ function render() {
   drawHealFields();
   drawVisionCones();
   drawObstacles();
+  drawCoverTimers();
 
   const drawList = [];
   for (const e of G.enemies) {
