@@ -1938,7 +1938,9 @@ const SUPPLY = {
 
 const ENEMY_TYPES = {
   /* 阿萨拉小兵：全家最小的个头、跑得最快，边冲边短点射，贴脸还有一记近身 */
-  runner:  { hp: 34,  r: 11, speed: 134, dmg: 9,  score: 12,  armor: 0,   // 突击兵是全线唯一无甲的：RIP 修脚弹就是给他们准备的  color: '#ff4d6d', glow: '#ff2d55', shape: 'tri',
+  /* 突击兵是全线唯一无甲的：RIP 修脚弹就是给他们准备的 */
+  runner:  { hp: 34,  r: 11, speed: 134, dmg: 9,  score: 12,  armor: 0,
+             color: '#ff4d6d', glow: '#ff2d55', shape: 'tri',
              sight: 320, fov: 1.0,
              burst: { n: 3, gap: 0.11, dmg: 5.2, spd: 560, spread: 0.055, cd: [1.9, 2.7], range: 520 } },
   /* 阿萨拉盾兵：中等身板，正面一块厚盾挡子弹（能被打碎），盾后探头点射 */
@@ -4318,7 +4320,8 @@ function spawnEnemy(type, atX, atY) {
     hp: hpBase * scale, maxHp: hpBase * scale,
     speed: T.speed * rand(0.92, 1.08),
     dmg: T.dmg * dmgMul, dmgMul, score: T.score,
-    color: T.color, glow: T.glow, shape: T.shape,
+    /* 颜色兜底：数据表里少一个字段不该让整个渲染管线挂掉 */
+    color: T.color || '#ff4d6d', glow: T.glow || T.color || '#ff2d55', shape: T.shape || 'tri',
 
     sight: T.sight, fov: T.fov,
     state: 'patrol',
@@ -8119,9 +8122,12 @@ function drawEnemy(e) {
   ctx.ellipse(2, 5, e.r * 1.0, e.r * 0.75, 0, 0, TAU);
   ctx.fill();
 
+  /* glow 必须是 '#rrggbb'：拼 '40' 之前先兜一层底，否则 addColorStop 会抛异常，
+     而那次异常会把整帧后面的迷雾与 HUD 一起吞掉（见 render 的绘制顺序） */
+  const glowHex = /^#[0-9a-f]{6}$/i.test(e.glow || '') ? e.glow : '#ff2d55';
   const gr = ctx.createRadialGradient(0, 0, e.r * 0.6, 0, 0, e.r * 1.7);
-  gr.addColorStop(0, e.glow + '40');
-  gr.addColorStop(1, e.glow + '00');
+  gr.addColorStop(0, glowHex + '40');
+  gr.addColorStop(1, glowHex + '00');
   ctx.fillStyle = gr;
   ctx.beginPath(); ctx.arc(0, 0, e.r * 1.7, 0, TAU); ctx.fill();
 
@@ -10892,7 +10898,12 @@ function render() {
   drawList.sort((a, b) => a.y - b.y);
   for (const item of drawList) {
     if (item.kind === 'p') { if (P.alive) drawPlayer(); }
-    else drawEnemy(item.ref);
+    else {
+      /* 兜底：单个敌人数据或绘制出问题，只跳过它自己。
+         以前这里一抛异常，跟在后面的迷雾、暗角、HUD 全都不画了 —— 表现就是「迷雾突然没了」。 */
+      try { drawEnemy(item.ref); }
+      catch (err) { if (!G._drawWarned) { G._drawWarned = 1; console.warn('drawEnemy failed', item.ref && item.ref.type, err); } }
+    }
   }
 
   drawBullets();
