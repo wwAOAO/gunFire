@@ -1900,8 +1900,11 @@ const METER = 18;
 const SKILL = {
   /* 烟雾弹：落点即起烟，0.3s 铺满、8s 总时长、最后 1.2s 收烟（起烟快、散得也快） */
   smoke: { r: 118, life: 8.0, grow: 0.30, fade: 1.2, range: 340 },
-  /* 三联装手炮：打的是"准星那个点"，100 米封顶，飞到点就炸（撞墙也炸），不再靠引信瞎飘 */
-  gl: { dmg: 52, radius: 100, speed: 900, range: 100 * 18, spread: 26, maxFlight: 2.1,
+  /* 三联装手炮：V 端出来 → 左键射向准星 100 米内的那个点；
+     到点不会立刻炸：弹体带着余速惯性滑一小段，引信固定 3 秒后才起爆。
+     glide = 过点后每秒的速度衰减系数，越大滑得越短（900 / glide ≈ 滑行距离） */
+  gl: { dmg: 52, radius: 100, speed: 900, range: 100 * 18, spread: 26,
+        fuse: 3.0, glide: 18, slideMin: 8,
         stun: 1.6, cripple: 6.0, selfMul: 0.5 },
   /* 滑铲：奔跑中才能起手，0.45s 位移，无冷却（只吃一点体力） */
   slide: { dur: 0.45, mul: 2.6, cost: 10 },
@@ -1965,7 +1968,7 @@ const OPERATORS = {
     },
     v: {
       name: '三联装手炮', sub: '三头犬', short: '三头犬', tag: '小技能', kind: 'gl',
-      desc: '朝准星位置打出三发榴弹（左右各偏 26px，间隔 0.11s），落点就是爆点 —— 打多远就炸多远，最远 100 米；撞到墙或掩体就在墙上炸。飞行时间随距离走，最远 2.1 秒，所以要打移动目标得留提前量。爆炸半径 100、中心 52 伤：被炸到的敌人眩晕 1.6 秒并骨折（移速 -40%，持续 6 秒）。自炸只有一半伤害。储备 2 组可连放，打掉一组按冷却 70 秒回充。',
+      desc: '按 V 把三联装手炮端出来，左键朝准星位置打出一组三发榴弹（左右各偏 26px，间隔 0.11s），最远 100 米；打墙上就贴墙停住。弹体到点不会立刻炸 —— 它会带着余速继续往前蹭两三米，引信从出膛算起固定 3 秒，时间到才引爆。爆炸半径 100、中心 52 伤：被炸到的敌人眩晕 1.6 秒并骨折（移速 -40%，持续 6 秒）。自炸只有一半伤害。储备 2 组可连放，打掉一组按冷却 70 秒回充。右键或再按 V 收炮。',
       cd: 70, charges: 2, shots: 3,
     },
     x: {
@@ -2366,11 +2369,12 @@ const MODE_KEY = {
   drone:    { k: 'V', text: 'WASD 操控无人机 · 再按 V 收回' },
   healgun:  { k: 'X', text: '左键注射 · 右键瞄准 · 长按 X 自用 · 再按 X 收起' },
   loiter:   { k: 'X', text: '左键发射 · 右键瞄准后手控制导 · 再按 X 收起' },
+  gl:       { k: 'V', text: '左键射出三联 · 到点惯性滑行 · 3 秒后引爆 · 再按 V 收起' },
 };
 
 /* 这个技能是不是「拿出来用」的类型（点一下键只是把东西拿到手上） */
 const MODE_SKILL = {
-  frag: 1, firebomb: 1, shockbow: 1, scanbow: 1, coverdev: 1, healgun: 1, loiter: 1,
+  frag: 1, firebomb: 1, shockbow: 1, scanbow: 1, coverdev: 1, healgun: 1, loiter: 1, gl: 1,
 };
 
 function modeOn() { return !!(P.op && P.op.mode); }
@@ -2387,6 +2391,7 @@ function enterMode(id, k) {
   else if (id === 'coverdev') popup(P.x, P.y - 48, '速 凝 装 置', '#ffc98a', 12);
   else if (id === 'healgun') popup(P.x, P.y - 48, '激 素 枪', '#8dffc0', 12);
   else if (id === 'loiter') popup(P.x, P.y - 48, '巡 飞 弹 发 射 器', '#ffc98a', 12);
+  else if (id === 'gl') popup(P.x, P.y - 48, '三 头 犬 就 位', '#ffd66b', 12);
   Sfx.adsIn();
 }
 
@@ -5413,14 +5418,15 @@ function fireGL(tg, side) {
   const mx = P.x + Math.cos(a) * (P.r + 10);
   const my = P.y + Math.sin(a) * (P.r + 10);
   const d = Math.max(24, Math.hypot(tx - mx, ty - my));
-  const flight = Math.min(L.maxFlight, d / L.speed);   // 到点就炸：飞行时间只跟距离有关
+  const flight = d / L.speed;                          // 到点的飞行时间：只跟距离有关
 
   G.gls.push({
     x: mx, y: my, px: mx, py: my,
     vx: (tx - mx) / flight,
     vy: (ty - my) / flight,
-    tx, ty, r: 5, fuse: flight + 0.12,
-    travel: 0, spin: rand(0, TAU),
+    tx, ty, r: 5,
+    fuse: L.fuse,                                      // 固定 3 秒引信：到点也不会立刻炸
+    arrived: false, travel: 0, spin: rand(0, TAU),
   });
   P.recoil = Math.max(P.recoil, 2.4);
   P.x -= Math.cos(a) * 1.8;
@@ -5446,12 +5452,6 @@ function useSkill() {
 
   if (op.v.kind === 'dash') {
     dashForward();
-  } else if (op.v.kind === 'gl') {
-    /* 三发共用一个落点：按下那一刻锁定准星位置，之后动鼠标不会把弹撒出去 */
-    const tg = glAimPoint();
-    fireGL(tg, 0);
-    P.op.volley = { left: Math.max(0, (op.v.shots || 3) - 1), t: 0.11, tg, n: 1 };
-    popup(P.x, P.y - 46, '三 头 犬', '#ffd66b', 12);
   }
   kineticKick();
 }
@@ -5549,6 +5549,7 @@ function glBlast(x, y) {
 }
 
 function updateGls(dt) {
+  const L = SKILL.gl;
   for (let i = G.gls.length - 1; i >= 0; i--) {
     const g = G.gls[i];
     g.fuse -= dt;
@@ -5558,33 +5559,43 @@ function updateGls(dt) {
     const spd = Math.hypot(g.vx, g.vy);
     const step = spd * dt;
     const n = Math.max(1, Math.ceil(step / 8));
-    let boom = false;
+    let boom = false, hit = false;
 
     for (let s = 0; s < n; s++) {
       const dtt = dt / n;
       const nx = g.x + g.vx * dtt;
       const ny = g.y + g.vy * dtt;
 
-      /* 撞到实体 / 撞出地图：就地起爆 —— 打墙上就在墙上炸，不再弹走 */
+      /* 撞到实体 / 撞出地图：就地停住 —— 惯性滑到墙上就贴墙停下，等引信烧完再炸 */
       if (!pointInObstacle(g.x, g.y) &&
-          (pointInObstacle(nx, g.y) || pointInObstacle(g.x, ny))) { boom = true; break; }
-      if (nx < 12 || nx > WORLD.w - 12 || ny < 12 || ny > WORLD.h - 12) { boom = true; break; }
+          (pointInObstacle(nx, g.y) || pointInObstacle(g.x, ny))) { hit = true; break; }
+      if (nx < 12 || nx > WORLD.w - 12 || ny < 12 || ny > WORLD.h - 12) { hit = true; break; }
 
       g.x = nx; g.y = ny;
       g.travel += step / n;
 
-      /* 飞到准星落点就炸：不靠引信硬等，落点就是爆点 */
-      if (Math.hypot(g.tx - g.x, g.ty - g.y) <= 9) { g.x = g.tx; g.y = g.ty; boom = true; break; }
+      /* 到准星落点：不炸，只是从这一帧起开始惯性滑行 */
+      if (!g.arrived && Math.hypot(g.tx - g.x, g.ty - g.y) <= 9) g.arrived = true;
     }
 
-    if (Math.random() < 0.8) {
+    /* 到点之后：弹体带着余速往前蹭一小段，速度指数衰减，蹭完就趴在那儿等引信 */
+    if (!g.arrived && ((g.tx - g.x) * g.vx + (g.ty - g.y) * g.vy) <= 0) g.arrived = true;   // 一帧跨过了落点
+    if (hit) { g.vx = 0; g.vy = 0; }
+    else if (g.arrived && (g.vx || g.vy)) {
+      const k = Math.exp(-L.glide * dt);
+      g.vx *= k; g.vy *= k;
+      if (Math.hypot(g.vx, g.vy) < L.slideMin) { g.vx = 0; g.vy = 0; }
+    }
+
+    if (Math.random() < (spd > 30 ? 0.8 : 0.25)) {
       addParticle(g.x, g.y, {
         vx: rand(-16, 16), vy: rand(-16, 16), life: rand(0.2, 0.45), r: rand(2, 4),
         color: '#ffcf6b', drag: 0.9, glow: true,
       });
     }
 
-    if (g.fuse <= 0) boom = true;      // 兜底：万一卡在什么刁钻角落，时间到也炸
+    /* 固定引信：从出膛那一刻算，3 秒到点就炸 —— 不管它落在哪 */
+    if (g.fuse <= 0) boom = true;
     if (boom) { glBlast(g.x, g.y); G.gls.splice(i, 1); }
   }
 }
@@ -5820,6 +5831,7 @@ function updateModeInput(dt) {
   if (rEdge) {
     if (M.id === 'frag') { fragThrow(true); consumeOp('g'); exitMode(); return; }
     if (M.id === 'firebomb') { firebombThrow(true); consumeOp('g'); exitMode(); return; }
+    if (M.id === 'gl') { exitMode(); return; }          // 右键把手炮收回去
     if (M.id === 'shockbow') {
       M.bounce = !M.bounce;
       popup(P.x, P.y - 58, M.bounce ? '反弹 · 开' : '反弹 · 关', M.bounce ? '#9ef7c8' : '#8fa8b8', 11);
@@ -5849,6 +5861,18 @@ function updateModeInput(dt) {
       return;
     } else if (M.id === 'healgun') {
       fireHealDart();
+    } else if (M.id === 'gl') {
+      /* 三发共用一个落点：按下那一刻锁定准星位置，之后动鼠标不会把弹撒出去 */
+      const S = P.op.v;
+      if (S.cd > 0 || S.use <= 0) return;
+      const tg = glAimPoint();
+      fireGL(tg, 0);
+      P.op.volley = { left: Math.max(0, (opDef().v.shots || 3) - 1), t: 0.11, tg, n: 1 };
+      consumeOp('v');
+      kineticKick();
+      popup(P.x, P.y - 46, '三 头 犬', '#ffd66b', 12);
+      if (S.use <= 0) exitMode();       // 最后一组打完自动收手
+      return;
     } else if (M.id === 'loiter') {
       fireLoiter(mouse.right);
       if (!mouse.right) exitMode();
@@ -11187,21 +11211,26 @@ function drawSmokeBlind() {
   ctx.restore();
 }
 
-/* 三头犬的榴弹：一颗带尾焰的胖子，弹过墙会留下火星 */
+/* 三头犬的榴弹：一颗带尾焰的胖子，弹过墙会留下火星；快炸的时候弹体开始闪红 */
 function drawGls() {
   for (const g of G.gls) {
     if (!fogVisibleAt(g.x, g.y)) continue;
+
+    const left = clamp(g.fuse / SKILL.gl.fuse, 0, 1);        // 1 → 刚出膛，0 → 马上炸
+    const blink = left < 0.34 ? 0.5 + 0.5 * Math.sin(g.spin * 3.2) : 0;
 
     ctx.globalAlpha = 0.28;
     ctx.fillStyle = '#000';
     ctx.beginPath(); ctx.ellipse(g.x, g.y + 6, 7, 4, 0, 0, TAU); ctx.fill();
     ctx.globalAlpha = 1;
 
-    const glow = ctx.createRadialGradient(g.x, g.y, 0, g.x, g.y, 18);
-    glow.addColorStop(0, 'rgba(255,214,107,0.75)');
+    const glow = ctx.createRadialGradient(g.x, g.y, 0, g.x, g.y, 18 + blink * 5);
+    glow.addColorStop(0, blink > 0
+      ? 'rgba(255,' + Math.round(150 - blink * 110) + ',90,0.85)'
+      : 'rgba(255,214,107,0.75)');
     glow.addColorStop(1, 'rgba(255,120,40,0)');
     ctx.fillStyle = glow;
-    ctx.beginPath(); ctx.arc(g.x, g.y, 18, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(g.x, g.y, 18 + blink * 5, 0, TAU); ctx.fill();
 
     ctx.save();
     ctx.translate(g.x, g.y);
@@ -11209,10 +11238,19 @@ function drawGls() {
     ctx.fillStyle = '#3a2f1a';
     drawRoundRect(-5.5, -4.5, 11, 9, 3);
     ctx.fill();
-    ctx.strokeStyle = '#ffbe55';
+    ctx.strokeStyle = blink > 0 ? 'rgba(255,' + Math.round(190 - blink * 130) + ',110,1)' : '#ffbe55';
     ctx.lineWidth = 1.6;
     ctx.stroke();
     ctx.restore();
+
+    /* 引信环：最后 1 秒倒着收紧，一眼看出「还没炸」 */
+    if (left < 0.34) {
+      ctx.strokeStyle = 'rgba(255,96,72,' + (0.35 + 0.5 * blink) + ')';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(g.x, g.y, 11, -Math.PI / 2, -Math.PI / 2 + TAU * (left / 0.34));
+      ctx.stroke();
+    }
   }
 }
 
@@ -11234,13 +11272,12 @@ function glImpact(t) {
   return { x: t.x, y: t.y, blocked: false };
 }
 
-/* 手炮落点预览：准星指着哪儿，三发就落在哪儿 —— 超过 100 米打不到，圈变红。
-   画在迷雾之上（屏幕坐标）：不然远处那个圈会被黑糊掉，等于没有提示。 */
+/* 手炮落点预览：只有 V 端在手上时才画 —— 平时不端着炮就不该有个框跟着走。
+   超过 100 米打不到，圈变红。画在迷雾之上（屏幕坐标）：不然远处那个圈会被黑糊掉。 */
 function drawGlAim() {
-  if (G.scene !== 'playing' || !P.alive || isDowned() || modeOn()) return;
-  const op = opDef();
-  if (!op || !op.v || op.v.kind !== 'gl') return;
-  if (!P.op || P.op.v.use <= 0) return;          // 没货就别画，免得当成常驻准星
+  if (G.scene !== 'playing' || !P.alive || isDowned()) return;
+  const M = P.op && P.op.mode;
+  if (!M || M.id !== 'gl') return;
 
   const t = glAimPoint();
   const im = glImpact(t);                        // 墙挡在中间时，圈画在撞墙处
@@ -11251,6 +11288,7 @@ function drawGlAim() {
   const px = (P.x - G.cam.x) * ZOOM + G.shakeX;
   const py = (P.y - G.cam.y) * ZOOM + G.shakeY;
   const rr = L.radius * ZOOM;
+  const ang = Math.atan2(im.y - P.y, im.x - P.x);
 
   ctx.save();
   ctx.lineCap = 'round';
@@ -11260,6 +11298,20 @@ function drawGlAim() {
   ctx.setLineDash([9, 10]);
   ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(sx, sy); ctx.stroke();
   ctx.setLineDash([]);
+
+  /* 惯性：到点不炸，还会顺着弹道往前蹭一小段（v / glide），画出它会滑到哪儿 */
+  if (!im.blocked) {
+    const gl = L.speed / L.glide * ZOOM;
+    const ex = sx + Math.cos(ang) * gl, ey = sy + Math.sin(ang) * gl;
+    ctx.strokeStyle = 'rgba(' + col + ',0.3)';
+    ctx.lineWidth = 1.1;
+    ctx.setLineDash([3, 5]);
+    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.strokeStyle = 'rgba(' + col + ',0.4)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(ex, ey, 4, 0, TAU); ctx.stroke();
+  }
 
   /* 爆炸范围：这一圈的边界就是能炸到的边界 */
   ctx.strokeStyle = 'rgba(' + col + ',0.5)';
@@ -11275,7 +11327,8 @@ function drawGlAim() {
   ctx.moveTo(sx, sy - 9); ctx.lineTo(sx, sy + 9);
   ctx.stroke();
 
-  const label = Math.round(Math.hypot(im.x - P.x, im.y - P.y) / 18) + 'm' +
+  const label = Math.round(Math.hypot(im.x - P.x, im.y - P.y) / 18) + 'm · ' +
+    L.fuse.toFixed(0) + 's' +
     (im.blocked ? ' · 撞墙' : (t.far ? ' · 超出 100m' : ''));
   ctx.textAlign = 'center';
   ctx.font = '700 10px ui-monospace, "Consolas", monospace';
