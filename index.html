@@ -1059,8 +1059,8 @@ const MEDKITS = {
   },
   kit_field: {
     name: '野战急救包', short: '野战包', code: 'FIELD TRAUMA KIT',
-    dur: 220, hps: 20, wind: 6, price: 1900, color: '#9ef2c8', size: 1.02,
-    desc: '220 点耐久，20 血/秒，启动 6s。读条最长，只适合战后蹲着慢慢灌，一支顶好几条命。',
+    dur: 220, hps: 20, wind: 4, price: 1900, color: '#9ef2c8', size: 1.02,
+    desc: '220 点耐久，20 血/秒，启动 4s。四秒起效、二十血一秒，一支顶好几条命，配着掩体用。',
     perk: '',
   },
   box_outdoor: {
@@ -2589,7 +2589,11 @@ canvas.addEventListener('mousemove', e => {
 });
 canvas.addEventListener('mousedown', e => {
   if (e.button === 0) { mouse.down = true; mouse.pressed = true; }
-  if (e.button === 2) mouse.right = true;          // 右键 = 开镜
+  if (e.button === 2) {
+    mouse.right = true;                              // 右键 = 开镜
+    /* 手上是药的时候右键不开镜，改成"收手"：读条 / 回血都能随时掐掉 */
+    if (G.scene === 'playing' && P.medOn) stopCare('已收手');
+  }
 });
 window.addEventListener('mouseup', e => {
   if (e.button === 0) mouse.down = false;
@@ -3908,7 +3912,7 @@ function equipSlot(slot) {
   P.meleeCd = 0;
   P.ads = 0;
   P.adsPrev = 0;
-  if (slot !== 'medkit') { P.medOn = null; P.medWind = 0; }   // 收药走人，包扎中断
+  if (slot !== 'medkit') { P.medOn = null; P.medWind = 0; }   // 药收回去了，读条自然作废（不算打断）
   const g = slotGunId(slot);
   if (g) P.weapon = g;
   P.fireCd = Math.max(P.fireCd, 0.14);
@@ -4086,6 +4090,10 @@ function careBusy() { return !!(P.medOn || P.medCd > 0); }
 /* 统一的"使用"入口：care key → 对应分支 */
 function startCare(key) {
   const k = careKindOf(key);
+  /* 血满了还按 5：先说清楚原因，别被后面的收手冷却抢了台词 */
+  if (k === 'med' && P.hp >= P.maxHp - 0.01) { uiToast('生命值已满，不用包扎', 'small'); return false; }
+  /* 刚收手的 0.25s 里再按，给一句反馈，别让人以为按键没生效 */
+  if (P.medCd > 0.05) { uiToast('手还没收回来 · ' + P.medCd.toFixed(1) + 's 后再起手', 'small'); return false; }
   if (k === 'stop') return startStopBleed(careIdOf(key));
   if (k === 'surg') return startSurgery(careIdOf(key));
   return startMedHeal(careIdOf(key));
@@ -4168,11 +4176,15 @@ function startSurgery(id) {
   return true;
 }
 
-function stopCare(msg) {
+/* ── 收手 ──
+   只有一种打断：玩家自己按右键（或再按 5 / 左键）收手。
+   挨打、起跑、翻窗都不会自动中断 —— 代价只有"时间"：读条白读、回血中断，
+   但已经灌进去的那部分耐久不会返还（耐久是按血量 1:1 扣的，血留下了，耐久就没了）。 */
+function stopCare(msg, cd) {
   if (!P.medOn) return;
   P.medOn = null;
   P.medWind = 0;
-  P.medCd = Math.max(P.medCd, 0.25);
+  P.medCd = Math.max(P.medCd, cd || 0.25);
   if (msg) uiToast(msg, 'small');
 }
 /* 老名字还留着：外面有几处是按"包扎"来调用的 */
@@ -4188,8 +4200,21 @@ function toggleMedkit() {
   startCare(key);
 }
 
+/* 长按 5 选中即用：掏出医疗槽 → 直接进启动读条，不用再按一次 5 */
+function useCareNow(key) {
+  if (!P.alive || !key) return false;
+  if (P.curSlot === 'medkit' && P.medOn === key) return true;   // 正在用的就是这一种，别把读条重开
+  if (P.curSlot !== 'medkit') equipSlot('medkit');
+  if (P.curSlot !== 'medkit') return false;      // 掏不出来（没药了）
+  if (P.medOn) stopCare();                       // 正在用别的：先收手再换
+  P.carePick = key;
+  P.medCd = 0;                                   // 换药不算"刚收手"的那 0.25s 抖动
+  return startCare(key);
+}
+
 /* ── 短按 / 长按 5 ──
-   按下只记账，松手时才决定：短按 = 用上次那种，长按 = 弹出选择盘。 */
+   按下只记账，松手时才决定：短按 = 用上次那种，长按 = 弹出选择盘。
+   选择盘里挑中哪一样，松手就当场上手（不再要求补按一次 5）。 */
 function medPressDown() {
   if (!P.alive) return;
   const own = careOwnedKeys();
@@ -4209,12 +4234,9 @@ function medPressUp() {
     MED_SEL.open = false;
     const id = MED_SEL.list[MED_SEL.idx];
     if (id) {
-      P.carePick = id;
       Sfx.tone(660, 0.06, 0.05, 'square');
-      const k = careKindOf(id);
-      const tail = k === 'surg' ? (' · 剩 ' + careCount(id) + ' 次')
-        : (k === 'stop' ? (' ×' + careCount(id)) : (' ×' + careCount(id) + ' · 剩余耐久 ' + Math.ceil(medLeftOf(careIdOf(id)))));
-      uiToast('已选择 ' + careName(id) + tail + ' · 短按 5 使用', 'small');
+      P.carePick = id;
+      useCareNow(id);            // 选中即用：松手直接进读条
     }
     return;
   }
@@ -4250,7 +4272,7 @@ function activeMedPerk() {
 
 function updateMedHeal(dt) {
   if (!P.medOn) return;
-  if (!P.alive || P.curSlot !== 'medkit') { P.medOn = null; P.medWind = 0; return; }
+  if (!P.alive || P.curSlot !== 'medkit' || isDowned()) { P.medOn = null; P.medWind = 0; return; }
 
   const key = P.medOn;
   const kind = careKindOf(key);
@@ -4321,10 +4343,14 @@ function updateMedHeal(dt) {
   const s = medUnit(id);
   if (!s) { P.medOn = null; return; }
 
-  if (P.hp >= P.maxHp - 0.01) { P.medOn = null; P.medCd = Math.max(P.medCd, 0.3); uiToast('生命值已满', 'small'); return; }
+  if (P.hp >= P.maxHp - 0.01) { P.medOn = null; uiToast('生命值已满', 'small'); return; }
+  /* 这一支的耐久耗光就收手 —— 想接着灌得重新起手、再走一次启动读条，
+     不能让"多带几支"变成一次读条喝到满血 */
   if (s.left <= 0.01) {
-    if (s.n > 0) { s.n--; s.left = M.dur; }               // 上一支用完了，自动接下一支
-    else { P.medOn = null; uiToast(M.name + ' 用完了', 'small warn'); return; }
+    P.medOn = null;                              // 自然用完不留冷却：换一支立刻能起手
+    if (s.n > 0) uiToast(M.name + ' 这支用完了 · 还有 ' + s.n + ' 支（再按 5 起手）', 'small');
+    else uiToast(M.name + ' 用完了', 'small warn');
+    return;
   }
 
   /* 还在流血的时候包扎效率很低，止血带能先解决这个问题 */
@@ -4345,11 +4371,6 @@ function updateMedHeal(dt) {
       vx: rand(-12, 12), vy: rand(-40, -14), life: 0.55, r: rand(2, 3.6),
       color: M.color, drag: 0.92, glow: true,
     });
-  }
-
-  if (s.left <= 0.01) {
-    if (s.n > 0) { s.n--; s.left = M.dur; popup(P.x, P.y - 48, '换 ' + M.name, M.color, 12); }
-    else { P.medOn = null; uiToast(M.name + ' 用完了', 'small warn'); }
   }
 }
 
@@ -11655,7 +11676,7 @@ function drawMedSelect(mono) {
   ctx.textAlign = 'center';
   ctx.fillStyle = 'rgba(190,230,250,0.85)';
   ctx.font = '700 11px ' + mono;
-  ctx.fillText('治疗物品 · 滚轮切换 · 松开 [5] 确认', VW / 2, y0 - 12);
+  ctx.fillText('治疗物品 · 滚轮切换 · 松开 [5] 直接用', VW / 2, y0 - 12);
 
   let ry = y0;
   for (const r of rows) {
@@ -12193,10 +12214,10 @@ function drawHUD() {
     ctx.fillStyle = winding ? '#ffd66b' : (P.medOn ? '#8fffc4' : 'rgba(150,228,255,0.85)');
     ctx.fillText(
       winding ? (careKindOf(P.medOn) === 'surg'
-        ? ('手术中 ' + P.medWind.toFixed(1) + 's · 左键 / 5 中止')
-        : ('启动中 ' + P.medWind.toFixed(1) + 's · 左键 / 5 取消'))
-        : (P.medOn ? (careKindOf(P.medOn) === 'med' ? '回血中 · 左键 / 5 停手' : '处理中 · 左键 / 5 停手')
-          : '短按 5 使用 · 长按 5 选择'),
+        ? ('手术中 ' + P.medWind.toFixed(1) + 's · 右键收手')
+        : ('启动中 ' + P.medWind.toFixed(1) + 's · 右键收手'))
+        : (P.medOn ? (careKindOf(P.medOn) === 'med' ? '回血中 · 右键收手' : '处理中 · 右键收手')
+          : '短按 5 用上次那种 · 长按 5 换药'),
       wx, stateY);
   }
 
