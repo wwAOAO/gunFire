@@ -1237,7 +1237,7 @@ const KNOWN_WEAPON_IDS = { g17: 1, '93r': 1, g18: 1, bizon: 1, m870: 1,
 const PISTOL_IDS = { g17: 1, '93r': 1, g18: 1 };
 
 /* 干员白名单：存档加载比 OPERATORS 表更早执行，这里只放 id，别引用表本身 */
-const OP_IDS = { redwolf: 1, weilong: 1 };
+const OP_IDS = { redwolf: 1, weilong: 1, luna: 1, beeser: 1, uluru: 1 };
 
 /* 空弹药表：CAL_ORDER 个口径 × 8 个弹级，全 0。
    新档和清洗共用一份，加口径时不用再改两处。 */
@@ -1913,6 +1913,38 @@ const SKILL = {
            kd: 3.0, bossKd: 1.0, selfKd: 2.0, knock: 70 },
   /* 动能辅助：技能 / 被掀翻后短暂加速，爆炸伤害与骨裂都打折 */
   kine: { dur: 2.6, move: 1.18, blastMul: 0.55, fissureDodge: 0.75 },
+
+  /* ── 露娜（侦察）── */
+  /* 增强破片手雷：按住左键点引信（5s），松手投出；引信烧完就在手上炸 */
+  frag: { dmg: 84, radius: 6 * 18, fuse: 5.0, near: 9 * 18, lob: 18 * 18,
+          speed: 660, selfMul: 0.7, bleed: 2, holdMax: 12 * 18 },
+  /* 电击箭矢：射出后落地成 5 米电圈，持续电击 + 减速（骨折）；可反弹一次 */
+  arc: { speed: 780, range: 30 * 18, zoneR: 5 * 18, zoneLife: 4.2, tick: 0.42,
+         dmg: 9, cripple: 3.5, bounce: 1, healSlow: 5 },
+  /* 侦察箭矢：飞 200 米，沿途 9 米内敌人全部标记 */
+  scan: { speed: 1150, range: 200 * 18, mark: 9, scanR: 9 * 18, hitR: 26 },
+
+  /* ── 蜂医（支援）── */
+  /* 蜂巢烟：15 秒，被激素枪打中转化成 60 秒绿色治疗场 */
+  bee: { life: 15, r: 118, healLife: 60, healR: 122, healRate: 3.4, tick: 0.5 },
+  /* 烟幕无人机：可手控飞行，一路拉直线长烟；不能染成治疗烟 */
+  drone: { life: 16, speed: 330, step: 0.17, r: 92, smokeLife: 15, trailR: 96 },
+  /* 激素枪：充能 30s/发、上限 3 发；打烟染色、打敌人穿甲 0 级、长按 X 自用 */
+  heal: { charges: 3, recharge: 30, dmg: 8, pen: 0, heal: 34, regen: 4.2, regenT: 8,
+          speed: 940, homing: 3.0, range: 34 * 18 },
+  /* 专业救援：倒地 8 秒自己爬起来，10 血复活；每局一次（CD 360s） */
+  rescue: { down: 8.0, hp: 10, cd: 360, weakCut: 1 },
+
+  /* ── 乌鲁鲁（工程）── */
+  firebomb: { r: 5 * 18, life: 12, dmg: 6.5, tick: 0.55, near: 9 * 18, lob: 19 * 18,
+              speed: 640, selfMul: 0.6 },
+  /* 速凝掩体：20 米内指定位置立一块板，横/竖可切，存在 60 秒 */
+  cover: { life: 60, range: 20 * 18, long: 132, thin: 26, selfMul: 0.5 },
+  /* 巡飞弹：手控制导，最远 180 米；炸开再分裂 4 枚子炸弹 */
+  loiter: { speed: 400, accel: 320, turn: 2.4, range: 180 * 18, radius: 6 * 18,
+            dmg: 95, subs: 4, subDmg: 36, subR: 4 * 18, subDelay: 0.55, selfMul: 0.5 },
+  /* 久经沙场：骨折 / 减速类 debuff 抗性 */
+  tough: { traumaMul: 0.45, legMul: 0.55, fissureMul: 0.5, chillMul: 0.6 },
 };
 
 const OPERATORS = {
@@ -1965,8 +1997,84 @@ const OPERATORS = {
       desc: '使用技能、被爆炸掀翻时会回收动能：2.6 秒内移速 +18%。爆炸类伤害对自己只吃 55%，也有 75% 概率直接免掉骨裂。没有冷却。',
     },
   },
+
+  luna: {
+    id: 'luna', name: '露娜', role: '侦察', en: 'LUNA',
+    color: '#8ef2b0', glow: '#2fd47a',
+    desc: '眼睛。箭比枪安静，也比枪看得远 —— 被她标上的人，隔着三堵墙也躲不掉下一发。',
+    g: {
+      name: '增强破片手雷', short: '破片雷', tag: '战术道具', kind: 'frag',
+      desc: '按 G 把雷拿到手上：按住左键开始烧引信（5 秒），松手投出 —— 引信剩多少就飞多久，烧到最后再扔就是瞬爆。右键直接抛出（更远、引信不烧）。引信在手上烧完会炸自己。爆炸半径 6 米、中心 84 伤并挂流血。储备 2 颗，打掉一颗按 40 秒回充。',
+      cd: 40, charges: 2,
+    },
+    v: {
+      name: '电击箭矢', short: '电箭', tag: '小技能', kind: 'shockbow',
+      desc: '按 V 张弓，左键射出电箭：落点炸出 5 米电圈，持续 4.2 秒电击（每 0.42 秒 9 伤）+ 减速 3.5 秒；被电到的敌人连治疗都变慢（回血速率 -70%，持续 5 秒）。弓上按右键切换「反弹」，开启后这支箭能弹墙一次。储备 2 支，按 40 秒回充。',
+      cd: 40, charges: 2,
+    },
+    x: {
+      name: '侦察箭矢', short: '侦察箭', tag: '大招', kind: 'scanbow',
+      desc: '按 X 张弓，左键射出侦察箭：以 1150 速度飞满 200 米（穿人而过），沿途 9 米内的敌人全部被标记 9 秒 —— 标记期间隔着迷雾、隔着墙都能看见他的位置。储备 1 支，CD 75 秒。',
+      cd: 75, charges: 1,
+    },
+    passive: {
+      name: '敌情分析', short: '敌情分析', tag: '被动', kind: 'spot',
+      desc: '你打中的敌人会被标记 4 秒：头顶一个绿色三角，位置在迷雾里也照样显示给你。没有冷却 —— 打中就标，标上就看得见。',
+    },
+  },
+
+  beeser: {
+    id: 'beeser', name: '蜂医', role: '支援', en: 'HIVES',
+    color: '#7dffb0', glow: '#26d96f',
+    desc: '队医。烟是自己的手术室，激素针是自己的止血钳 —— 一个人也能把自己从地上捞起来，只是得躺满八秒。',
+    g: {
+      name: '蜂巢科技烟雾弹', short: '蜂巢烟', tag: '战术道具', kind: 'beesmoke',
+      desc: '按 G 直接投出一枚蜂巢烟：15 秒大烟，和普通烟一样遮断视线。用激素枪打中这团烟（左键或长按 X 自扎都算）会把它染成绿色治疗场：范围 6.8 米，持续 60 秒，敌我站进去都按每秒 3.4 点回血 —— 包括敌人。储备 2 颗，按 40 秒回充。',
+      cd: 40, charges: 2,
+    },
+    v: {
+      name: '烟幕无人机', short: '烟幕机', tag: '小技能', kind: 'drone',
+      desc: '点按 V：朝准星方向拉出一条 30 米的直线长烟。按住 V 超过 0.3 秒再松开：放出一台烟幕无人机，WASD 直接操控飞行、一路不停留下烟迹（最多 16 秒），再按一次 V 收回。这烟是机器喷的，染不成治疗场。储备 1 台，按 60 秒回充。',
+      cd: 60, charges: 1,
+    },
+    x: {
+      name: '激素枪', short: '激素枪', tag: '大招', kind: 'healgun',
+      desc: '按 X 切出激素枪：左键射出追踪激素针 —— 命中烟雾把它染成治疗场，命中敌人按 0 级弹算伤害。右键抬枪收束。长按 X 直接给自己来一针：立刻 +34 血，之后 8 秒内再回 4.2/秒。充能 30 秒发一发、最多存 3 发（不是冷却，是弹匣）。',
+      cd: 0, charges: 3, dur: 0,
+    },
+    passive: {
+      name: '专业救援', short: '专业救援', tag: '被动', kind: 'rescue',
+      desc: '一个人出勤也死不了：血量见底时不是直接倒下，而是进入倒地状态 8 秒 —— 这 8 秒里敌人照样能把你打死，但你自己能爬。撑满 8 秒自动起身：10 点血、移除「血量上限降低」的虚弱。每局只有一次（CD 360 秒）。',
+    },
+  },
+
+  uluru: {
+    id: 'uluru', name: '乌鲁鲁', role: '工程', en: 'ULURU',
+    color: '#ffb457', glow: '#ff8a1f',
+    desc: '工兵。别人找掩体，他自己浇一个；别人躲爆炸，他把爆炸送到一百八十米外。',
+    g: {
+      name: '复合型燃烧弹', short: '燃烧弹', tag: '战术道具', kind: 'firebomb',
+      desc: '按 G 取出燃烧弹：左键投掷、右键抛出（更远）。落地立刻烧起来，火场半径 5 米、持续 12 秒，每秒 6.5 伤并附加灼烧。储备 2 颗，按 45 秒回充。',
+      cd: 45, charges: 2,
+    },
+    v: {
+      name: '速凝掩体', short: '速凝掩体', tag: '小技能', kind: 'coverdev',
+      desc: '按 V 切换速凝掩体装置：左键在准星处（20 米内）喷出一块速凝板 —— 挡子弹、挡视线、也挡人。右键切换横向 / 竖向。掩体存在 60 秒。储备 1 个，按 55 秒回充。',
+      cd: 55, charges: 1,
+    },
+    x: {
+      name: '巡飞弹', short: '巡飞弹', tag: '大招', kind: 'loiter',
+      desc: '按 X 举起巡飞弹发射器：左键直接发射（按准星方向平飞），右键进入瞄准、左键发射后由你手动遥控（WASD 转向、镜头跟着导弹）。飞行满 180 米或手动引爆即起爆：半径 6 米、95 伤，随后分裂 4 枚子炸弹向四周散开再炸一轮。储备 1 发，CD 90 秒。',
+      cd: 90, charges: 1,
+    },
+    passive: {
+      name: '久经沙场', short: '久经沙场', tag: '被动', kind: 'tough',
+      desc: '骨折类创伤的判定概率 -55%，骨裂伤害与腿部 / 冻伤的减速效果也各打一半 —— 同样的爆炸，别人断腿，他只是踉跄一下。没有冷却。',
+    },
+  },
 };
-const OP_ORDER = ['redwolf', 'weilong'];
+
+const OP_ORDER = ['redwolf', 'weilong', 'luna', 'beeser', 'uluru'];
 
 function opDef() { return OPERATORS[SAVE.operator] || null; }
 function exoOn() { return !!(P.op && P.op.x && P.op.x.on); }
@@ -2237,27 +2345,189 @@ const MED_HOLD_T = 0.34;   // 按住超过这个时长就算长按
 const MAG_AIM = { down: false, hold: 0, on: false };
 const MAG_HOLD_T = 0.28;
 
+/* 无人机 / 激素枪的「点按 / 长按」判定 */
+const HOLDV = { down: false, hold: 0 };
+const HOLDX = { down: false, hold: 0 };
+const HOLD_T = 0.30;
+
+/* 手持模式的文案：HUD 底部那行提示 */
+const MODE_KEY = {
+  frag:     { k: 'G', text: '左键按住点引信 · 松手投出 · 右键抛出 · 再按 G 收起' },
+  firebomb: { k: 'G', text: '左键投掷 · 右键抛出 · 再按 G 收起' },
+  shockbow: { k: 'V', text: '左键射箭 · 右键切换反弹 · 再按 V 收弓' },
+  scanbow:  { k: 'X', text: '左键射出侦察箭 · 再按 X 收弓' },
+  coverdev: { k: 'V', text: '左键放置掩体 · 右键切换横 / 竖 · 再按 V 收起' },
+  drone:    { k: 'V', text: 'WASD 操控无人机 · 再按 V 收回' },
+  healgun:  { k: 'X', text: '左键注射 · 右键瞄准 · 长按 X 自用 · 再按 X 收起' },
+  loiter:   { k: 'X', text: '左键发射 · 右键瞄准后手控制导 · 再按 X 收起' },
+};
+
+/* 这个技能是不是「拿出来用」的类型（点一下键只是把东西拿到手上） */
+const MODE_SKILL = {
+  frag: 1, firebomb: 1, shockbow: 1, scanbow: 1, coverdev: 1, healgun: 1, loiter: 1,
+};
+
+function modeOn() { return !!(P.op && P.op.mode); }
+
+function enterMode(id, k) {
+  if (!P.op) return;
+  P.op.mode = { id, k, t: 0, lit: false, fuse: 0, bounce: false, vert: false, aimR: 0, prevDown: false };
+  P.sprinting = false;
+  P.ads = 0;
+  if (id === 'frag') popup(P.x, P.y - 48, '破 片 雷 就 位', '#bff3c9', 12);
+  else if (id === 'firebomb') popup(P.x, P.y - 48, '燃 烧 弹 就 位', '#ffc98a', 12);
+  else if (id === 'shockbow') popup(P.x, P.y - 48, '电 箭 上 弦', '#bff3c9', 12);
+  else if (id === 'scanbow') popup(P.x, P.y - 48, '侦 察 弓', '#9ef7c8', 12);
+  else if (id === 'coverdev') popup(P.x, P.y - 48, '速 凝 装 置', '#ffc98a', 12);
+  else if (id === 'healgun') popup(P.x, P.y - 48, '激 素 枪', '#8dffc0', 12);
+  else if (id === 'loiter') popup(P.x, P.y - 48, '巡 飞 弹 发 射 器', '#ffc98a', 12);
+  Sfx.adsIn();
+}
+
+function exitMode(silent) {
+  if (!P.op || !P.op.mode) return;
+  const id = P.op.mode.id;
+  P.op.mode = null;
+  if (id === 'drone') G.drones.length = 0;      // 收回无人机：烟迹留在原地
+  if (id === 'loiter') {                        // 松开遥控 = 引爆
+    const m = ctlLoiter();
+    if (m) {
+      loiterBlast(m.x, m.y, true);
+      const k = G.loiters.indexOf(m);
+      if (k >= 0) G.loiters.splice(k, 1);
+    }
+  }
+  if (!silent) Sfx.adsOut();
+}
+
+/* 手上这件东西还剩几层储备 / 冷却好没好 */
+function modeAvailable(k) {
+  const op = opDef();
+  if (!op || !P.op) return false;
+  const S = P.op[k], def = op[k];
+  if (!def) return false;
+  if (def.kind === 'healgun') {
+    if (S.use <= 0) { uiToast('激素枪充能中 · ' + Math.ceil(S.recharge) + 's', 'small'); return false; }
+    return true;
+  }
+  if (S.cd > 0) { uiToast(def.short + '装填中', 'small'); return false; }
+  if (S.use <= 0) { uiToast(def.short + '回充中 · ' + Math.ceil(S.recharge) + 's', 'small'); return false; }
+  return true;
+}
+
+/* 真正扣掉一层储备（拿出来不扣，用掉才扣） */
+function consumeOp(k) {
+  const op = opDef();
+  if (!op || !P.op) return;
+  const S = P.op[k], def = op[k];
+  S.use--;
+  S.cd = 0.55;                                  // 出弹间隔：防连按双发
+  /* 充能型大招（激素枪）没有 CD，回充间隔就按「每发 30 秒」算 */
+  const gap = def.kind === 'healgun' ? SKILL.heal.recharge : def.cd;
+  if (S.use < def.charges && S.recharge <= 0) S.recharge = gap;
+}
+
 function magAimDist() { return Math.hypot(mouse.wx - P.x, mouse.wy - P.y); }
 
 function skillGDown() {
   if (G.scene !== 'playing') return;
   const op = opDef();
-  if (!op || !P.alive || (op.g.kind !== 'magbomb')) { useTactic(); return; }
-  MAG_AIM.down = true;
-  MAG_AIM.hold = 0;
-  MAG_AIM.on = false;
+  if (!op || !P.alive) return;
+
+  /* 已经在手持模式里：再按一次对应的键就收起来 */
+  if (modeOn()) {
+    if (P.op.mode.k === 'g') { exitMode(); }
+    return;
+  }
+
+  if (op.g.kind === 'magbomb') {
+    MAG_AIM.down = true; MAG_AIM.hold = 0; MAG_AIM.on = false;
+    return;
+  }
+  if (MODE_SKILL[op.g.kind]) {
+    if (!modeAvailable('g')) return;
+    enterMode(op.g.kind, 'g');
+    return;
+  }
+  useTactic();
 }
 
 function skillGUp() {
-  if (!MAG_AIM.down) return;
-  const held = MAG_AIM.hold;
-  MAG_AIM.down = false;
-  MAG_AIM.on = false;
-  MAG_AIM.hold = 0;
+  if (MAG_AIM.down) {
+    const held = MAG_AIM.hold;
+    MAG_AIM.down = false; MAG_AIM.on = false; MAG_AIM.hold = 0;
+    if (G.scene !== 'playing') return;
+    const op = opDef();
+    if (op && op.g.kind === 'magbomb') useTactic(held >= MAG_HOLD_T ? magAimDist() : null);
+  }
+}
+
+/* ── V 键：点按 / 长按分流（无人机） ── */
+function skillVDown() {
   if (G.scene !== 'playing') return;
   const op = opDef();
-  if (!op || op.g.kind !== 'magbomb') return;
-  useTactic(held >= MAG_HOLD_T ? magAimDist() : null);
+  if (!op || !P.alive) return;
+
+  if (modeOn()) {
+    if (P.op.mode.k === 'v') exitMode();
+    return;
+  }
+  if (op.v.kind === 'drone') {
+    if (!modeAvailable('v')) return;
+    HOLDV.down = true; HOLDV.hold = 0;
+    return;
+  }
+  if (MODE_SKILL[op.v.kind]) {
+    if (!modeAvailable('v')) return;
+    enterMode(op.v.kind, 'v');
+    return;
+  }
+  useSkill();
+}
+
+function skillVUp() {
+  if (!HOLDV.down) return;
+  const held = HOLDV.hold;
+  HOLDV.down = false; HOLDV.hold = 0;
+  if (G.scene !== 'playing') return;
+  const op = opDef();
+  if (!op || op.v.kind !== 'drone') return;
+  if (held >= HOLD_T) startDrone();
+  else layLineSmoke();
+}
+
+/* ── X 键：点按切枪 / 长按给自己一针 ── */
+function skillXDown() {
+  if (G.scene !== 'playing') return;
+  const op = opDef();
+  if (!op || !P.alive) return;
+
+  if (modeOn()) {
+    if (P.op.mode.k === 'x') exitMode();
+    return;
+  }
+  if (op.x.kind === 'healgun') {
+    HOLDX.down = true; HOLDX.hold = 0;
+    return;
+  }
+  if (MODE_SKILL[op.x.kind]) {
+    if (!modeAvailable('x')) return;
+    enterMode(op.x.kind, 'x');
+    return;
+  }
+  useUlt();
+}
+
+function skillXUp() {
+  if (!HOLDX.down) return;
+  const held = HOLDX.hold;
+  HOLDX.down = false; HOLDX.hold = 0;
+  if (G.scene !== 'playing') return;
+  const op = opDef();
+  if (!op || op.x.kind !== 'healgun') return;
+
+  if (held >= HOLD_T) healSelfShot();
+  else if (modeAvailable('x')) enterMode('healgun', 'x');
 }
 
 window.addEventListener('keydown', e => {
@@ -2275,8 +2545,8 @@ window.addEventListener('keydown', e => {
   if (k === 'r') startReload();
 /* 干员技能：G 战术道具 / V 小技能 / X 大招 / C 被动滑铲 */
   if (k === 'g' && !e.repeat) skillGDown();
-  if (k === 'v' && !e.repeat) useSkill();
-  if (k === 'x' && !e.repeat) useUlt();
+  if (k === 'v' && !e.repeat) skillVDown();
+  if (k === 'x' && !e.repeat) skillXDown();
   if (k === 'c' && !e.repeat) trySlide();
   if (k === '5') { if (!e.repeat) medPressDown(); return; }
   if (k >= '1' && k <= '4' && !e.repeat) {
@@ -2288,6 +2558,8 @@ window.addEventListener('keyup', e => {
   const k = e.key.toLowerCase();
   keys[k] = false;
   if (k === 'g') skillGUp();
+  if (k === 'v') skillVUp();
+  if (k === 'x') skillXUp();
   if (k !== '5') return;
   if (G.scene === 'playing') medPressUp();
   else { MED_SEL.down = false; MED_SEL.open = false; }
@@ -2297,6 +2569,8 @@ window.addEventListener('blur', () => {
   mouse.down = false; mouse.right = false;
   MED_SEL.down = false; MED_SEL.open = false;
   MAG_AIM.down = false; MAG_AIM.on = false; MAG_AIM.hold = 0;
+  HOLDV.down = false; HOLDV.hold = 0;
+  HOLDX.down = false; HOLDX.hold = 0;
 });
 
 canvas.addEventListener('mousemove', e => {
@@ -2370,6 +2644,13 @@ const G = {
   gls: [],          // 玩家三联装手炮的榴弹（会弹墙）
   magbombs: [],     // 威龙的磁吸炸弹（飞行 / 吸附 / 倒计时）
   shocks: [],       // 威龙虎蹲炮的压缩空气弹（会弹墙）
+  frags: [],        // 露娜的破片手雷（引信在飞 / 在手上烧）
+  arrows: [],       // 露娜的电击箭 / 侦察箭
+  ezones: [],       // 电击箭落地的电圈
+  healFields: [],   // 蜂医染出来的绿色治疗场
+  drones: [],       // 蜂医的烟幕无人机
+  covers: [],       // 乌鲁鲁的速凝掩体（同时挂在 obstacles 里挡人挡弹）
+  loiters: [],      // 乌鲁鲁的巡飞弹（含分裂出来的子炸弹）
   units: [],        // 地图里布置的敌人（兵种 + 驻地）
   bossSpawned: false, // 本局是否已有 BOSS（避免增援重复刷）
   bossBarBottom: false, // BOSS 血条是否临时挪到屏幕底部
@@ -2394,6 +2675,8 @@ const P = {
   /* 干员技能运行时：g/v 各自 {cd,use}（use = 本局剩余储备），x = {cd,on,t}，
      volley 是三连发的排程，slide/slideA 是滑铲的剩余时间与方向 */
   op: null,
+  downed: 0,                    // 蜂医被动：倒地剩余时间（>0 就趴着）
+  regenT: 0,                    // 激素针的后续回血剩余时间
   concuss: 0,                   // 被自己的榴弹震到：眩晕，重影 + 不能开镜
   aim: 0,
   fireCd: 0,
@@ -3067,7 +3350,10 @@ function initOperatorSkills() {
        打掉一层后立刻开始回充，回满一层接着回下一层 —— 手上有余量就能连放 */
     g: { cd: 0, use: op ? op.g.charges : 0, recharge: 0 },
     v: { cd: 0, use: op ? op.v.charges : 0, recharge: 0 },
-    x: { cd: 0, on: false, t: 0 },
+    x: { cd: 0, on: false, t: 0, use: op ? (op.x.charges || 1) : 0, recharge: 0 },
+    /* 技能手持模式：拿出来的雷 / 弓 / 装置 / 发射器。有 mode 时左键右键都归技能管，
+       枪是收起来的。结构见 enterMode() */
+    mode: null,
     volley: null,          // 三连发的排程：{ left, t }
     slide: 0,              // 滑铲剩余时间
     slideDur: 0,           // 这一下滑铲的总时长（算衰减用）
@@ -3078,9 +3364,13 @@ function initOperatorSkills() {
     dashSpd: 0,            // 推进速度（按正/侧/后打过的折）
     kine: 0,               // 动能辅助剩余时间
     lastMag: SKILL.mag.def,// 磁吸炸弹上次的投掷距离（短按沿用）
+    lastThrow: 5 * 18,      // 燃烧弹 / 破片雷上次的投掷距离
+    rescueCd: 0,           // 蜂医「专业救援」的冷却（每局重生一次）
   };
   P.concuss = 0;
   P.kd = 0;                // 被虎蹲炮掀翻的剩余时间
+  P.downed = 0;            // 每局重新开始，倒地状态清零
+  P.regenT = 0;
 }
 
 function resetPlayer() {
@@ -3393,6 +3683,12 @@ function addDebuff(kind, n, label) {
   const d = P.deb;
   const k = Math.max(1, n | 0);
   let txt = '';
+  /* 久经沙场：骨折 / 骨裂这一类结构伤，有一半概率直接扛住 */
+  if (toughOn() && (kind === 'leg' || kind === 'arm' || kind === 'fissure')
+      && Math.random() < SKILL.tough.traumaMul) {
+    popup(P.x + rand(-8, 8), P.y - 46, '久经沙场 · 硬扛', '#ffc98a', 12);
+    return;
+  }
   if (kind === 'bleed') {
     const before = d.bleed;
     d.bleed = Math.min(DEBUFF.bleedMax, d.bleed + k);
@@ -3589,6 +3885,7 @@ function equipSlot(slot) {
     if (slot === 'medkit') toggleMedkit();
     return;
   }
+  if (modeOn()) exitMode(true);          // 换枪就把手上的技能装置收起来
   P.curSlot = slot;
   P.burstLeft = 0;
   P.reloading = 0;
@@ -3676,7 +3973,7 @@ function finishReload() {
 /* 扣扳机：全自动按住就连，半自动每发都要重新按，点射一次打三发 */
 function tryFire(edge) {
   if (!P.weapon || !P.owned[P.weapon]) return;
-  if (dashOn() || knockOn()) return;          // 推进中不能开火，倒地更不能
+  if (dashOn() || knockOn() || modeOn() || isDowned()) return;   // 推进 / 倒地 / 手持技能都不能开火
   const W = weaponStats(P.weapon);
   const a = currentAmmo();
   if (P.reloading > 0 || a.mag <= 0 || P.fireCd > 0) return;
@@ -4045,9 +4342,9 @@ function updateMedHeal(dt) {
    已经在跑的人可以一直跑到 0，重新起跑要 >= resumeAt，避免在 0 附近反复抖。 */
 function updateSprint(dt, il) {
   const load = P.armorLoad || 0;
-  if (dashOn() || knockOn()) { P.sprinting = false; return; }   // 推进 / 倒地时不算跑
+  if (dashOn() || knockOn() || isDowned()) { P.sprinting = false; return; }   // 推进 / 倒地时不算跑
   const ready = P.alive && il > 0 && P.ads < 0.3 && P.reloading <= 0 &&
-                P.medOn === null && !legBroken() && P.exhaust <= 0;
+                P.medOn === null && !legBroken() && P.exhaust <= 0 && !modeOn();
   const run = ready && !!keys['shift'] &&
               (P.sprinting ? P.stamina > 0 : P.stamina >= SPRINT.resumeAt);
 
@@ -4079,6 +4376,21 @@ function updatePlayer(dt) {
   updateMedHeal(dt);            // 包扎按耐久持续回血
   updateOperatorSkills(dt);     // 干员技能：冷却 / 三连发 / 外骨骼 / 滑铲计时
 
+  /* 激素针的后续回血 */
+  if (P.regenT > 0 && P.alive && !isDowned()) {
+    P.regenT = Math.max(0, P.regenT - dt);
+    P.hp = Math.min(P.maxHp, P.hp + SKILL.heal.regen * dt);
+  }
+
+  /* 蜂医倒地：动不了、打不了，只能等着自己爬起来（或者被打死） */
+  if (isDowned()) {
+    updateDowned(dt);
+    P.aim = Math.atan2(mouse.y + G.cam.y - P.y, mouse.x + G.cam.x - P.x);
+    P.vx = 0; P.vy = 0;
+    mouse.pressed = false;
+    return;
+  }
+
   const wmx = mouse.x + G.cam.x;
   const wmy = mouse.y + G.cam.y;
   mouse.wx = wmx; mouse.wy = wmy;
@@ -4094,6 +4406,8 @@ function updatePlayer(dt) {
 
   /* 被虎蹲炮掀翻：站不起来也开不了枪，只能等这 2 秒过去 */
   if (knockOn()) { ix = 0; iy = 0; }
+  /* 遥控巡飞弹时人钉在原地：WASD 此时归导弹 */
+  if (modeOn() && P.op.mode.controlling) { ix = 0; iy = 0; }
 
   /* ── 跑步：这一步要排在开镜之前，跑起来就没法开镜 ── */
   updateSprint(dt, il);
@@ -4103,7 +4417,7 @@ function updatePlayer(dt) {
   const aCfg = adsOf(wNow);
   const gunOut = P.curSlot !== 'melee' && P.curSlot !== 'medkit';
   const adsOn = mouse.right && gunOut && P.alive && P.reloading <= 0 && !P.sprinting
-                && P.concuss <= 0 && !dashOn() && !knockOn();
+                && P.concuss <= 0 && !dashOn() && !knockOn() && !modeOn() && !isDowned();
   /* 手臂断了抬枪又慢又抖，止痛之后能压住 */
   const adsTime = aCfg.time * (armHurt() ? DEBUFF.armAds : 1) * (1 + 0.12 * P.chill);
   P.ads = clamp(P.ads + (adsOn ? dt / adsTime : -dt / (adsTime * 0.75)), 0, 1);
@@ -4119,11 +4433,14 @@ function updatePlayer(dt) {
   else if (P.curSlot === 'medkit' && activeMedPerk() !== 'move') spd *= 0.92;   // 一边包扎一边走，慢一点
   /* 创伤：流血越多越虚；腿断了直接掉一半多；骨裂再叠一层，止痛都救不回来 */
   if (P.deb.bleed > 0) spd *= 1 - Math.min(0.20, 0.05 * P.deb.bleed);
-  if (P.deb.leg > 0) spd *= DEBUFF.legMove;
-  if (P.deb.fissure > 0) spd *= 1 - DEBUFF.fissureMove * P.deb.fissure;
+  const toughK = toughOn() ? SKILL.tough.legMul : 1;
+  if (P.deb.leg > 0) spd *= 1 - (1 - DEBUFF.legMove) * toughK;
+  if (P.deb.fissure > 0) spd *= 1 - DEBUFF.fissureMove * P.deb.fissure * toughK;
   if (armHurt()) spd *= 0.96;                        // 一只手挂着，跑起来也别扭
   /* 冻伤：每层再慢 7%，霜区里叠满三层基本挪不动 */
-  if (P.chill > 0) spd *= 1 - 0.07 * P.chill;
+  if (P.chill > 0) spd *= 1 - 0.07 * P.chill * (toughOn() ? 0.6 : 1);
+  /* 手上拿着技能装置：脚步放慢一点 */
+  if (modeOn()) spd *= 0.9;
   if (P.reloading > 0) spd *= 0.82;
   if (P.fireCd > 0.02) spd *= 0.94;
   spd *= 1 - P.ads * (1 - aCfg.move);            // 开镜走得慢（重枪更慢）
@@ -4221,7 +4538,10 @@ function updatePlayer(dt) {
     if (P.reloading <= 0) { P.reloading = 0; finishReload(); }
   }
 
-  if (P.curSlot === 'melee') {
+  if (modeOn()) {
+    updateModeInput(dt);                   // 手上拿着雷 / 弓 / 装置：左键右键都归技能管
+    mouse.pressed = false;
+  } else if (P.curSlot === 'melee') {
     if (mouse.down) swingMelee();          // 按住就一下一下地挥
   } else if (P.curSlot === 'medkit') {
     if (mouse.pressed) toggleMedkit();     // 左键开始 / 停止包扎
@@ -4248,6 +4568,59 @@ function updatePlayer(dt) {
   }
 }
 
+/* ── 蜂医被动：专业救援 ──
+   一个人出勤时，血量见底不是直接结账，而是「倒地」8 秒：
+   这 8 秒里敌人照样能补枪把你打死，撑过去就 10 血自己爬起来。 */
+function isDowned() { return (P.downed || 0) > 0; }
+
+function startDowned() {
+  P.downed = SKILL.rescue.down;
+  P.hp = 0;
+  P.invuln = 1.2;
+  P.burnT = 0;
+  if (P.op) P.op.rescueCd = SKILL.rescue.cd;
+  exitMode(true);
+  uiToast('倒地 · 8 秒后自行爬起', 'small warn');
+  popup(P.x, P.y - 54, '倒 地', '#8dffc0', 16);
+  Sfx.hurt();
+  shake(12);
+  burst(P.x, P.y, 18, { color: ['#ff4060', '#8dffc0'], life: 0.7, r: 4, spdMin: 40, spdMax: 220 });
+}
+
+function updateDowned(dt) {
+  P.downed = Math.max(0, P.downed - dt);
+  if (Math.random() < dt * 9) {
+    addParticle(P.x + rand(-12, 12), P.y + rand(-6, 12), {
+      vx: rand(-10, 10), vy: rand(-24, -6), life: rand(0.4, 0.8), r: rand(2, 4),
+      color: pick(['#8dffc0', '#ff4060']), drag: 0.92, glow: true,
+    });
+  }
+  if (P.downed <= 0) reviveSelf();
+}
+
+function reviveSelf() {
+  P.downed = 0;
+  P.hp = SKILL.rescue.hp;
+  P.deb.weak = 0;              // 专业救援：把「血量上限降低」一并清掉
+  recalcMaxHp();
+  P.invuln = 1.6;
+  P.painT = Math.max(P.painT, 4);
+  uiToast('自己爬起来了 · ' + SKILL.rescue.hp + ' 血', '');
+  popup(P.x, P.y - 50, '救 援 成 功', '#8dffc0', 15);
+  Sfx.heal();
+  burst(P.x, P.y, 20, { color: ['#ffffff', '#8dffc0', '#26d96f'], life: 0.6, r: 4, spdMin: 40, spdMax: 240, glow: true });
+}
+
+/* 所有致命伤都走这里：能倒地就倒地，不能才结算阵亡 */
+function playerLethal() {
+  if (rescueOn() && P.op && P.op.rescueCd <= 0 && !isDowned()) {
+    startDowned();
+    return true;
+  }
+  endRaid(false);
+  return false;
+}
+
 function damagePlayer(amount, srcX, srcY, inv) {
   if (P.invuln > 0 || !P.alive) return;
   let dmg = amount * (1 - P.armorDR);
@@ -4267,7 +4640,7 @@ function damagePlayer(amount, srcX, srcY, inv) {
   G.comboTimer = 0;
   burst(P.x, P.y, 10, { color: ['#ff4060', '#ff8fa3'], life: 0.45, r: 3.5, spdMin: 60, spdMax: 240 });
   emitNoise(P.x, P.y, 780, 0.9);   // 受伤惨叫/交火声会暴露位置
-  if (P.hp <= 0) { P.hp = 0; endRaid(false); }
+  if (P.hp <= 0) { P.hp = 0; playerLethal(); }
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -4732,9 +5105,11 @@ function updateRockets(dt) {
 
 /* ── 烟雾：半径随时间长大 / 最后一段收缩 ── */
 function smokeRadius(s) {
+  if (s.fixed) return s.r;                       // 无人机 / 直线长烟：一出来就是满半径
   const SM = SKILL.smoke;
+  const life = s.life || SM.life;
   if (s.t < SM.grow) return SM.r * Math.pow(s.t / SM.grow, 0.55);
-  const left = SM.life - s.t;
+  const left = life - s.t;
   if (left < SM.fade) return SM.r * Math.pow(Math.max(0, left) / SM.fade, 0.7);
   return SM.r;
 }
@@ -4776,7 +5151,7 @@ function updateSmokes(dt) {
     s.t += dt;
     s.r = smokeRadius(s);
 
-    if (s.t >= SKILL.smoke.life) { G.smokes.splice(i, 1); continue; }
+    if (s.t >= (s.life || SKILL.smoke.life)) { G.smokes.splice(i, 1); continue; }
 
     /* 起烟那 0.3s 往外喷几团，让它看起来是"炸开"的而不是"淡入"的 */
     if (s.t < SKILL.smoke.grow && Math.random() < dt * 110) {
@@ -4787,7 +5162,8 @@ function updateSmokes(dt) {
       });
     }
     /* 收烟阶段零星往外散 */
-    if (s.t > SKILL.smoke.life - SKILL.smoke.fade && Math.random() < dt * 26) {
+    const slife = s.life || SKILL.smoke.life;
+    if (s.t > slife - SKILL.smoke.fade && Math.random() < dt * 26) {
       const a = rand(0, TAU), rr = s.r * rand(0.3, 1);
       addParticle(s.x + Math.cos(a) * rr, s.y + Math.sin(a) * rr, {
         vx: rand(-24, 24), vy: rand(-30, 10), life: rand(0.4, 0.9), r: rand(6, 12),
@@ -4828,6 +5204,7 @@ function useTactic(dist) {
   if (S.use < op.g.charges && S.recharge <= 0) S.recharge = op.g.cd;
 
   if (op.g.kind === 'magbomb') throwMagBomb(dist);
+  else if (op.g.kind === 'beesmoke') throwBeeSmoke();
   else throwSmoke();
 
   kineticKick();                                // 动能辅助：放技能就给一档移速
@@ -5004,7 +5381,7 @@ function useSkill() {
 
   if (op.v.kind === 'dash') {
     dashForward();
-  } else {
+  } else if (op.v.kind === 'gl') {
     fireGL();
     P.op.volley = { left: Math.max(0, (op.v.shots || 3) - 1), t: 0.11 };
     popup(P.x, P.y - 46, '三 头 犬', '#ffd66b', 12);
@@ -5162,6 +5539,8 @@ function useUlt() {
     kineticKick();
     return;
   }
+
+  if (op.x.kind !== 'exo') return;   // 其余大招都在手持模式里处理
 
   S.on = true;
   S.t = op.x.dur;
@@ -5322,6 +5701,738 @@ function trySlide() {
   });
 }
 
+/* ══════════════════════════════════════════════════════════
+   8.6 露娜 / 蜂医 / 乌鲁鲁：手持装置与技能实体
+   ══════════════════════════════════════════════════════════
+   共同约定：这些技能先「拿出来」（P.op.mode），左键 / 右键才是技能动作，
+   这期间枪是收起来的。拿出来不扣储备，真正用掉才算一次。
+   ─────────────────────────────────────────────────────── */
+function spotOn() {
+  const op = opDef();
+  return !!(op && op.passive && op.passive.kind === 'spot');
+}
+function toughOn() {
+  const op = opDef();
+  return !!(op && op.passive && op.passive.kind === 'tough');
+}
+function rescueOn() {
+  const op = opDef();
+  return !!(op && op.passive && op.passive.kind === 'rescue');
+}
+/* 被标上的人：迷雾里也看得见 */
+function markEnemy(e, t) {
+  if (!e) return;
+  e.mark = Math.max(e.mark || 0, t);
+}
+
+/* 手持模式的每帧：右键边沿、左键动作、引信计时 */
+function updateModeInput(dt) {
+  const M = P.op && P.op.mode;
+  if (!M) return;
+  M.t += dt;
+
+  /* 手控制导中：左键手动引爆，导弹没了就自动收手 */
+  if (M.controlling) {
+    if (!ctlLoiter()) { exitMode(true); return; }
+    if (mouse.pressed) {
+      const m = ctlLoiter();
+      if (m) {
+        loiterBlast(m.x, m.y, true);
+        const idx = G.loiters.indexOf(m);
+        if (idx >= 0) G.loiters.splice(idx, 1);
+      }
+      exitMode(true);
+      return;
+    }
+    M.prevDown = mouse.down;
+    return;
+  }
+
+  const rEdge = mouse.right && !M.rightPrev;
+  M.rightPrev = mouse.right;
+
+  if (rEdge) {
+    if (M.id === 'frag') { fragThrow(true); consumeOp('g'); exitMode(); return; }
+    if (M.id === 'firebomb') { firebombThrow(true); consumeOp('g'); exitMode(); return; }
+    if (M.id === 'shockbow') {
+      M.bounce = !M.bounce;
+      popup(P.x, P.y - 58, M.bounce ? '反弹 · 开' : '反弹 · 关', M.bounce ? '#9ef7c8' : '#8fa8b8', 11);
+      Sfx.tone(760, 0.05, 0.03, 'square', 900);
+    }
+    if (M.id === 'coverdev') {
+      M.vert = !M.vert;
+      popup(P.x, P.y - 58, M.vert ? '竖向' : '横向', '#ffc98a', 11);
+      Sfx.tone(700, 0.05, 0.03, 'square', 900);
+    }
+  }
+
+  if (mouse.pressed) {
+    if (M.id === 'frag') {
+      M.lit = true;
+      M.fuse = SKILL.frag.fuse;
+      Sfx.tone(1200, 0.05, 0.03, 'square', 900);
+    } else if (M.id === 'firebomb') {
+      firebombThrow(false); consumeOp('g'); exitMode(); return;
+    } else if (M.id === 'shockbow') {
+      fireArrow('arc', M.bounce); consumeOp('v'); exitMode(); return;
+    } else if (M.id === 'scanbow') {
+      fireArrow('scan', false); consumeOp('x'); exitMode(); return;
+    } else if (M.id === 'coverdev') {
+      placeCover(M.vert); consumeOp('v'); exitMode(); return;
+    } else if (M.id === 'healgun') {
+      fireHealDart();
+    } else if (M.id === 'loiter') {
+      fireLoiter(mouse.right);
+      if (!mouse.right) exitMode();
+      return;
+    }
+  }
+
+  if (M.id === 'frag' && M.lit) {
+    M.fuse -= dt;
+    if (M.fuse <= 0) {
+      fragBlast(P.x, P.y, true);
+      exitMode(true);
+      uiToast('引信烧完了 —— 手里炸的', 'small warn');
+      return;
+    }
+    if (M.prevDown && !mouse.down) { fragThrow(false); consumeOp('g'); exitMode(); return; }
+  }
+  M.prevDown = mouse.down;
+  if (M.id === 'loiter') M.aimR = clamp(M.aimR + (mouse.right ? dt * 3 : -dt * 3), 0, 1);
+  if (M.id === 'healgun') P.ads = Math.max(P.ads, mouse.right ? 0.5 : 0);
+}
+
+/* ── 露娜 G：增强破片手雷 ── */
+function fragThrow(isLob) {
+  const F = SKILL.frag, M = P.op.mode;
+  const maxD = isLob ? F.lob : F.holdMax;
+  const d = clamp(magAimDist() || 120, 70, maxD);
+  P.op.lastThrow = d;
+  const a = P.aim;
+  const tx = clamp(P.x + Math.cos(a) * d, 24, WORLD.w - 24);
+  const ty = clamp(P.y + Math.sin(a) * d, 24, WORLD.h - 24);
+  G.frags.push({
+    x: P.x, y: P.y, sx: P.x, sy: P.y, tx, ty, t: 0,
+    dur: clamp(d / F.speed, 0.12, 0.9),
+    fuse: isLob ? F.fuse : Math.max(0.04, M ? M.fuse : F.fuse),
+    st: 'fly', spin: rand(0, TAU), lob: !!isLob,
+  });
+  P.recoil = Math.max(P.recoil, 3);
+  burst(P.x + Math.cos(a) * (P.r + 10), P.y + Math.sin(a) * (P.r + 10), 7, {
+    angle: a, spread: 0.5, spdMin: 50, spdMax: 180,
+    color: ['#e8f6ec', '#8ef2b0'], life: 0.25, r: 3,
+  });
+  Sfx.dash();
+}
+
+function fragBlast(x, y, self) {
+  const F = SKILL.frag;
+  blastFX(x, y, F.radius);
+  Sfx.explode();
+  shake(14);
+  emitNoise(x, y, 1400, 1.0);
+  burst(x, y, 26, {
+    color: ['#ffffff', '#bff3c9', '#8ef2b0', '#ffd66b'],
+    life: 0.55, r: 4.5, spdMin: 90, spdMax: 400, glow: true, drag: 0.9,
+  });
+  for (let i = G.enemies.length - 1; i >= 0; i--) {
+    const e = G.enemies[i];
+    if (!e.alive) continue;
+    const d = dist(x, y, e.x, e.y);
+    if (d > F.radius + e.r) continue;
+    const fall = 1 - clamp((d - e.r) / F.radius, 0, 1);
+    damageEnemy(e, F.dmg * (0.32 + fall * 0.68), (e.x - x) / (d || 1), (e.y - y) / (d || 1), 320);
+    e.stagger = 0.4;
+    if (Math.random() < 0.55) e.cripple = Math.max(e.cripple || 0, 2.5);
+    if (Math.random() < 0.5) markEnemy(e, 4);      // 破片也算「打中」
+    popup(e.x, e.y - e.r - 16, '破片', '#bff3c9', 10);
+  }
+  if (P.alive) {
+    const dp = dist(x, y, P.x, P.y);
+    if (dp < F.radius + P.r) {
+      const fall = 1 - clamp((dp - P.r) / F.radius, 0, 1);
+      damagePlayer(F.dmg * (0.32 + fall * 0.68) * (self ? 1 : F.selfMul), x, y, 0.45);
+      if (Math.random() < 0.35) addDebuff('bleed', 1);
+    }
+  }
+}
+
+function updateFrags(dt) {
+  for (let i = G.frags.length - 1; i >= 0; i--) {
+    const g = G.frags[i];
+    g.spin += dt * 12;
+    if (g.st === 'fly') {
+      g.t += dt;
+      const k = clamp(g.t / g.dur, 0, 1);
+      g.x = lerp(g.sx, g.tx, k);
+      g.y = lerp(g.sy, g.ty, k);
+      g.h = Math.sin(k * Math.PI) * (g.lob ? 74 : 46);
+      if (k >= 1) {
+        g.st = 'ground';
+        g.h = 0;
+        if (g.fire) { igniteGround(g.x, g.y); G.frags.splice(i, 1); continue; }
+      }
+    } else {
+      g.fuse -= dt;
+      if (g.fuse <= 0) { fragBlast(g.x, g.y, false); G.frags.splice(i, 1); }
+    }
+  }
+}
+
+/* ── 露娜 V / X：弓 ── */
+function fireArrow(kind, bounce) {
+  const A = kind === 'arc' ? SKILL.arc : SKILL.scan;
+  const a = P.aim + rand(-0.012, 0.012);
+  const mx = P.x + Math.cos(a) * (P.r + 12);
+  const my = P.y + Math.sin(a) * (P.r + 12);
+  G.arrows.push({
+    kind, x: mx, y: my, px: mx, py: my,
+    vx: Math.cos(a) * A.speed, vy: Math.sin(a) * A.speed,
+    bounce: bounce ? 1 : 0, bounces: 0, dist: 0, max: A.range,
+    life: A.range / A.speed, spin: a,
+  });
+  P.recoil = Math.max(P.recoil, 2);
+  burst(mx, my, 6, {
+    angle: a, spread: 0.22, spdMin: 90, spdMax: 260,
+    color: kind === 'arc' ? ['#ffffff', '#8ef2b0', '#43d9a0'] : ['#ffffff', '#9ef7c8', '#5fe0b0'],
+    life: 0.24, r: 2.6, glow: true,
+  });
+  Sfx.tone(620, 0.06, 0.03, 'triangle', 1400);
+  popup(P.x, P.y - 46, kind === 'arc' ? '电 击 箭' : '侦 察 箭', kind === 'arc' ? '#8ef2b0' : '#9ef7c8', 12);
+}
+
+function arrowLand(a) {
+  if (a.kind === 'arc') {
+    const A = SKILL.arc;
+    G.ezones.push({ x: a.x, y: a.y, r: A.zoneR, life: A.zoneLife, max: A.zoneLife, tick: 0, seed: rand(0, 100) });
+    burst(a.x, a.y, 20, {
+      color: ['#ffffff', '#8ef2b0', '#43d9a0'], life: 0.5, r: 4, spdMin: 60, spdMax: 320, glow: true,
+    });
+    Sfx.tone(1800, 0.22, 0.05, 'sawtooth', 400);
+    shake(5);
+    popup(a.x, a.y - 26, '电 圈', '#8ef2b0', 12);
+  } else {
+    burst(a.x, a.y, 14, {
+      color: ['#ffffff', '#9ef7c8', '#5fe0b0'], life: 0.45, r: 3.4, spdMin: 40, spdMax: 200, glow: true,
+    });
+    Sfx.tone(1500, 0.12, 0.04, 'sine', 700);
+  }
+}
+
+/* 激素针：轻微追踪最近的蜂巢烟 / 敌人；命中烟就把它染绿 */
+function stepHealDart(a, dt) {
+  const H = SKILL.heal;
+  let tgt = null, bd = 300 * 300;
+  for (const s of G.smokes) {
+    if (!s.bee || s.dyed) continue;
+    const d2 = dist2(a.x, a.y, s.x, s.y);
+    if (d2 < bd) { bd = d2; tgt = s; }
+  }
+  if (!tgt) {
+    for (const e of G.enemies) {
+      if (!e.alive) continue;
+      const d2 = dist2(a.x, a.y, e.x, e.y);
+      if (d2 < bd) { bd = d2; tgt = e; }
+    }
+  }
+  if (tgt) {
+    const want = Math.atan2(tgt.y - a.y, tgt.x - a.x);
+    const cur = Math.atan2(a.vy, a.vx);
+    const na = cur + clamp(angleDiff(want, cur), -H.homing * dt, H.homing * dt);
+    a.vx = Math.cos(na) * H.speed;
+    a.vy = Math.sin(na) * H.speed;
+  }
+
+  a.px = a.x; a.py = a.y;
+  a.x += a.vx * dt;
+  a.y += a.vy * dt;
+  a.dist += H.speed * dt;
+
+  for (let i = 0; i < G.smokes.length; i++) {
+    const s = G.smokes[i];
+    if (!s.bee || s.dyed) continue;
+    if (dist(a.x, a.y, s.x, s.y) < s.r + 8) {
+      dyeSmoke(s);
+      G.smokes.splice(i, 1);
+      a.dead = true;
+      return;
+    }
+  }
+  for (const e of G.enemies) {
+    if (!e.alive) continue;
+    if (dist(a.x, a.y, e.x, e.y) < e.r + 7) {
+      damageEnemy(e, H.dmg, a.vx / H.speed, a.vy / H.speed, 40);
+      markEnemy(e, 3);
+      popup(e.x, e.y - e.r - 12, '激素', '#8dffc0', 10);
+      a.dead = true;
+      return;
+    }
+  }
+  if (pointInObstacle(a.x, a.y) || a.dist > a.max) a.dead = true;
+}
+
+function updateArrows(dt) {
+  const S = SKILL.scan;
+  for (let i = G.arrows.length - 1; i >= 0; i--) {
+    const a = G.arrows[i];
+
+    if (a.kind === 'heal') {
+      stepHealDart(a, dt);
+      if (a.dead) G.arrows.splice(i, 1);
+      continue;
+    }
+
+    /* 侦察箭：一路上把 9 米内的敌人标出来 */
+    if (a.kind === 'scan') {
+      for (const e of G.enemies) {
+        if (!e.alive) continue;
+        if (dist2(a.x, a.y, e.x, e.y) < S.scanR * S.scanR) markEnemy(e, S.mark);
+      }
+    }
+
+    a.px = a.x; a.py = a.y;
+    const step = Math.hypot(a.vx, a.vy) * dt;
+    const n = Math.max(1, Math.ceil(step / 10));
+    let stop = false;
+    for (let k = 0; k < n; k++) {
+      const dtt = dt / n;
+      let nx = a.x + a.vx * dtt;
+      let ny = a.y + a.vy * dtt;
+      if (nx < 10 || nx > WORLD.w - 10) { if (a.bounce > 0) { a.bounce--; a.bounces++; nx = clamp(nx, 10, WORLD.w - 10); a.vx *= -0.9; } else stop = true; }
+      if (ny < 10 || ny > WORLD.h - 10) { if (a.bounce > 0) { a.bounce--; a.bounces++; ny = clamp(ny, 10, WORLD.h - 10); a.vy *= -0.9; } else stop = true; }
+      if (!stop && pointInObstacle(nx, a.y)) { if (a.bounce > 0) { a.bounce--; a.bounces++; nx = a.x; a.vx *= -0.9; } else stop = true; }
+      if (!stop && pointInObstacle(a.x, ny)) { if (a.bounce > 0) { a.bounce--; a.bounces++; ny = a.y; a.vy *= -0.9; } else stop = true; }
+      if (stop) break;
+      a.x = nx; a.y = ny;
+    }
+
+    a.dist += step;
+    if (a.kind === 'arc' || a.kind === 'scan') {
+      /* 打到敌人就立刻落地（电箭） —— 侦察箭穿人 */
+      if (a.kind === 'arc') {
+        for (const e of G.enemies) {
+          if (!e.alive) continue;
+          if (dist2(a.x, a.y, e.x, e.y) < (e.r + 8) * (e.r + 8)) { stop = true; break; }
+        }
+      }
+    }
+    if (stop || a.dist >= a.max) {
+      arrowLand(a);
+      G.arrows.splice(i, 1);
+    }
+  }
+}
+
+function updateEZones(dt) {
+  const A = SKILL.arc;
+  for (let i = G.ezones.length - 1; i >= 0; i--) {
+    const z = G.ezones[i];
+    z.life -= dt;
+    if (z.life <= 0) { G.ezones.splice(i, 1); continue; }
+    if (Math.random() < dt * 16) {
+      const ang = rand(0, TAU), rr = z.r * Math.sqrt(Math.random());
+      addParticle(z.x + Math.cos(ang) * rr, z.y + Math.sin(ang) * rr, {
+        vx: rand(-20, 20), vy: rand(-50, -12), life: rand(0.2, 0.45), r: rand(1.5, 3.4),
+        color: pick(['#ffffff', '#8ef2b0', '#43d9a0']), drag: 0.9, glow: true,
+      });
+    }
+    z.tick -= dt;
+    if (z.tick > 0) continue;
+    z.tick = A.tick;
+    for (let j = G.enemies.length - 1; j >= 0; j--) {
+      const e = G.enemies[j];
+      if (!e.alive) continue;
+      if (dist(e.x, e.y, z.x, z.y) > z.r + e.r) continue;
+      damageEnemy(e, A.dmg, (e.x - z.x) / (z.r || 1), (e.y - z.y) / (z.r || 1), 0);
+      e.cripple = Math.max(e.cripple || 0, A.cripple);
+      e.healSlow = Math.max(e.healSlow || 0, A.healSlow);
+      e.stun = Math.max(e.stun || 0, 0.12);
+      markEnemy(e, 3);
+    }
+    if (P.alive && !isDowned() && dist(P.x, P.y, z.x, z.y) < z.r + P.r * 0.5) {
+      /* 自己的电圈也会电自己一脚：小伤 + 减速，不骨折 */
+      burnPlayer(3.2, z.x, z.y);
+      P.chill = Math.max(P.chill, 0.4);
+    }
+  }
+}
+
+/* ── 蜂医 G：蜂巢烟（可被激素枪染成治疗场） ── */
+function throwBeeSmoke() {
+  const SM = SKILL.smoke;
+  const dx = mouse.wx - P.x, dy = mouse.wy - P.y;
+  const d = Math.hypot(dx, dy) || 1;
+  const k = Math.min(SM.range, Math.max(70, d)) / d;
+  let tx = clamp(P.x + dx * k, 30, WORLD.w - 30);
+  let ty = clamp(P.y + dy * k, 30, WORLD.h - 30);
+  for (let t = 0; t < 14 && pointInObstacle(tx, ty); t++) { tx -= (dx / d) * 24; ty -= (dy / d) * 24; }
+  G.smokes.push({ x: tx, y: ty, t: 0, r: 0, seed: rand(0, 100), life: SKILL.bee.life, bee: true });
+  popup(P.x, P.y - 46, '蜂 巢 烟', '#8dffc0', 12);
+  Sfx.dash();
+  burst(tx, ty, 14, { color: ['#e8fff0', '#8dffc0', '#43d9a0'], life: 0.45, r: 6, spdMin: 20, spdMax: 140, drag: 0.88 });
+}
+
+/* 把一团蜂巢烟染成治疗场 */
+function dyeSmoke(s) {
+  const B = SKILL.bee;
+  s.dyed = true;
+  G.healFields.push({ x: s.x, y: s.y, r: B.healR, life: B.healLife, max: B.healLife, tick: 0, seed: rand(0, 100) });
+  burst(s.x, s.y, 26, {
+    color: ['#ffffff', '#8dffc0', '#26d96f'], life: 0.7, r: 6, spdMin: 40, spdMax: 220, glow: true, drag: 0.9,
+  });
+  popup(s.x, s.y - 26, '治 疗 场', '#8dffc0', 13);
+  Sfx.heal();
+}
+
+function updateHealFields(dt) {
+  const B = SKILL.bee;
+  for (let i = G.healFields.length - 1; i >= 0; i--) {
+    const f = G.healFields[i];
+    f.life -= dt;
+    if (f.life <= 0) { G.healFields.splice(i, 1); continue; }
+
+    if (Math.random() < dt * 14) {
+      const ang = rand(0, TAU), rr = f.r * Math.sqrt(Math.random());
+      addParticle(f.x + Math.cos(ang) * rr, f.y + Math.sin(ang) * rr, {
+        vx: rand(-12, 12), vy: rand(-38, -10), life: rand(0.5, 1.1), r: rand(2, 4.4),
+        color: pick(['#8dffc0', '#43d9a0', '#d8ffe8']), drag: 0.92, glow: true,
+      });
+    }
+
+    if (P.alive && !isDowned() && dist(P.x, P.y, f.x, f.y) < f.r) {
+      if (P.hp < P.maxHp) {
+        P.hp = Math.min(P.maxHp, P.hp + B.healRate * dt);
+        P.healAcc = (P.healAcc || 0) + B.healRate * dt;
+        if (P.healAcc >= 8) { popup(P.x, P.y - 34, '+' + Math.round(P.healAcc), '#8dffc0', 11); P.healAcc = 0; }
+      }
+    }
+    /* 敌我都能吃到：敌人站在绿场里也回血（所以别给他们留一口） */
+    for (const e of G.enemies) {
+      if (!e.alive) continue;
+      if (dist(e.x, e.y, f.x, f.y) > f.r) continue;
+      const slow = (e.healSlow || 0) > 0 ? 0.3 : 1;
+      e.hp = Math.min(e.maxHp, e.hp + B.healRate * 0.7 * slow * dt);
+      if (Math.random() < dt * 0.6) popup(e.x + rand(-6, 6), e.y - e.r - 10, '+', '#6fe8a0', 9);
+    }
+  }
+}
+
+/* ── 蜂医 V：烟幕无人机（点按 = 直线长烟） ── */
+function layLineSmoke() {
+  const D = SKILL.drone;
+  if (!modeAvailable('v')) return;
+  const a = P.aim;
+  let n = 0;
+  for (let d = 60; d <= 30 * 18; d += 72) {
+    const x = P.x + Math.cos(a) * d, y = P.y + Math.sin(a) * d;
+    if (pointInObstacle(x, y)) break;
+    G.smokes.push({ x, y, t: 0, r: D.r, seed: rand(0, 100), life: SKILL.bee.life, bee: true, fixed: true });
+    n++;
+  }
+  consumeOp('v');
+  popup(P.x, P.y - 46, '直 线 长 烟', '#8dffc0', 12);
+  Sfx.tone(520, 0.12, 0.04, 'triangle', 900);
+  burst(P.x + Math.cos(a) * 40, P.y + Math.sin(a) * 40, 10, {
+    angle: a, spread: 0.4, spdMin: 40, spdMax: 200,
+    color: ['#e8fff0', '#8dffc0'], life: 0.35, r: 4, drag: 0.9,
+  });
+}
+
+function startDrone() {
+  const D = SKILL.drone;
+  if (!modeAvailable('v')) return;
+  consumeOp('v');
+  const a = P.aim;
+  G.drones.push({
+    x: P.x + Math.cos(a) * 46, y: P.y + Math.sin(a) * 46,
+    ang: a, life: D.life, stepT: 0,
+  });
+  enterMode('drone', 'v');
+  uiToast('WASD 操控无人机 · 再按 V 收回', 'small');
+}
+
+function updateDrones(dt) {
+  const D = SKILL.drone;
+  const ctl = modeOn() && P.op.mode.id === 'drone';
+  for (let i = G.drones.length - 1; i >= 0; i--) {
+    const d = G.drones[i];
+    d.life -= dt;
+    if (d.life <= 0 || !ctl) {
+      /* 收回 / 到期：机身飞回（这里直接销毁） */
+      if (d.life <= 0) popup(d.x, d.y - 16, '无人机撤离', '#8dffc0', 11);
+      G.drones.splice(i, 1);
+      if (ctl) exitMode(true);
+      continue;
+    }
+    if (ctl) {
+      let ix = 0, iy = 0;
+      if (keys['a'] || keys['arrowleft']) ix -= 1;
+      if (keys['d'] || keys['arrowright']) ix += 1;
+      if (keys['w'] || keys['arrowup']) iy -= 1;
+      if (keys['s'] || keys['arrowdown']) iy += 1;
+      if (ix || iy) d.ang = Math.atan2(iy, ix);
+      const mv = (ix || iy) ? D.speed : D.speed * 0.25;
+      d.x = clamp(d.x + Math.cos(d.ang) * mv * dt, 20, WORLD.w - 20);
+      d.y = clamp(d.y + Math.sin(d.ang) * mv * dt, 20, WORLD.h - 20);
+    }
+
+    d.stepT -= dt;
+    if (d.stepT <= 0) {
+      d.stepT = D.step;
+      G.smokes.push({
+        x: d.x, y: d.y, t: 0, r: D.trailR, seed: rand(0, 100),
+        life: SKILL.bee.life, bee: true, fixed: true, drone: true,
+      });
+    }
+    if (Math.random() < dt * 30) {
+      addParticle(d.x + rand(-4, 4), d.y + rand(-4, 4), {
+        vx: rand(-14, 14), vy: rand(-14, 14), life: rand(0.2, 0.4), r: rand(2, 4),
+        color: '#8dffc0', drag: 0.9, glow: true,
+      });
+    }
+  }
+}
+
+/* ── 蜂医 X：激素枪 ── */
+function fireHealDart() {
+  const H = SKILL.heal;
+  if (!modeAvailable('x')) { exitMode(); return; }
+  consumeOp('x');
+  const a = P.aim + rand(-H.homing * 0.004, H.homing * 0.004);
+  const mx = P.x + Math.cos(a) * (P.r + 12);
+  const my = P.y + Math.sin(a) * (P.r + 12);
+  G.arrows.push({
+    kind: 'heal', x: mx, y: my, px: mx, py: my,
+    vx: Math.cos(a) * H.speed, vy: Math.sin(a) * H.speed,
+    dist: 0, max: H.range, bounce: 0,
+  });
+  P.recoil = Math.max(P.recoil, 1.6);
+  burst(mx, my, 5, {
+    angle: a, spread: 0.2, spdMin: 60, spdMax: 200,
+    color: ['#ffffff', '#8dffc0'], life: 0.22, r: 2.4, glow: true,
+  });
+  Sfx.tone(980, 0.05, 0.03, 'sine', 1600);
+}
+
+function healSelfShot() {
+  const H = SKILL.heal;
+  if (!modeAvailable('x')) return;
+  consumeOp('x');
+  P.hp = Math.min(P.maxHp, P.hp + H.heal);
+  P.regenT = Math.max(P.regenT || 0, H.regenT);
+  P.painT = Math.max(P.painT, 6);              // 激素里带止痛
+  popup(P.x, P.y - 50, '激 素 · +' + H.heal, '#8dffc0', 13);
+  burst(P.x, P.y, 16, { color: ['#ffffff', '#8dffc0', '#26d96f'], life: 0.5, r: 3.6, spdMin: 30, spdMax: 180, glow: true });
+  Sfx.heal();
+  /* 站在自己蜂巢烟里扎针：顺手把烟染绿 */
+  for (const s of G.smokes) {
+    if (!s.bee || s.dyed || s.r < 20) continue;
+    if (dist(P.x, P.y, s.x, s.y) < s.r * 0.9) { dyeSmoke(s); G.smokes.splice(G.smokes.indexOf(s), 1); break; }
+  }
+}
+
+/* ── 乌鲁鲁 G：复合燃烧弹 ── */
+function firebombThrow(isLob) {
+  const F = SKILL.firebomb;
+  const maxD = isLob ? F.lob : 9 * 18;
+  const d = clamp(magAimDist() || 120, 70, maxD);
+  P.op.lastThrow = d;
+  const a = P.aim;
+  const tx = clamp(P.x + Math.cos(a) * d, 24, WORLD.w - 24);
+  const ty = clamp(P.y + Math.sin(a) * d, 24, WORLD.h - 24);
+  G.frags.push({
+    x: P.x, y: P.y, sx: P.x, sy: P.y, tx, ty, t: 0,
+    dur: clamp(d / F.speed, 0.12, 0.9),
+    fuse: 0, st: 'fly', spin: rand(0, TAU), lob: !!isLob, fire: true,
+  });
+  burst(P.x + Math.cos(a) * (P.r + 10), P.y + Math.sin(a) * (P.r + 10), 7, {
+    angle: a, spread: 0.5, spdMin: 50, spdMax: 180,
+    color: ['#ffd66b', '#ff8a3a'], life: 0.25, r: 3, glow: true,
+  });
+  Sfx.dash();
+}
+
+function igniteGround(x, y) {
+  const F = SKILL.firebomb;
+  blastFX(x, y, F.r * 0.7);
+  Sfx.explode();
+  shake(8);
+  emitNoise(x, y, 1100, 0.9);
+  burst(x, y, 22, { color: ['#ffffff', '#ffd66b', '#ff8a3a', '#ff4422'], life: 0.55, r: 4.6, spdMin: 60, spdMax: 300, glow: true });
+  G.fires.push({
+    x, y, r: F.r, life: F.life, max: F.life, tick: 0.1,
+    dmg: F.dmg, breed: F.tick, warm: 3.0, geo: true,
+  });
+  popup(x, y - 24, '火 场', '#ff9b57', 12);
+}
+
+/* ── 乌鲁鲁 V：速凝掩体 ── */
+function placeCover(vert) {
+  const C = SKILL.cover;
+  const a = P.aim;
+  const d = clamp(magAimDist() || 120, 60, C.range);
+  const cx = clamp(P.x + Math.cos(a) * d, 40, WORLD.w - 40);
+  const cy = clamp(P.y + Math.sin(a) * d, 40, WORLD.h - 40);
+  const w = vert ? C.thin : C.long;
+  const h = vert ? C.long : C.thin;
+  let x = cx - w / 2, y = cy - h / 2;
+  /* 别把玩家自己砌进去 */
+  if (P.x + P.r > x && P.x - P.r < x + w && P.y + P.r > y && P.y - P.r < y + h) {
+    x += Math.cos(a) * (P.r + 8);
+    y += Math.sin(a) * (P.r + 8);
+  }
+  x = clamp(x, 8, WORLD.w - w - 8);
+  y = clamp(y, 8, WORLD.h - h - 8);
+  const o = { x, y, w, h, tone: 0.78, cover: true };
+  G.obstacles.push(o);
+  G.covers.push({ o, t: C.life, max: C.life });
+  rebuildFogBlock();
+  Sfx.tone(300, 0.16, 0.06, 'square', 900);
+  shake(3);
+  popup(x + w / 2, y - 14, '速 凝 掩 体', '#ffc98a', 12);
+  burst(x + w / 2, y + h / 2, 16, {
+    color: ['#ffd8a8', '#ffb457', '#ffffff'], life: 0.5, r: 4, spdMin: 40, spdMax: 220, drag: 0.88,
+  });
+}
+
+function updateCovers(dt) {
+  for (let i = G.covers.length - 1; i >= 0; i--) {
+    const c = G.covers[i];
+    c.t -= dt;
+    if (c.t > 0) continue;
+    const k = G.obstacles.indexOf(c.o);
+    if (k >= 0) G.obstacles.splice(k, 1);
+    G.covers.splice(i, 1);
+    rebuildFogBlock();
+    burst(c.o.x + c.o.w / 2, c.o.y + c.o.h / 2, 14, {
+      color: ['#ffd8a8', '#b98d5f'], life: 0.5, r: 4, spdMin: 20, spdMax: 130, drag: 0.9,
+    });
+    popup(c.o.x + c.o.w / 2, c.o.y - 10, '掩体消散', '#c8b090', 11);
+  }
+}
+
+/* 迷雾的墙体掩码是按障碍物栅格化的；掩体来了 / 走了要重算一次 */
+function rebuildFogBlock() {
+  if (!FOG.ready || !FOG.block) return;
+  const c = FOG.cell;
+  FOG.block.fill(0);
+  for (const o of G.obstacles) {
+    const c0 = Math.floor(o.x / c), c1 = Math.floor((o.x + o.w) / c);
+    const r0 = Math.floor(o.y / c), r1 = Math.floor((o.y + o.h) / c);
+    for (let r = Math.max(0, r0); r <= Math.min(FOG.rows - 1, r1); r++) {
+      const base = r * FOG.cols;
+      for (let k = Math.max(0, c0); k <= Math.min(FOG.cols - 1, c1); k++) FOG.block[base + k] = 1;
+    }
+  }
+}
+
+/* ── 乌鲁鲁 X：巡飞弹 ── */
+function fireLoiter(ctl) {
+  const L = SKILL.loiter;
+  const a = P.aim;
+  G.loiters.push({
+    x: P.x + Math.cos(a) * (P.r + 16), y: P.y + Math.sin(a) * (P.r + 16),
+    ang: a, spd: L.speed * 0.55, dist: 0, max: L.range,
+    ctl: !!ctl, sub: false, t: 0,
+  });
+  consumeOp('x');
+  if (ctl && P.op && P.op.mode) P.op.mode.controlling = true;
+  P.recoil = Math.max(P.recoil, 9);
+  shake(6);
+  Sfx.shoot('shotgun');
+  burst(P.x + Math.cos(a) * (P.r + 16), P.y + Math.sin(a) * (P.r + 16), 14, {
+    angle: a + Math.PI, spread: 0.5, spdMin: 60, spdMax: 260,
+    color: ['#ffffff', '#ffd66b', '#ffb457'], life: 0.4, r: 4, glow: true,
+  });
+  popup(P.x, P.y - 50, ctl ? '巡 飞 弹 · 手 控' : '巡 飞 弹', '#ffc98a', 13);
+  if (ctl) uiToast('WASD 控制导弹 · 再点左键引爆', 'small');
+}
+
+function loiterBlast(x, y, main) {
+  const L = SKILL.loiter;
+  blastFX(x, y, L.radius);
+  Sfx.explode();
+  shake(main ? 20 : 10);
+  emitNoise(x, y, main ? 1700 : 900, 1.0);
+  burst(x, y, main ? 34 : 18, {
+    color: ['#ffffff', '#ffd66b', '#ff8a3a', '#ff4422'],
+    life: main ? 0.7 : 0.5, r: main ? 6 : 4, spdMin: 80, spdMax: main ? 480 : 300, glow: true, drag: 0.88,
+  });
+  const R = main ? L.radius : L.subR;
+  const DMG = main ? L.dmg : L.subDmg;
+  for (let j = G.enemies.length - 1; j >= 0; j--) {
+    const e = G.enemies[j];
+    if (!e.alive) continue;
+    const d = dist(x, y, e.x, e.y);
+    if (d > R + e.r) continue;
+    const fall = 1 - clamp((d - e.r) / R, 0, 1);
+    damageEnemy(e, DMG * (0.4 + fall * 0.6), (e.x - x) / (d || 1), (e.y - y) / (d || 1), 260);
+    e.stagger = 0.35;
+    markEnemy(e, 4);
+  }
+  if (P.alive) {
+    const dp = dist(x, y, P.x, P.y);
+    if (dp < R + P.r) {
+      const fall = 1 - clamp((dp - P.r) / R, 0, 1);
+      damagePlayer(DMG * (0.4 + fall * 0.6) * L.selfMul, x, y, 0.45);
+    }
+  }
+  if (main) {
+    for (let s = 0; s < L.subs; s++) {
+      const ang = rand(0, TAU);
+      G.loiters.push({
+        x, y, ang, spd: 210, dist: 0, max: 150, ctl: false, sub: true, t: L.subDelay,
+      });
+    }
+    popup(x, y - 30, '分 裂 ×4', '#ffb457', 13);
+  }
+}
+
+function updateLoiters(dt) {
+  const L = SKILL.loiter;
+  for (let i = G.loiters.length - 1; i >= 0; i--) {
+    const m = G.loiters[i];
+
+    if (m.sub) {
+      m.t -= dt;
+      if (m.t > 0) continue;
+    }
+
+    /* 手控制导：A/D 转向、W/S 加减速 */
+    if (m.ctl) {
+      if (keys['a'] || keys['arrowleft']) m.ang -= L.turn * dt;
+      if (keys['d'] || keys['arrowright']) m.ang += L.turn * dt;
+      if (keys['w'] || keys['arrowup']) m.spd = Math.min(L.speed * 1.25, m.spd + L.accel * dt);
+      if (keys['s'] || keys['arrowdown']) m.spd = Math.max(L.speed * 0.25, m.spd - L.accel * dt);
+    }
+
+    m.px = m.x; m.py = m.y;
+    const stepLen = m.spd * dt;
+    m.x += Math.cos(m.ang) * stepLen;
+    m.y += Math.sin(m.ang) * stepLen;
+    m.dist += stepLen;
+
+    let boom = false;
+    if (m.x < 10 || m.x > WORLD.w - 10 || m.y < 10 || m.y > WORLD.h - 10) boom = true;
+    if (pointInObstacle(m.x, m.y)) boom = true;
+    if (m.dist >= m.max) boom = true;
+
+    if (!m.sub && Math.random() < dt * 40) {
+      addParticle(m.x, m.y, {
+        vx: rand(-20, 20), vy: rand(-20, 20), life: rand(0.2, 0.4), r: rand(2.5, 5),
+        color: pick(['#ffffff', '#ffd66b', '#ffb457']), drag: 0.9, glow: true,
+      });
+    }
+    if (boom) { loiterBlast(m.x, m.y, !m.sub); G.loiters.splice(i, 1); }
+  }
+}
+
+function ctlLoiter() {
+  for (const m of G.loiters) if (m.ctl && !m.sub) return m;
+  return null;
+}
+
 /* 每帧：冷却、三连发排程、外骨骼计时、滑铲计时 */
 function updateOperatorSkills(dt) {
   if (!P.op) initOperatorSkills();
@@ -5367,6 +6478,21 @@ function updateOperatorSkills(dt) {
   if (S.dash > 0) S.dash = Math.max(0, S.dash - dt);
   if (S.kine > 0) S.kine = Math.max(0, S.kine - dt);
   P.kd = Math.max(0, (P.kd || 0) - dt);
+  if (P.op.rescueCd > 0) P.op.rescueCd = Math.max(0, P.op.rescueCd - dt);
+
+  /* 蜂医激素枪：按「充能」回，不是冷却 */
+  if (op && op.x.kind === 'healgun' && S.x.use < op.x.charges) {
+    S.x.recharge = Math.max(0, S.x.recharge - dt);
+    if (S.x.recharge <= 0) {
+      S.x.use++;
+      S.x.recharge = S.x.use < op.x.charges ? SKILL.heal.recharge : 0;
+      popup(P.x, P.y - 58, '激素针 +1 · ' + S.x.use + '/' + op.x.charges, '#8dffc0', 11);
+    }
+  }
+
+  /* 点按 / 长按计时 */
+  if (HOLDV.down) HOLDV.hold += dt;
+  if (HOLDX.down) HOLDX.hold += dt;
 
   /* 长按 G 的预瞄计时：超过阈值才开始画轨迹 */
   if (MAG_AIM.down) {
@@ -5604,7 +6730,7 @@ function frostSprayHit(e, S) {
   P.hurtFlash = Math.max(P.hurtFlash, 0.4);
   addChill(S.chill);
   if (Math.random() < 0.4) Sfx.tone(rand(1500, 1900), 0.05, 0.02, 'sine', 1200);
-  if (P.hp <= 0) { P.hp = 0; endRaid(false); }
+  if (P.hp <= 0) { P.hp = 0; playerLethal(); }
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -5857,6 +6983,8 @@ function updateEnemies(dt) {
     e.stun = Math.max(0, (e.stun || 0) - dt);        // 三头犬震晕：不吃不减，纯粹站着发呆
     e.kd = Math.max(0, (e.kd || 0) - dt);            // 虎蹲炮击倒：只负责"趴着"的画面
     e.cripple = Math.max(0, (e.cripple || 0) - dt);  // 骨折：移速打折
+    e.mark = Math.max(0, (e.mark || 0) - dt);         // 被标记（露娜被动 / 侦察箭）
+    e.healSlow = Math.max(0, (e.healSlow || 0) - dt); // 被电：回血变慢
     e.invuln = Math.max(0, e.invuln - dt);
     e.walkPhase += dt * 8;
 
@@ -6594,6 +7722,8 @@ function damageEnemy(e, dmg, dirX, dirY, knock) {
   e.hp -= dmg;
   e.burn = 1;
   e.stagger = Math.min(0.22, dmg / 380);
+  /* 露娜被动：打中就标上 —— 隔着迷雾也能看见他往哪跑 */
+  if (spotOn()) markEnemy(e, 4);
   if (knock) { e.x += dirX * knock * 0.02; e.y += dirY * knock * 0.02; }
   if (e.hp <= 0 && e.alive) killEnemy(e);
 }
@@ -7066,7 +8196,7 @@ function burnPlayer(dmg, srcX, srcY) {
     P.x += Math.cos(a) * 2;
     P.y += Math.sin(a) * 2;
   }
-  if (P.hp <= 0) { P.hp = 0; endRaid(false); }
+  if (P.hp <= 0) { P.hp = 0; playerLethal(); }
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -7542,6 +8672,17 @@ function updateParticles(dt) {
    13. 相机
    ══════════════════════════════════════════════════════════ */
 function updateCamera(dt) {
+  /* 手控制导期间：镜头跟着导弹飞，爆炸后自动回到干员身上 */
+  const ml = ctlLoiter();
+  if (ml) {
+    const mx = ml.x - VW / 2, my = ml.y - VH / 2;
+    G.cam.x = lerp(G.cam.x, clamp(mx, 0, Math.max(0, WORLD.w - VW)), 1 - Math.pow(0.0002, dt));
+    G.cam.y = lerp(G.cam.y, clamp(my, 0, Math.max(0, WORLD.h - VH)), 1 - Math.pow(0.0002, dt));
+    G.shake *= Math.pow(0.0025, dt);
+    if (G.shake < 0.15) G.shake = 0;
+    return;
+  }
+
   const look = 35 + P.ads * 78;                 // 开镜时镜头往准星方向前探
   const tx = P.x + Math.cos(P.aim) * look - VW / 2;
   const ty = P.y + Math.sin(P.aim) * look - VH / 2;
@@ -7789,13 +8930,14 @@ function drawObstacles() {
     ctx.fill();
 
     const g = ctx.createLinearGradient(o.x, o.y, o.x, o.y + o.h);
-    if (o.tone > 0.5) { g.addColorStop(0, '#33475e'); g.addColorStop(1, '#1f2d3d'); }
+    if (o.cover) { g.addColorStop(0, '#6a5138'); g.addColorStop(1, '#3d2f22'); }
+    else if (o.tone > 0.5) { g.addColorStop(0, '#33475e'); g.addColorStop(1, '#1f2d3d'); }
     else { g.addColorStop(0, '#2b3c50'); g.addColorStop(1, '#1a2634'); }
     ctx.fillStyle = g;
     drawRoundRect(o.x, o.y, o.w, o.h, 4);
     ctx.fill();
 
-    ctx.strokeStyle = 'rgba(120, 180, 225, 0.5)';
+    ctx.strokeStyle = o.cover ? 'rgba(255, 190, 120, 0.75)' : 'rgba(120, 180, 225, 0.5)';
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
@@ -8431,6 +9573,23 @@ function drawPlayer() {
   const t = G.time;
   const bob = Math.sin(P.walkPhase) * 1.4;
 
+  /* 倒地：趴在地上的一具身体，头朝准星 */
+  if (isDowned()) {
+    ctx.save();
+    ctx.translate(P.x, P.y);
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.beginPath(); ctx.ellipse(2, 5, P.r * 1.5, P.r * 0.95, 0, 0, TAU); ctx.fill();
+    ctx.rotate(P.aim);
+    ctx.fillStyle = '#20465a';
+    ctx.strokeStyle = '#8dffc0';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.ellipse(0, 0, P.r * 1.5, P.r * 0.78, 0, 0, TAU); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#c8d6de';
+    ctx.beginPath(); ctx.arc(P.r * 0.9, 0, P.r * 0.42, 0, TAU); ctx.fill();
+    ctx.restore();
+    return;
+  }
+
   ctx.save();
   ctx.translate(P.x, P.y + bob);
 
@@ -8563,6 +9722,24 @@ function drawVisionCones() {
 
 function drawEnemy(e) {
   const t = G.time;
+  /* 被标记：脚下转一圈绿环 + 头顶三角，隔着迷雾也认得出 */
+  if (e.mark > 0) {
+    const a = clamp(e.mark / 1.2, 0, 1);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(140,250,190,' + (0.55 * a) + ')';
+    ctx.lineWidth = 1.6;
+    ctx.setLineDash([6, 6]);
+    ctx.lineDashOffset = -G.time * 30;
+    ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 10, 0, TAU); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(150,255,200,' + (0.85 * a) + ')';
+    ctx.beginPath();
+    ctx.moveTo(e.x, e.y - e.r - 22);
+    ctx.lineTo(e.x - 5, e.y - e.r - 30);
+    ctx.lineTo(e.x + 5, e.y - e.r - 30);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
   ctx.save();
   ctx.translate(e.x, e.y);
 
@@ -9509,20 +10686,216 @@ function drawNades() {
 
 
 /* 烟雾：一团会呼吸的灰白气，边缘是渐隐的，戴不住一个完美圆 */
+/* ── 破片雷 / 燃烧弹：抛物线 + 引信闪红 ── */
+function drawFrags() {
+  for (const g of G.frags) {
+    if (!fogVisibleAt(g.x, g.y)) continue;
+    const h = g.h || 0;
+    ctx.fillStyle = 'rgba(0,0,0,0.34)';
+    ctx.beginPath(); ctx.ellipse(g.x, g.y + 6, 7, 4.5, 0, 0, TAU); ctx.fill();
+
+    const bx = g.x, by = g.y - h;
+    ctx.save();
+    ctx.translate(bx, by);
+    ctx.rotate(g.spin);
+    ctx.fillStyle = g.fire ? '#ff7a2a' : '#5e6d61';
+    ctx.strokeStyle = g.fire ? '#ffd66b' : '#bff3c9';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(0, 0, 5.2, 0, TAU); ctx.fill(); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-3, -2); ctx.lineTo(3, 2);
+    ctx.moveTo(-3, 2); ctx.lineTo(3, -2);
+    ctx.globalAlpha = 0.55; ctx.stroke(); ctx.globalAlpha = 1;
+    ctx.restore();
+
+    if (g.fire) {
+      ctx.fillStyle = 'rgba(255,170,70,' + (0.45 + 0.4 * Math.sin(G.time * 22)) + ')';
+      ctx.beginPath(); ctx.arc(bx, by, 9, 0, TAU); ctx.fill();
+    } else if (g.st === 'fly' ? g.fuse < 2.2 : g.fuse < 2.2) {
+      const blink = 0.35 + 0.65 * Math.abs(Math.sin(G.time * 16));
+      ctx.fillStyle = 'rgba(255,72,72,' + blink + ')';
+      ctx.beginPath(); ctx.arc(bx, by - 7, 2.6, 0, TAU); ctx.fill();
+    }
+  }
+}
+
+/* ── 箭矢：电箭绿、侦察箭青、激素针淡绿 ── */
+function drawArrows() {
+  for (const a of G.arrows) {
+    if (!fogVisibleAt(a.x, a.y)) continue;
+    const col = a.kind === 'arc' ? '#8ef2b0' : a.kind === 'scan' ? '#9ef7c8' : '#8dffc0';
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 2;
+    ctx.globalAlpha = 0.9;
+    ctx.beginPath();
+    ctx.moveTo(a.px, a.py);
+    ctx.lineTo(a.x, a.y);
+    ctx.stroke();
+    ctx.globalAlpha = 0.35;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(a.px, a.py);
+    ctx.lineTo(a.x, a.y);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = col;
+    ctx.beginPath(); ctx.arc(a.x, a.y, 2.6, 0, TAU); ctx.fill();
+  }
+}
+
+/* ── 电圈：会电人的绿环 ── */
+function drawEZones() {
+  for (const z of G.ezones) {
+    if (!fogVisibleAt(z.x, z.y)) continue;
+    const k = clamp(z.life / z.max, 0, 1);
+    const a = Math.min(1, k * 2.2);
+    const g = ctx.createRadialGradient(z.x, z.y, z.r * 0.15, z.x, z.y, z.r);
+    g.addColorStop(0, 'rgba(70,230,150,' + (0.10 * a) + ')');
+    g.addColorStop(0.72, 'rgba(60,220,140,' + (0.20 * a) + ')');
+    g.addColorStop(1, 'rgba(60,220,140,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, TAU); ctx.fill();
+
+    ctx.strokeStyle = 'rgba(150,255,200,' + (0.75 * a) + ')';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([9, 7]);
+    ctx.lineDashOffset = -G.time * 26;
+    ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, TAU); ctx.stroke();
+    ctx.setLineDash([]);
+
+    /* 几道随机电弧，让它看起来在放电 */
+    for (let i = 0; i < 3; i++) {
+      const ang = G.time * 2.4 + i * 2.1 + z.seed;
+      const r0 = z.r * 0.25, r1 = z.r * (0.65 + 0.3 * Math.abs(Math.sin(G.time * 7 + i)));
+      ctx.strokeStyle = 'rgba(220,255,235,' + (0.5 * a) + ')';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(z.x + Math.cos(ang) * r0, z.y + Math.sin(ang) * r0);
+      ctx.lineTo(z.x + Math.cos(ang + 0.5) * r1 * 0.7, z.y + Math.sin(ang + 0.5) * r1 * 0.7);
+      ctx.lineTo(z.x + Math.cos(ang + 0.2) * r1, z.y + Math.sin(ang + 0.2) * r1);
+      ctx.stroke();
+    }
+  }
+}
+
+/* ── 治疗场：绿色呼吸圈 + 十字 ── */
+function drawHealFields() {
+  for (const f of G.healFields) {
+    if (!fogVisibleAt(f.x, f.y)) continue;
+    const k = clamp(f.life / f.max, 0, 1);
+    const a = Math.min(1, k * 3);
+    const pulse = 0.86 + 0.14 * Math.sin(G.time * 2.2);
+    const g = ctx.createRadialGradient(f.x, f.y, f.r * 0.1, f.x, f.y, f.r * pulse);
+    g.addColorStop(0, 'rgba(60,235,140,' + (0.26 * a) + ')');
+    g.addColorStop(0.62, 'rgba(40,210,120,' + (0.20 * a) + ')');
+    g.addColorStop(1, 'rgba(30,180,100,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(f.x, f.y, f.r * pulse, 0, TAU); ctx.fill();
+
+    ctx.strokeStyle = 'rgba(160,255,200,' + (0.5 * a) + ')';
+    ctx.lineWidth = 1.6;
+    ctx.setLineDash([5, 9]);
+    ctx.lineDashOffset = G.time * 18;
+    ctx.beginPath(); ctx.arc(f.x, f.y, f.r * 0.94, 0, TAU); ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.strokeStyle = 'rgba(220,255,235,' + (0.55 * a) + ')';
+    ctx.lineWidth = 3;
+    const s = 9 * pulse;
+    ctx.beginPath();
+    ctx.moveTo(f.x - s, f.y); ctx.lineTo(f.x + s, f.y);
+    ctx.moveTo(f.x, f.y - s); ctx.lineTo(f.x, f.y + s);
+    ctx.stroke();
+  }
+}
+
+/* ── 烟幕无人机 ── */
+function drawDrones() {
+  for (const d of G.drones) {
+    if (!fogVisibleAt(d.x, d.y)) continue;
+    ctx.save();
+    ctx.translate(d.x, d.y);
+    ctx.rotate(d.ang);
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.beginPath(); ctx.ellipse(2, 8, 9, 5, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#dff8ea';
+    ctx.strokeStyle = '#26d96f';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.arc(0, 0, 6, 0, TAU); ctx.fill(); ctx.stroke();
+    /* 四个旋翼 */
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
+      ctx.globalAlpha = 0.7;
+      ctx.beginPath();
+      ctx.ellipse(sx * 9, sy * 8, 5.5 + Math.sin(G.time * 40 + sx + sy) * 1.2, 2.4, 0, 0, TAU);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    ctx.fillStyle = 'rgba(140,255,190,' + (0.4 + 0.35 * Math.abs(Math.sin(G.time * 6))) + ')';
+    ctx.beginPath(); ctx.arc(2, 0, 2.2, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+}
+
+/* ── 巡飞弹 ── */
+function drawLoiters() {
+  for (const m of G.loiters) {
+    if (!fogVisibleAt(m.x, m.y)) continue;
+    ctx.save();
+    ctx.translate(m.x, m.y);
+    ctx.rotate(m.ang);
+    if (m.sub) {
+      ctx.fillStyle = 'rgba(255,180,90,0.9)';
+      ctx.beginPath(); ctx.arc(0, 0, 5, 0, TAU); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,230,180,0.8)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(0, 0, 8, 0, TAU); ctx.stroke();
+    } else {
+      ctx.fillStyle = '#ffd6a8';
+      ctx.strokeStyle = '#ff8a1f';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(13, 0); ctx.lineTo(-7, -5.5); ctx.lineTo(-4, 0); ctx.lineTo(-7, 5.5);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      /* 尾焰 */
+      ctx.fillStyle = 'rgba(255,190,90,' + (0.55 + 0.35 * Math.sin(G.time * 30)) + ')';
+      ctx.beginPath();
+      ctx.moveTo(-6, -3.2); ctx.lineTo(-16 - Math.random() * 8, 0); ctx.lineTo(-6, 3.2);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+
+    if (m.ctl) {
+      ctx.strokeStyle = 'rgba(255,190,120,0.75)';
+      ctx.lineWidth = 1.4;
+      ctx.setLineDash([6, 6]);
+      ctx.beginPath(); ctx.arc(m.x, m.y, 26, 0, TAU); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(255,220,180,0.9)';
+      ctx.font = '700 10px ui-monospace, "Consolas", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('手控制导 · ' + Math.max(0, Math.round((m.max - m.dist) / 18)) + 'm', m.x, m.y - 34);
+    }
+  }
+}
+
 function drawSmokes() {
   const SM = SKILL.smoke;
   for (const s of G.smokes) {
     if (!fogVisibleAt(s.x, s.y)) continue;
     const t = s.t;
-    const a = clamp(Math.min(t / SM.grow, (SM.life - t) / SM.fade + 0.2), 0, 1);
+    const life = s.life || SM.life;
+    const a = s.fixed ? clamp(Math.min(1, (life - t) / SM.fade + 0.2), 0, 1)
+                      : clamp(Math.min(t / SM.grow, (life - t) / SM.fade + 0.2), 0, 1);
     const r = s.r;
     if (r < 1) continue;
+    /* 蜂巢烟是淡绿色的，一眼能和红狼的白烟分开 */
+    const tone = s.bee ? ['236,255,242', '208,246,222', '176,232,198'] : ['228,234,238', '208,216,222', '188,200,208'];
 
     const g = ctx.createRadialGradient(s.x, s.y, r * 0.08, s.x, s.y, r);
-    g.addColorStop(0, 'rgba(228,234,238,' + (0.93 * a) + ')');
-    g.addColorStop(0.58, 'rgba(208,216,222,' + (0.87 * a) + ')');
-    g.addColorStop(0.86, 'rgba(188,200,208,' + (0.55 * a) + ')');
-    g.addColorStop(1, 'rgba(176,190,200,0)');
+    g.addColorStop(0, 'rgba(' + tone[0] + ',' + (0.93 * a) + ')');
+    g.addColorStop(0.58, 'rgba(' + tone[1] + ',' + (0.87 * a) + ')');
+    g.addColorStop(0.86, 'rgba(' + tone[2] + ',' + (0.55 * a) + ')');
+    g.addColorStop(1, 'rgba(' + tone[2] + ',0)');
     ctx.fillStyle = g;
     ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, TAU); ctx.fill();
 
@@ -9533,8 +10906,8 @@ function drawSmokes() {
       const bx = s.x + Math.cos(ang) * r * 0.40;
       const by = s.y + Math.sin(ang * 1.27) * r * 0.33;
       const gg = ctx.createRadialGradient(bx, by, 0, bx, by, rr);
-      gg.addColorStop(0, 'rgba(238,244,248,' + (0.34 * a) + ')');
-      gg.addColorStop(1, 'rgba(200,212,220,0)');
+      gg.addColorStop(0, 'rgba(' + tone[0] + ',' + (0.34 * a) + ')');
+      gg.addColorStop(1, 'rgba(' + tone[1] + ',0)');
       ctx.fillStyle = gg;
       ctx.beginPath(); ctx.arc(bx, by, rr, 0, TAU); ctx.fill();
     }
@@ -9706,6 +11079,66 @@ function drawShocks() {
 }
 
 /* 长按 G：从人指到落点的虚线 + 落点爆炸圈 + 距离读数 */
+/* 手持装置的落点预览：虚线 + 落点圈 / 掩体轮廓 */
+function drawModeAim() {
+  if (!modeOn() || !P.alive) return;
+  const M = P.op.mode, a = P.aim;
+  const dash = (x1, y1, x2, y2, col) => {
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 1.4;
+    ctx.setLineDash([7, 7]);
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    ctx.setLineDash([]);
+  };
+
+  if (M.id === 'frag' || M.id === 'firebomb') {
+    const F = M.id === 'frag' ? SKILL.frag : SKILL.firebomb;
+    const maxD = M.id === 'frag' ? F.holdMax : 9 * 18;
+    const d = clamp(magAimDist() || 120, 70, maxD);
+    const tx = P.x + Math.cos(a) * d, ty = P.y + Math.sin(a) * d;
+    const col = M.id === 'frag' ? 'rgba(160,240,190,0.55)' : 'rgba(255,170,90,0.55)';
+    dash(P.x, P.y, tx, ty, col);
+    ctx.strokeStyle = M.id === 'frag' ? 'rgba(160,240,190,0.75)' : 'rgba(255,170,90,0.75)';
+    ctx.lineWidth = 1.6;
+    ctx.setLineDash([5, 6]);
+    ctx.beginPath(); ctx.arc(tx, ty, F.radius, 0, TAU); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(220,255,235,0.85)';
+    ctx.font = '700 10px ui-monospace, "Consolas", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(Math.round(d / 18) + 'm', tx, ty - F.radius - 8);
+  } else if (M.id === 'coverdev') {
+    const C = SKILL.cover;
+    const d = clamp(magAimDist() || 120, 60, C.range);
+    const cx = clamp(P.x + Math.cos(a) * d, 40, WORLD.w - 40);
+    const cy = clamp(P.y + Math.sin(a) * d, 40, WORLD.h - 40);
+    const w = M.vert ? C.thin : C.long, h = M.vert ? C.long : C.thin;
+    dash(P.x, P.y, cx, cy, 'rgba(255,190,120,0.5)');
+    ctx.strokeStyle = 'rgba(255,190,120,0.85)';
+    ctx.fillStyle = 'rgba(255,180,90,0.16)';
+    ctx.lineWidth = 1.6;
+    ctx.setLineDash([6, 5]);
+    ctx.beginPath(); ctx.rect(cx - w / 2, cy - h / 2, w, h); ctx.fill(); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(255,220,180,0.85)';
+    ctx.font = '700 10px ui-monospace, "Consolas", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(Math.round(d / 18) + 'm · ' + (M.vert ? '竖' : '横'), cx, cy - 12);
+  } else if (M.id === 'loiter') {
+    if (M.controlling) return;                   // 镜头已经跟着导弹走了
+    /* 直接发射：一条射向准星的示意线；右键瞄准：画出预测弹道 */
+    ctx.strokeStyle = 'rgba(255,190,120,' + (0.18 + M.aimR * 0.35) + ')';
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([10, 10]);
+    ctx.beginPath();
+    ctx.moveTo(P.x, P.y);
+    const len = M.aimR > 0.05 ? 260 : 120;
+    ctx.lineTo(P.x + Math.cos(a) * len, P.y + Math.sin(a) * len);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
 function drawMagAim() {
   if (!MAG_AIM.on || !P.alive) return;
   const M = SKILL.mag;
@@ -10810,11 +12243,17 @@ function drawSkillBar(mono) {
   const x0 = Math.round(VW / 2 - total / 2);
   const y0 = VH - 84;
 
+  const xCharged = (op.x.charges || 1) > 1;      // 激素枪这类「按发充能」的大招
   const rows = [
     { k: 'G', cn: op.g.short, col: '#c8d6de', cd: S.g.cd, max: op.g.cd, use: S.g.use, cap: op.g.charges, rech: S.g.recharge },
     { k: 'V', cn: op.v.short, col: '#ffd66b', cd: S.v.cd, max: op.v.cd, use: S.v.use, cap: op.v.charges, rech: S.v.recharge },
-    { k: 'X', cn: op.x.short, col: '#ff8a4c', cd: S.x.on ? S.x.t : S.x.cd,
-      max: S.x.on ? op.x.dur : op.x.cd, use: S.x.on ? 1 : 0, cap: 1, on: S.x.on },
+    xCharged
+      ? { k: 'X', cn: op.x.short, col: '#8dffc0',
+          cd: S.x.use <= 0 ? S.x.recharge : 0, max: SKILL.heal.recharge,
+          use: S.x.use, cap: op.x.charges,
+          rech: S.x.use < op.x.charges ? S.x.recharge : 0 }
+      : { k: 'X', cn: op.x.short, col: '#ff8a4c', cd: S.x.on ? S.x.t : S.x.cd,
+          max: S.x.on ? op.x.dur : op.x.cd, use: S.x.on ? 1 : 0, cap: 1, on: S.x.on },
   ];
 
   ctx.save();
@@ -10824,12 +12263,14 @@ function drawSkillBar(mono) {
     const it = rows[i];
     const x = x0 + i * (size + gap);
     const ready = it.on || (it.cd <= 0 && it.use > 0);
+    const inMode = modeOn() && P.op.mode.k === it.k;
 
     /* 底板 */
     ctx.fillStyle = 'rgba(8,14,20,0.72)';
     drawRoundRect(x, y0, size, size, 3);
     ctx.fill();
-    ctx.strokeStyle = it.on ? 'rgba(255,138,76,0.95)'
+    ctx.strokeStyle = inMode ? 'rgba(150,255,200,0.95)'
+                    : it.on ? 'rgba(255,138,76,0.95)'
                     : ready ? 'rgba(140,200,230,0.55)' : 'rgba(90,130,160,0.28)';
     ctx.lineWidth = 1.4;
     drawRoundRect(x, y0, size, size, 3);
@@ -10878,6 +12319,36 @@ function drawSkillBar(mono) {
       ctx.fillStyle = 'rgba(220,240,255,0.9)';
       ctx.font = '800 15px ' + mono;
       ctx.fillText(Math.ceil(it.cd) + '', x + size / 2, y0 + size / 2 + 6);
+    }
+  }
+
+  /* 手上拿着东西时的一行提示 */
+  if (modeOn()) {
+    const M = P.op.mode;
+    const MK = MODE_KEY[M.id];
+    if (MK) {
+      let txt = MK.text, col = '#a8f5c8';
+      if (M.id === 'frag') {
+        if (M.lit) { txt = '引信 ' + M.fuse.toFixed(1) + 's · 松手投出'; col = M.fuse < 1.6 ? '#ff8f8f' : '#ffd0a0'; }
+      } else if (M.id === 'shockbow') {
+        txt = '左键射箭 · 右键 ' + (M.bounce ? '反弹 · 开' : '反弹 · 关') + ' · V 收弓';
+      } else if (M.id === 'coverdev') {
+        txt = '左键放置 · 右键 ' + (M.vert ? '竖向' : '横向') + ' · V 收起';
+      } else if (M.id === 'healgun') {
+        txt = '左键注射 · 右键瞄准 · 剩 ' + P.op.x.use + ' 发 · X 收起';
+      } else if (M.id === 'loiter' && M.controlling) {
+        const lm = ctlLoiter();
+        txt = 'WASD 操控导弹 · 左键引爆 · 剩 ' + (lm ? Math.max(0, Math.round((lm.max - lm.dist) / 18)) : 0) + 'm';
+        col = '#ffc98a';
+      }
+      ctx.font = '700 11px ' + mono;
+      ctx.textAlign = 'center';
+      const w = ctx.measureText(txt).width;
+      ctx.fillStyle = 'rgba(6,12,18,0.8)';
+      drawRoundRect(VW / 2 - w / 2 - 11, y0 - 40, w + 22, 21, 3);
+      ctx.fill();
+      ctx.fillStyle = col;
+      ctx.fillText(txt, VW / 2, y0 - 25.5);
     }
   }
 
@@ -11221,6 +12692,13 @@ function update(dt) {
   updateGls(dt);
   updateMagbombs(dt);
   updateShocks(dt);
+  updateFrags(dt);
+  updateArrows(dt);
+  updateEZones(dt);
+  updateHealFields(dt);
+  updateDrones(dt);
+  updateCovers(dt);
+  updateLoiters(dt);
   updateIceBolts(dt);
   updateIcePots(dt);
   updateMolotovs(dt);
@@ -11483,6 +12961,18 @@ function paintFog() {
   FOG.cx.putImageData(FOG.img, 0, 0);
 }
 
+/* 被标记的敌人：迷雾会盖住普通绘制，这里把标记目标重新画一层（雾上） */
+function drawMarkedOverlays() {
+  let any = false;
+  for (const e of G.enemies) {
+    if (!(e.mark > 0) || fogVisibleAt(e.x, e.y)) continue;
+    if (!any) { ctx.save(); ctx.translate(-G.cam.x + G.shakeX, -G.cam.y + G.shakeY); any = true; }
+    try { drawEnemy(e); }
+    catch (err) { if (!G._markWarned) { G._markWarned = 1; console.warn('drawMarked failed', err); } }
+  }
+  if (any) ctx.restore();
+}
+
 /* 某个世界坐标当前是否处在玩家视野内（必须同时在正面视锥里） */
 function fogVisibleAt(x, y) {
   if (!FOG.ready) return true;
@@ -11567,12 +13057,14 @@ function render() {
   drawPickups();
   drawFrosts();
   drawFires();
+  drawEZones();
+  drawHealFields();
   drawVisionCones();
   drawObstacles();
 
   const drawList = [];
   for (const e of G.enemies) {
-    if (!fogVisibleAt(e.x, e.y)) continue;   // 视野外的敌人不可见
+    if (!fogVisibleAt(e.x, e.y) && !(e.mark > 0)) continue;   // 视野外的敌人不可见（被标记的除外）
     drawList.push({ y: e.y, kind: 'e', ref: e });
   }
   drawList.push({ y: P.y, kind: 'p', ref: P });
@@ -11594,8 +13086,13 @@ function render() {
   drawGls();
   drawMagbombs();
   drawShocks();
+  drawFrags();
+  drawArrows();
+  drawDrones();
+  drawLoiters();
   drawSmokes();
   drawMagAim();          // 长按 G 的投掷预瞄（画在烟上面，别被自己烟挡住）
+  drawModeAim();         // 手上装置（雷 / 掩体 / 巡飞弹）的落点预览
   drawMolotovs();
   drawRockets();
   drawFlameCones();
@@ -11606,6 +13103,7 @@ function render() {
   ctx.restore();
 
   drawFog();
+  drawMarkedOverlays();      // 被标记的敌人重画在雾上面：隔着迷雾也看得见
   drawSniperBeams();
   drawLighting();
   drawSmokeBlind();          // 自己在烟里：先糊住世界，再画 HUD
@@ -11614,7 +13112,42 @@ function render() {
     drawHUD();
     drawDebuffOverlay();
     drawKnockOverlay();
+    drawDownedOverlay();
   }
+}
+
+/* 倒地：画面压红、四角收暗，中间一条起身进度 —— 这 8 秒敌人还能补枪 */
+function drawDownedOverlay() {
+  if (!isDowned() || !P.alive) return;
+  const k = clamp(P.downed / SKILL.rescue.down, 0, 1);
+  ctx.save();
+  ctx.fillStyle = 'rgba(26,8,14,0.46)';
+  ctx.fillRect(0, 0, VW, VH);
+
+  const cx = VW / 2, cy = VH / 2;
+  const g = ctx.createRadialGradient(cx, cy, Math.min(VW, VH) * 0.2, cx, cy, Math.max(VW, VH) * 0.75);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(1, 'rgba(0,0,0,0.7)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, VW, VH);
+
+  const w = 260, h = 7;
+  const bx = cx - w / 2, by = cy + 84;
+  ctx.fillStyle = 'rgba(0,0,0,0.62)';
+  drawRoundRect(bx - 2, by - 2, w + 4, h + 4, 3);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(120,255,180,0.85)';
+  drawRoundRect(bx, by, Math.max(2, w * (1 - k)), h, 3);
+  ctx.fill();
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#a8f5c8';
+  ctx.font = '800 17px ui-monospace, "Consolas", monospace';
+  ctx.fillText('倒 地', cx, cy + 58);
+  ctx.fillStyle = 'rgba(220,255,235,0.9)';
+  ctx.font = '700 12px ui-monospace, "Consolas", monospace';
+  ctx.fillText('自行救援中 · ' + P.downed.toFixed(1) + 's · 现在挨枪就没了', cx, cy + 112);
+  ctx.restore();
 }
 
 /* 被虎蹲炮掀翻：画面压一层灰、四角收紧，中间一行字告诉你「现在动不了」 */
@@ -11792,9 +13325,14 @@ function renderOpsPanel() {
     '<div class="skillbody"><b>' + title + '</b><span class="meta">' + meta + '</span><p>' + desc + '</p></div></div>';
 
   const onDuty = SAVE.operator === op.id;
-  const gMeta = '战术道具 · CD ' + op.g.cd + 's' + (op.g.charges > 1 ? ' · 储备 ' + op.g.charges + (op.g.kind === 'magbomb' ? ' 颗' : ' 枚') : '');
-  const vMeta = '小技能 · CD ' + op.v.cd + 's' + (op.v.charges > 1 ? ' · 储备 ' + op.v.charges + ' 组' : '');
-  const xMeta = '大招 · CD ' + op.x.cd + 's' + (op.x.dur ? ' · 持续 ' + op.x.dur + 's' : '');
+  const gUnit = (op.g.kind === 'smoke' || op.g.kind === 'drone') ? '枚'
+              : (op.g.kind === 'bee' ? '颗' : '颗');
+  const gMeta = '战术道具 · CD ' + op.g.cd + 's' + (op.g.charges > 1 ? ' · 储备 ' + op.g.charges + ' ' + gUnit : '');
+  const vUnit = op.v.kind === 'drone' ? '台' : '组';
+  const vMeta = '小技能 · CD ' + op.v.cd + 's' + (op.v.charges > 1 ? ' · 储备 ' + op.v.charges + ' ' + vUnit : '');
+  const xMeta = (op.x.charges || 1) > 1
+    ? '大招 · 充能 ' + (SKILL.heal.recharge) + 's / 发 · 上限 ' + op.x.charges + ' 发'
+    : '大招 · CD ' + op.x.cd + 's' + (op.x.dur ? ' · 持续 ' + op.x.dur + 's' : '');
   const pKey = op.passive.kind === 'slide' ? 'C' : '被动';
   det.innerHTML =
     '<div class="ops-head"><div class="opavatar">' + op.name.slice(-1) + '</div>' +
@@ -13144,6 +14682,13 @@ function startRaid() {
   G.gls = [];
   G.magbombs = [];
   G.shocks = [];
+  G.frags = [];
+  G.arrows = [];
+  G.ezones = [];
+  G.healFields = [];
+  G.drones = [];
+  G.covers = [];
+  G.loiters = [];
   G.icepots = [];
   G.fires = [];
   G.molotovs = [];
