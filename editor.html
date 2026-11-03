@@ -200,7 +200,9 @@
       <option value="sniper">阿萨拉狙击兵 · 激光锁定、一枪见血</option>
       <option value="rocket">阿萨拉火箭筒兵 · 范围爆炸</option>
       <option value="flamer">阿萨拉喷火兵 · 近身火舌</option>
-      <option value="cryo">阿萨拉冰冻军团 · 霜区减速</option>
+      <option value="cryo">阿萨拉冰冻军团-投射兵 · 冰弹霜区</option>
+      <option value="cryoT">阿萨拉冰冻军团-投掷兵 · 抛掷霜瓶</option>
+      <option value="cryoS">阿萨拉冰冻军团-喷射兵 · 近身冷雾</option>
       <option value="nader">阿萨拉手雷兵 · 抛掷破片雷</option>
       <option value="boss">赤霄 · 重机枪（守点）</option>
     </select></label>
@@ -250,7 +252,9 @@
         <option value="sniper">阿萨拉狙击兵</option>
         <option value="rocket">阿萨拉火箭筒兵</option>
         <option value="flamer">阿萨拉喷火兵</option>
-        <option value="cryo">阿萨拉冰冻军团</option>
+        <option value="cryo">阿萨拉冰冻军团-投射兵</option>
+        <option value="cryoT">阿萨拉冰冻军团-投掷兵</option>
+        <option value="cryoS">阿萨拉冰冻军团-喷射兵</option>
         <option value="nader">阿萨拉手雷兵</option>
         <option value="boss">赤霄 · 重机枪</option>
       </select></label>
@@ -314,7 +318,7 @@ const MAP_FORMAT = 'neonpurge-map';
 const MAP_VERSION = 1;
 const DEFAULT_SQUAD = ['runner', 'runner', 'shooter', 'runner', 'brute', 'runner',
                        'shooter', 'sniper', 'runner', 'rocket', 'brute', 'flamer',
-                       'shooter', 'runner', 'cryo', 'nader'];
+                       'shooter', 'runner', 'cryo', 'cryoT', 'cryoS', 'nader'];
 const SNAP = 10;
 
 /* 与游戏 ENEMY_TYPES 保持一致的兵种表（只取编辑需要的字段） */
@@ -325,11 +329,14 @@ const ENEMY_TYPES = {
   sniper:  { r: 13, color: '#5ce1e6', glow: '#18a8bd', label: '阿萨拉狙击兵', short: '狙击兵' },
   rocket:  { r: 19, color: '#8ad34a', glow: '#4d9a1a', label: '阿萨拉火箭筒兵', short: '火箭兵' },
   flamer:  { r: 20, color: '#ffd24a', glow: '#ff8a1f', label: '阿萨拉喷火兵', short: '喷火兵' },
-  cryo:    { r: 23, color: '#7fd4ff', glow: '#2f9fe0', label: '阿萨拉冰冻军团', short: '冰冻兵' },
+  cryo:    { r: 23, color: '#7fd4ff', glow: '#2f9fe0', label: '阿萨拉冰冻军团-投射兵', short: '投射兵' },
+  cryoT:   { r: 21, color: '#8fe0ff', glow: '#35b8f0', label: '阿萨拉冰冻军团-投掷兵', short: '投掷兵' },
+  cryoS:   { r: 24, color: '#c9f2ff', glow: '#66ccff', label: '阿萨拉冰冻军团-喷射兵', short: '喷射兵' },
   nader:   { r: 18, color: '#ffb347', glow: '#ff7a1f', label: '阿萨拉手雷兵', short: '手雷兵' },
   boss:    { r: 44, color: '#ff2d55', glow: '#ff0040', label: '赤霄', short: '赤霄' },
 };
-const ENEMY_ORDER = ['runner', 'shooter', 'brute', 'sniper', 'rocket', 'flamer', 'cryo', 'nader', 'boss'];
+const ENEMY_ORDER = ['runner', 'shooter', 'brute', 'sniper', 'rocket', 'flamer',
+                     'cryo', 'cryoT', 'cryoS', 'nader', 'boss'];
 
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
@@ -710,13 +717,25 @@ function drawUnits(hair) {
       }
       ctx.closePath();
     } else if (u.type === 'cryo') {
-      /* 冰冻军团：六边冰晶 */
+      /* 冰冻军团·投射兵：六边冰晶 */
       for (let k = 0; k < 6; k++) {
         const a = k * TAU / 6 - Math.PI / 2;
         const px = Math.cos(a) * rr, py = Math.sin(a) * rr;
         k ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
       }
       ctx.closePath();
+    } else if (u.type === 'cryoT') {
+      /* 冰冻军团·投掷兵：八边钝角 */
+      for (let k = 0; k < 8; k++) {
+        const a = k * TAU / 8 - Math.PI / 2;
+        const px = Math.cos(a) * rr * 0.9, py = Math.sin(a) * rr * 0.9;
+        k ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+      }
+      ctx.closePath();
+    } else if (u.type === 'cryoS') {
+      /* 冰冻军团·喷射兵：厚圆角箱体 */
+      const s2 = rr * 0.86;
+      ctx.rect(-s2, -s2 * 0.96, s2 * 2, s2 * 1.92);
     } else if (u.type === 'nader') {
       /* 手雷兵：圆角方身板 */
       const s = rr * 0.84;
@@ -773,6 +792,25 @@ function drawUnits(hair) {
       ctx.fillStyle = picked ? '#ffffff' : 'rgba(255,170,60,0.9)';
       ctx.beginPath(); ctx.arc(rr * 1.55, 0, 5, 0, TAU); ctx.fill();
       ctx.fillStyle = picked ? '#ffffff' : T.color;
+    } else if (u.type === 'cryo') {
+      // 冷冻投射管 + 管口白雾
+      ctx.fillStyle = picked ? '#eafcff' : '#1b3d52';
+      ctx.fillRect(rr * 0.35, -2.4 * hair, rr * 1.05, 4.8 * hair);
+      ctx.fillStyle = picked ? '#ffffff' : 'rgba(127,212,255,0.85)';
+      ctx.beginPath(); ctx.arc(rr * 1.45, 0, 4.5, 0, TAU); ctx.fill();
+    } else if (u.type === 'cryoT') {
+      // 手上举着一支霜瓶
+      ctx.fillStyle = picked ? '#ffffff' : 'rgba(226,248,255,0.9)';
+      ctx.fillRect(rr * 0.9, -rr * 0.4 - 4, 7, 8);
+      ctx.strokeStyle = picked ? '#ffffff' : 'rgba(79,184,234,0.95)';
+      ctx.lineWidth = 1.1 * hair;
+      ctx.strokeRect(rr * 0.9, -rr * 0.4 - 4, 7, 8);
+    } else if (u.type === 'cryoS') {
+      // 粗冷雾管 + 管口冷雾
+      ctx.fillStyle = picked ? '#eafcff' : '#16394d';
+      ctx.fillRect(rr * 0.42, -3 * hair, rr * 1.0, 6 * hair);
+      ctx.fillStyle = picked ? '#ffffff' : 'rgba(201,242,255,0.85)';
+      ctx.beginPath(); ctx.arc(rr * 1.5, 0, 5.5, 0, TAU); ctx.fill();
     }
 
     if (u.type === 'boss') {
@@ -1153,7 +1191,8 @@ function syncInputs() {
 
 /* 守军构成摘要 */
 function unitSummary() {
-  const c = { runner: 0, shooter: 0, brute: 0, sniper: 0, rocket: 0, flamer: 0, boss: 0 };
+  const c = { runner: 0, shooter: 0, brute: 0, sniper: 0, rocket: 0, flamer: 0,
+              cryo: 0, cryoT: 0, cryoS: 0, nader: 0, boss: 0 };
   for (const u of map.units) if (c[u.type] !== undefined) c[u.type]++;
   const parts = [];
   if (c.runner) parts.push('小兵 ' + c.runner);
@@ -1162,6 +1201,10 @@ function unitSummary() {
   if (c.sniper) parts.push('狙击 ' + c.sniper);
   if (c.rocket) parts.push('火箭 ' + c.rocket);
   if (c.flamer) parts.push('喷火 ' + c.flamer);
+  if (c.cryo) parts.push('投射 ' + c.cryo);
+  if (c.cryoT) parts.push('投掷 ' + c.cryoT);
+  if (c.cryoS) parts.push('喷射 ' + c.cryoS);
+  if (c.nader) parts.push('手雷 ' + c.nader);
   if (c.boss) parts.push('赤霄 ' + c.boss);
   return map.units.length + ' 人' + (parts.length ? ' · ' + parts.join(' · ') : '');
 }

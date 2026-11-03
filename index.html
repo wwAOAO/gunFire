@@ -1976,12 +1976,28 @@ const ENEMY_TYPES = {
              flame: { dur: 1.9, tick: 0.3, dmg: 4.5, range: 228, arc: 0.34, cd: [2.4, 3.2],
                       fireR: 44, fireLife: 2.0, fireDmg: 2.0 } },
 
-  /* 阿萨拉冰冻军团：全场最慢的重甲，打的不是血而是「空间」——
-     冰弹炸开留一片霜区，站进去越久越僵，跑不动就等于被围死。
-     伤害很低，真正致命的是它把你钉在原地，等机枪兵和手雷兵到位。 */
+  /* ── 阿萨拉冰冻军团：三个兵种共用一套「冻伤」底层，打法完全不同 ──
+     它们都不负责打死你，负责让你跑不掉：伤害很低，真正致命的是把人钉在原地，
+     等机枪兵、手雷兵、喷火兵到位。
+
+     投射兵：远远地射冰弹，落地炸开一片霜区（远距离封锁）
+     投掷兵：把霜瓶抛到你脚下，落点先亮一个冰圈（中距离赶人，逼你离开掩体）
+     喷射兵：贴到跟前按着冷雾管喷一片锥形冰雾（近距离沾上就叠冻伤） */
   cryo:    { hp: 160, r: 23, speed: 45, dmg: 12, score: 56, armor: 3, color: '#7fd4ff', glow: '#2f9fe0', shape: 'cry',
              sight: 420, fov: 0.95, keep: 320,
              ice: { load: 0.8, spd: 420, radius: 104, life: 5.0, dmg: 12, cd: [4.4, 5.8], range: 540 } },
+
+  cryoT:   { hp: 145, r: 21, speed: 50, dmg: 10, score: 52, armor: 3, color: '#8fe0ff', glow: '#35b8f0', shape: 'cryt',
+             sight: 400, fov: 0.95, keep: 360,
+             /* pot：霜瓶抛物线飞 1 秒，落点先亮冰圈；砸开是一片更大的霜（半径 132、6 秒） */
+             pot: { throw: 1.0, radius: 132, life: 6.0, dmg: 16, cd: [5.2, 6.6], range: 560, near: 210 } },
+
+  cryoS:   { hp: 185, r: 24, speed: 52, dmg: 13, score: 58, armor: 3, color: '#c9f2ff', glow: '#66ccff', shape: 'crys',
+             sight: 330, fov: 1.05, keep: 150,
+             /* spray：贴脸按住冷雾管 1.7 秒，锥形范围里每 0.26 秒掉一点血 + 叠冻伤；
+                喷完地上留一串小霜点，封住退路 */
+             spray: { dur: 1.7, tick: 0.26, dmg: 3.2, range: 196, arc: 0.42, cd: [2.9, 3.9],
+                      patchR: 46, patchLife: 1.9, chill: 0.3 } },
 
   /* 阿萨拉手雷兵：不打枪，只往你脚下丢雷。落点先亮一个红圈倒计时，
      逼你从掩体后面挪窝；空中的雷还能被子弹打爆提前引爆 —— 这是留给玩家的操作空间。 */
@@ -1999,7 +2015,7 @@ const ENEMY_TYPES = {
    ══════════════════════════════════════════════════════════ */
 const SECRET = {
   hp: { runner: 68, shooter: 60, sniper: 55, rocket: 105, flamer: 170, brute: 360, boss: 2400,
-        cryo: 220, nader: 120 },
+        cryo: 220, cryoT: 195, cryoS: 250, nader: 120 },
   /* 机密甲抬升：只对「本来就穿甲」的兵种生效 —— 突击兵裸奔，机密图里还是裸奔，
      RIP 修脚弹和「一枪一个小兵」的手感都留着。
      封顶 5 级：再往上（6 级）就只有红弹 / 顶级弹啃得动，等于硬墙。
@@ -2008,7 +2024,7 @@ const SECRET = {
   armorLvCap: 5,
   armorOverCapHp: 1.5,
   dmgMul: { runner: 1.35, shooter: 1.23, sniper: 0.84, rocket: 0.83, flamer: 1.33, brute: 1.33, boss: 1.33,
-            cryo: 1.2, nader: 1.15 },
+            cryo: 1.2, cryoT: 1.15, cryoS: 1.25, nader: 1.15 },
   shield: 140,          // 盾兵的盾，普通是 120
   playerInvuln: 0.30,   // 玩家挨打后的无敌帧，普通是 0.55（围攻才开始有压力）
   firstWave: 60,        // 首波增援
@@ -2045,7 +2061,9 @@ const MELEE = {
   sniper:  { reach: 28, wind: 0.30, cd: 1.20, arc: 0.42, lunge: 18, kick: 26 },   // 狙击兵：枪托短刺
   rocket:  { reach: 36, wind: 0.42, cd: 1.40, arc: 0.52, lunge: 24, kick: 46 },   // 火箭兵：筒子横砸
   flamer:  { reach: 34, wind: 0.38, cd: 1.35, arc: 0.50, lunge: 22, kick: 38 },   // 喷火兵：喷管一记闷棍
-  cryo:    { reach: 38, wind: 0.52, cd: 1.65, arc: 0.58, lunge: 18, kick: 54 },   // 冰冻军团：冰壳正面一撞
+  cryo:    { reach: 38, wind: 0.52, cd: 1.65, arc: 0.58, lunge: 18, kick: 54 },   // 冰冻军团·投射兵：冰壳正面一撞
+  cryoT:   { reach: 32, wind: 0.40, cd: 1.35, arc: 0.48, lunge: 16, kick: 38 },   // 冰冻军团·投掷兵：霜瓶砸一下
+  cryoS:   { reach: 36, wind: 0.46, cd: 1.55, arc: 0.54, lunge: 20, kick: 46 },   // 冰冻军团·喷射兵：冷雾管横扫
   nader:   { reach: 30, wind: 0.32, cd: 1.20, arc: 0.46, lunge: 18, kick: 30 },   // 手雷兵：雷柄敲一下
   boss:    { reach: 62, wind: 0.58, cd: 1.90, arc: 0.95, lunge: 40, kick: 104 },  // 赤霄：重踏，范围最大
 };
@@ -2054,17 +2072,19 @@ function meleeOf(e) { return MELEE[e.type] || MELEE.runner; }
 function meleeReach(e) { return P.r + e.r + meleeOf(e).reach; }
 
 /* 敌人可布置的兵种清单（地图文件与编辑器共用这个顺序） */
-const ENEMY_ORDER = ['runner', 'shooter', 'brute', 'sniper', 'rocket', 'flamer', 'cryo', 'nader', 'boss'];
+const ENEMY_ORDER = ['runner', 'shooter', 'brute', 'sniper', 'rocket', 'flamer',
+                     'cryo', 'cryoT', 'cryoS', 'nader', 'boss'];
 const ENEMY_LABEL = {
   runner: '阿萨拉小兵', shooter: '阿萨拉盾兵', brute: '阿萨拉机枪兵',
   sniper: '阿萨拉狙击兵', rocket: '阿萨拉火箭筒兵', flamer: '阿萨拉喷火兵',
-  cryo: '阿萨拉冰冻军团', nader: '阿萨拉手雷兵',
+  cryo: '阿萨拉冰冻军团-投射兵', cryoT: '阿萨拉冰冻军团-投掷兵', cryoS: '阿萨拉冰冻军团-喷射兵',
+  nader: '阿萨拉手雷兵',
   boss: '赤霄',
 };
 const ENEMY_SHORT = {
   runner: '小兵', shooter: '盾兵', brute: '机枪兵',
   sniper: '狙击兵', rocket: '火箭兵', flamer: '喷火兵',
-  cryo: '冰冻兵', nader: '手雷兵',
+  cryo: '投射兵', cryoT: '投掷兵', cryoS: '喷射兵', nader: '手雷兵',
   boss: '赤霄',
 };
 const BOSS_NAME = '赤霄';
@@ -2270,8 +2290,9 @@ const G = {
   fires: [],        // 燃烧瓶火场
   molotovs: [],     // 飞行中的燃烧瓶
   rockets: [],      // 敌方火箭弹
-  icebolts: [],     // 敌方冰弹（冰冻军团）
-  frosts: [],       // 冰弹炸开后留下的霜区
+  icebolts: [],     // 敌方冰弹（冰冻军团·投射兵）
+  icepots: [],      // 敌方霜瓶（冰冻军团·投掷兵）在飞的那几只
+  frosts: [],       // 冰弹 / 霜瓶 / 冷雾炸开后留下的霜区
   smokes: [],       // 干员烟雾弹留下的烟幕（挡敌人视线）
   gls: [],          // 玩家三联装手炮的榴弹（会弹墙）
   units: [],        // 地图里布置的敌人（兵种 + 驻地）
@@ -2559,7 +2580,7 @@ const WORLD_DEFAULT = { w: 3000, h: 2200 };
 /* 单出生点 / 随机地图的默认守军：14 人，四种新兵各放一两个，别一上来就满编 */
 const DEFAULT_SQUAD = ['runner', 'runner', 'shooter', 'runner', 'brute', 'runner',
                        'shooter', 'sniper', 'runner', 'rocket', 'brute', 'flamer',
-                       'shooter', 'runner', 'cryo', 'nader'];
+                       'shooter', 'runner', 'cryo', 'cryoT', 'cryoS', 'nader'];
 
 const numOr = (v, d) => (typeof v === 'number' && isFinite(v)) ? v : d;
 
@@ -4339,8 +4360,12 @@ function spawnEnemy(type, atX, atY) {
     loadT: 0, rocketCd: rand(1.6, 2.8),
     /* 喷火兵：flameT 喷射剩余时间 / flameTick 下一次灼烧结算 / fireDrop 下一次落地留火 */
     flameT: 0, flameTick: 0, fireDrop: 0, flameCd: rand(1.0, 1.9),
-    /* 冰冻军团：iceLoad 装填读条（>0 正在蓄冰） / iceCd 冷却 */
+    /* 冰冻军团·投射兵：iceLoad 装填读条（>0 正在蓄冰） / iceCd 冷却 */
     iceLoad: 0, iceCd: rand(1.4, 2.6),
+    /* 冰冻军团·投掷兵：potCd 下一次抛霜瓶的冷却 */
+    potCd: rand(1.6, 3.0),
+    /* 冰冻军团·喷射兵：sprayT 喷雾剩余 / sprayTick 下一次结算 / patchDrop 下一次落地留霜 / sprayCd 冷却 */
+    sprayT: 0, sprayTick: 0, patchDrop: 0, sprayCd: rand(1.2, 2.3),
     /* 手雷兵：throwCd 下一次投掷的冷却 */
     throwCd: rand(1.2, 2.4),
 
@@ -4373,11 +4398,13 @@ function spawnReinforce() {
     const r = Math.random();
     let type = 'runner';
     if (G.reinforceWave >= 4 && r < 0.07) type = 'flamer';
-    else if (G.reinforceWave >= 4 && r < 0.14) type = 'cryo';
-    else if (G.reinforceWave >= 3 && r < 0.21) type = 'brute';
-    else if (G.reinforceWave >= 3 && r < 0.28) type = 'rocket';
-    else if (G.reinforceWave >= 2 && r < 0.35) type = 'sniper';
-    else if (G.reinforceWave >= 2 && r < 0.43) type = 'nader';
+    else if (G.reinforceWave >= 4 && r < 0.13) type = 'cryo';
+    else if (G.reinforceWave >= 4 && r < 0.18) type = 'cryoT';
+    else if (G.reinforceWave >= 3 && r < 0.23) type = 'cryoS';
+    else if (G.reinforceWave >= 3 && r < 0.29) type = 'brute';
+    else if (G.reinforceWave >= 3 && r < 0.35) type = 'rocket';
+    else if (G.reinforceWave >= 2 && r < 0.42) type = 'sniper';
+    else if (G.reinforceWave >= 2 && r < 0.48) type = 'nader';
     else if (G.reinforceWave >= 2 && r < 0.62) type = 'shooter';
     const e = spawnEnemy(type);
     if (e && alarmed) {
@@ -4989,7 +5016,134 @@ function updateFrosts(dt) {
 }
 
 /* ══════════════════════════════════════════════════════════
-   9.6 手雷兵：抛掷破片雷
+   9.6 冰冻军团：投掷兵霜瓶 / 喷射兵冷雾
+   ──────────────────────────────────────────────────────────
+   · 霜瓶：抛物线飞到预判落点（飞行 1 秒，落点先亮冰圈），砸开是一片更大的霜
+     （半径 132、持续 6 秒），范围内直接吃一层冻伤。落地就炸、不拖引信，
+     赶人的方式是把冰圈画在你脚下。
+   · 冷雾：贴脸按住管子喷 1.7 秒，锥形里每 0.26 秒掉一点血 + 叠冻伤；
+     喷的时候地上不断留小霜点，喷完那片地仍然站不住。
+   ══════════════════════════════════════════════════════════ */
+
+/* 冻伤叠层统一入口：霜区 / 霜瓶 / 冷雾都走这里，跨过整数层才弹一次提示 */
+function addChill(n) {
+  if (!P.alive || n <= 0) return;
+  const before = P.chill;
+  P.chill = Math.min(3, P.chill + n);
+  if (P.chill > before && Math.floor(P.chill) > Math.floor(before)) {
+    popup(P.x, P.y - 52, '冻伤 ×' + Math.round(P.chill), '#7fd4ff', 12);
+    Sfx.tone(320, 0.12, 0.04, 'sine', 220);
+  }
+}
+
+function throwIcePot(e) {
+  const PT = ENEMY_TYPES.cryoT.pot;
+  const lead = 0.6;
+  let tx = P.alive ? P.x + P.vx * lead : e.lastSeenX;
+  let ty = P.alive ? P.y + P.vy * lead : e.lastSeenY;
+
+  const dd = dist(e.x, e.y, tx, ty);
+  if (dd > PT.range) {
+    tx = e.x + (tx - e.x) / dd * PT.range;
+    ty = e.y + (ty - e.y) / dd * PT.range;
+  }
+
+  G.icepots.push({
+    x: e.x, y: e.y, sx: e.x, sy: e.y, tx, ty, h: 0,
+    t: 0, dur: PT.throw, radius: PT.radius, life: PT.life,
+    dmg: PT.dmg * (e.dmgMul || 1), r: 6, spin: rand(-8, 8), rot: 0,
+  });
+
+  popup(e.x, e.y - e.r - 26, '霜瓶！', '#8fe0ff', 13);
+  Sfx.tone(420, 0.16, 0.05, 'triangle', 300);
+}
+
+/* 霜瓶砸开：一片大霜 + 落点伤害，范围内的人直接吃一层冻伤 */
+function burstIcePot(pt) {
+  G.frosts.push({ x: pt.tx, y: pt.ty, r: pt.radius, life: pt.life, max: pt.life, mul: 1 });
+  burst(pt.tx, pt.ty, 26, {
+    spdMin: 50, spdMax: 260, life: 0.65, r: 4,
+    color: ['#ffffff', '#bfe9ff', '#7fd4ff'], drag: 0.88, glow: true,
+  });
+  Sfx.noiseBurst(0.26, 2600, 0.7, 0.14, 'highpass');
+  shake(5);
+
+  if (!P.alive) return;
+  const d = dist(pt.tx, pt.ty, P.x, P.y);
+  if (d < pt.radius + P.r) {
+    const fall = 1 - clamp(d / pt.radius, 0, 1);
+    damagePlayer(pt.dmg * (0.45 + fall * 0.55), pt.tx, pt.ty, 0.3);
+    addChill(1);
+  }
+}
+
+function updateIcePots(dt) {
+  for (let i = G.icepots.length - 1; i >= 0; i--) {
+    const pt = G.icepots[i];
+    pt.t += dt;
+    pt.rot += pt.spin * dt;
+    const k = Math.min(1, pt.t / pt.dur);
+    pt.x = pt.sx + (pt.tx - pt.sx) * k;
+    pt.y = pt.sy + (pt.ty - pt.sy) * k;
+    pt.h = Math.sin(Math.PI * k) * 58;
+
+    if (Math.random() < 0.5) {
+      addParticle(pt.x, pt.y - pt.h * 0.35, {
+        vx: rand(-14, 14), vy: rand(-4, 26), life: rand(0.2, 0.42), r: rand(1.4, 3),
+        color: pick(['#ffffff', '#bfe9ff', '#7fd4ff']), drag: 0.9, glow: true,
+      });
+    }
+
+    if (k >= 1) { burstIcePot(pt); G.icepots.splice(i, 1); }
+  }
+}
+
+/* 冷雾：喷口不断吐白气，锥形里一片雾 */
+function coldSpray(e) {
+  const S = ENEMY_TYPES.cryoS.spray;
+  const a0 = e.aim;
+  const mx = e.x + Math.cos(a0) * (e.r + 8);
+  const my = e.y + Math.sin(a0) * (e.r + 8);
+  for (let i = 0; i < 2; i++) {
+    const a = a0 + rand(-S.arc, S.arc) * 1.05;
+    const spd = rand(150, 320);
+    const off = rand(18, 46);
+    addParticle(mx + Math.cos(a) * off, my + Math.sin(a) * off, {
+      vx: Math.cos(a) * spd, vy: Math.sin(a) * spd,
+      life: rand(0.24, 0.42), r: rand(3.5, 6.5),
+      color: pick(['#ffffff', '#d9f4ff', '#9fdcff']),
+      drag: 0.88, glow: true,
+    });
+  }
+  if (Math.random() < 0.3) {
+    addParticle(mx + Math.cos(a0) * 22, my + Math.sin(a0) * 22, {
+      vx: Math.cos(a0) * 260, vy: Math.sin(a0) * 260,
+      life: 0.12, r: 7, color: '#eaf9ff', drag: 0.8, glow: true, shape: 'flash',
+    });
+  }
+}
+
+/* 冷雾结算：锥形 + 视线通畅才吃伤害与冻伤。
+   伤害走轻量通道 —— 每 0.26 秒一次，走 damagePlayer 会把无敌帧与红屏抖动用烂 */
+function frostSprayHit(e, S) {
+  if (!P.alive) return;
+  const dx = P.x - e.x, dy = P.y - e.y;
+  const d = Math.hypot(dx, dy);
+  if (d > S.range + P.r) return;
+  if (Math.abs(angleDiff(Math.atan2(dy, dx), e.aim)) > S.arc) return;
+  if (!losClear(e.x, e.y, P.x, P.y)) return;
+
+  let dmg = S.dmg * (e.dmgMul || 1) * (1 - P.armorDR);
+  if (P.painT > 0) dmg *= 1 - PAIN_DR;
+  P.hp -= dmg;
+  P.hurtFlash = Math.max(P.hurtFlash, 0.4);
+  addChill(S.chill);
+  if (Math.random() < 0.4) Sfx.tone(rand(1500, 1900), 0.05, 0.02, 'sine', 1200);
+  if (P.hp <= 0) { P.hp = 0; endRaid(false); }
+}
+
+/* ══════════════════════════════════════════════════════════
+   9.7 手雷兵：抛掷破片雷
    ──────────────────────────────────────────────────────────
    雷从兵身上抛向「预判落点」，飞行 0.95 秒后落地，再等 1.3 秒引爆。
    落地那一刻起地上会出现红圈 + 收缩的倒计时环，给玩家 1.3 秒挪窝。
@@ -5077,6 +5231,53 @@ function flameSpray(e) {
       life: 0.09, r: 6, color: '#ffe9b0', drag: 0.8, glow: true, shape: 'flash',
     });
   }
+}
+
+/* 冷雾本体：和火舌同构的扇形，换成白蓝 —— 撞墙同样会被截断 */
+function drawSprayCone(e) {
+  if (e.sprayT <= 0) return;
+  if (!fogVisibleAt(e.x, e.y)) return;
+  const S = ENEMY_TYPES.cryoS.spray;
+  const a0 = e.aim;
+
+  let len = S.range;
+  for (let d = e.r + 10; d < S.range; d += 12) {
+    if (pointInObstacle(e.x + Math.cos(a0) * d, e.y + Math.sin(a0) * d)) { len = d; break; }
+  }
+
+  const t = G.time;
+  const pulse = 0.9 + Math.sin(t * 18) * 0.06 + Math.sin(t * 31 + 1.3) * 0.04;
+  const half = S.arc * 1.05;
+  const mx = e.x + Math.cos(a0) * (e.r + 7);
+  const my = e.y + Math.sin(a0) * (e.r + 7);
+  const L = Math.max(24, len * pulse);
+
+  ctx.save();
+  ctx.translate(mx, my);
+  ctx.rotate(a0);
+
+  const g = ctx.createRadialGradient(0, 0, 2, 0, 0, L);
+  g.addColorStop(0, 'rgba(246,254,255,0.42)');
+  g.addColorStop(0.28, 'rgba(200,240,255,0.26)');
+  g.addColorStop(0.64, 'rgba(130,205,255,0.14)');
+  g.addColorStop(1, 'rgba(90,170,255,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.arc(0, 0, L, -half, half);
+  ctx.closePath();
+  ctx.fill();
+
+  const g2 = ctx.createRadialGradient(0, 0, 2, 0, 0, L * 0.5);
+  g2.addColorStop(0, 'rgba(255,255,255,0.42)');
+  g2.addColorStop(1, 'rgba(150,215,255,0)');
+  ctx.fillStyle = g2;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.arc(0, 0, L * 0.5, -half * 0.55, half * 0.55);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
 }
 
 /* 火舌本体：一个朝瞄准方向的扇形，撞墙就断开 */
@@ -5485,7 +5686,7 @@ function updateEnemies(dt) {
           }
         }
       } else if (e.type === 'cryo') {
-        /* 阿萨拉冰冻军团：远远地架着冷冻投射器，蓄冰 0.8 秒后打一发冰弹。
+        /* 阿萨拉冰冻军团·投射兵：远远地架着冷冻投射器，蓄冰 0.8 秒后打一发冰弹。
            冰弹本身不疼，疼的是它在地上留下的那片霜 —— 逼你换位置 */
         const CT = ENEMY_TYPES.cryo;
         const IC = CT.ice;
@@ -5513,6 +5714,77 @@ function updateEnemies(dt) {
           e.iceLoad = IC.load;
           popup(e.x, e.y - e.r - 26, '蓄冰', '#7fd4ff', 12);
           Sfx.tone(680, 0.18, 0.04, 'triangle', 460);
+        }
+      } else if (e.type === 'cryoT') {
+        /* 阿萨拉冰冻军团·投掷兵：站在中距离把霜瓶抛到你脚下。
+           落点有冰圈预警，但落地就炸 —— 逼你从掩体后面挪出来挨枪 */
+        const TT = ENEMY_TYPES.cryoT;
+        const PT = TT.pot;
+
+        if (!sees) {
+          mvx = tdx / td; mvy = tdy / td;
+        } else if (d < PT.near) {
+          mvx = -nx; mvy = -ny;
+        } else if (d > TT.keep + 140) {
+          mvx = nx * 0.85; mvy = ny * 0.85;
+        } else {
+          mvx = -ny * e.strafe * 0.45;
+          mvy = nx * e.strafe * 0.45;
+          if (Math.random() < 0.006) e.strafe *= -1;
+        }
+
+        e.potCd -= dt;
+        if (sees && e.potCd <= 0 && d < PT.range) {
+          throwIcePot(e);
+          e.potCd = rand(PT.cd[0], PT.cd[1]);
+        }
+      } else if (e.type === 'cryoS') {
+        /* 阿萨拉冰冻军团·喷射兵：一路贴到十米内按住冷雾管。
+           伤害低得可以忽略，但那片雾沾上就叠冻伤，站两秒就走不动了 */
+        const ST = ENEMY_TYPES.cryoS;
+        const SP = ST.spray;
+
+        if (!sees) {
+          e.sprayT = 0;
+          mvx = tdx / td; mvy = tdy / td;
+        } else if (d > SP.range * 0.78) {
+          mvx = nx; mvy = ny;
+        } else if (d < 78) {
+          mvx = -nx * 0.7; mvy = -ny * 0.7;
+        } else {
+          mvx = -ny * e.strafe * 0.5;
+          mvy = nx * e.strafe * 0.5;
+          if (Math.random() < 0.007) e.strafe *= -1;
+        }
+
+        if (e.sprayT > 0) {
+          e.sprayT -= dt;
+          e.sprayTick -= dt;
+          e.patchDrop -= dt;
+          coldSpray(e);
+          if (e.sprayTick <= 0) { e.sprayTick = SP.tick; frostSprayHit(e, SP); }
+          if (e.patchDrop <= 0) {
+            e.patchDrop = 0.42;
+            const sa = e.aim + rand(-SP.arc * 0.7, SP.arc * 0.7);
+            const sr = rand(70, SP.range * 0.92);
+            const fx = e.x + Math.cos(sa) * sr;
+            const fy = e.y + Math.sin(sa) * sr;
+            const stacked = G.frosts.some(q => dist2(q.x, q.y, fx, fy) < 40 * 40);
+            if (!pointInObstacle(fx, fy) && !stacked) {
+              G.frosts.push({ x: fx, y: fy, r: SP.patchR, life: SP.patchLife, max: SP.patchLife, mul: 1 });
+            }
+          }
+          if (e.sprayT <= 0) e.sprayCd = rand(SP.cd[0], SP.cd[1]);
+        } else if (sees) {
+          e.sprayCd -= dt;
+          if (e.sprayCd <= 0 && d < SP.range * 1.02) {
+            e.sprayT = SP.dur;
+            e.sprayTick = 0;
+            e.patchDrop = 0.24;
+            popup(e.x, e.y - e.r - 26, '冷雾！', '#c9f2ff', 13);
+            Sfx.noiseBurst(0.5, 2200, 0.7, 0.14, 'highpass');
+            Sfx.tone(240, 0.3, 0.05, 'sine', 180);
+          }
         }
       } else if (e.type === 'nader') {
         /* 阿萨拉手雷兵：不正面接火，保持中距离往玩家预判点抛雷；被贴脸就往后跑 */
@@ -5697,6 +5969,7 @@ function updateEnemies(dt) {
     if (e.type === 'rocket' && e.loadT > 0) spd *= 0.32;
     if (e.type === 'flamer' && e.flameT > 0) spd *= 0.42;
     if (e.type === 'cryo' && e.iceLoad > 0) spd *= 0.45;
+    if (e.type === 'cryoS' && e.sprayT > 0) spd *= 0.34;     // 喷着雾基本是站桩
     if (e.type === 'nader' && e.throwCd > 4.6) spd *= 0.6;   // 刚扔完那一小会儿会停一下
     if (rolling) spd = ENEMY_TYPES.boss.rollSpd;
 
@@ -7957,6 +8230,56 @@ function drawEnemy(e) {
     ctx.beginPath(); ctx.arc(0, 0, e.r * 0.42, 0, TAU); ctx.fill();
     ctx.fillStyle = 'rgba(220,248,255,' + (0.5 + charge * 0.45) + ')';
     ctx.beginPath(); ctx.arc(0, 0, e.r * 0.2, 0, TAU); ctx.fill();
+  } else if (e.shape === 'cryt') {
+    /* 冰冻军团·投掷兵：棱面稍钝的八边形，背上插一排霜瓶 */
+    ctx.rotate(e.aim);
+    const pw = 0.88 + Math.sin(e.walkPhase * 1.3) * 0.04;
+    ctx.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const a = i * TAU / 8 - Math.PI / 2;
+      const px = Math.cos(a) * e.r * pw, py = Math.sin(a) * e.r * pw;
+      i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fillStyle = baseCol; ctx.fill();
+    ctx.strokeStyle = strokeCol; ctx.lineWidth = 2.4; ctx.stroke();
+
+    for (let i = 0; i < 3; i++) {
+      const by = -e.r * 0.62 + i * e.r * 0.62;
+      ctx.fillStyle = 'rgba(226,248,255,0.9)';
+      drawRoundRect(-e.r * 1.02, by - 3.2, e.r * 0.46, 6.4, 3);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(79,184,234,0.95)';
+      ctx.lineWidth = 1.1;
+      drawRoundRect(-e.r * 1.02, by - 3.2, e.r * 0.46, 6.4, 3);
+      ctx.stroke();
+    }
+    ctx.rotate(-e.aim);
+    ctx.fillStyle = 'rgba(8,32,52,0.78)';
+    ctx.beginPath(); ctx.arc(0, 0, e.r * 0.38, 0, TAU); ctx.fill();
+    ctx.fillStyle = 'rgba(220,248,255,0.6)';
+    ctx.beginPath(); ctx.arc(0, 0, e.r * 0.16, 0, TAU); ctx.fill();
+  } else if (e.shape === 'crys') {
+    /* 冰冻军团·喷射兵：最敦实的一个，厚圆角箱体 + 侧面两罐冷媒 */
+    ctx.rotate(e.aim);
+    const ss = e.r * 0.84;
+    drawRoundRect(-ss, -ss * 0.96, ss * 2, ss * 1.92, ss * 0.46);
+    ctx.fillStyle = baseCol; ctx.fill();
+    ctx.strokeStyle = strokeCol; ctx.lineWidth = 3; ctx.stroke();
+    ctx.rotate(-e.aim);
+    ctx.fillStyle = 'rgba(8,40,60,0.66)';
+    ctx.beginPath(); ctx.arc(0, 0, e.r * 0.3, 0, TAU); ctx.fill();
+    ctx.rotate(e.aim);
+    for (let i = 0; i < 2; i++) {
+      ctx.fillStyle = 'rgba(120,205,245,0.55)';
+      drawRoundRect(-ss * 1.18, (i ? 1 : -1) * ss * 0.34 - 5, ss * 0.4, 10, 4);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(210,245,255,0.6)';
+      ctx.lineWidth = 1.1;
+      drawRoundRect(-ss * 1.18, (i ? 1 : -1) * ss * 0.34 - 5, ss * 0.4, 10, 4);
+      ctx.stroke();
+    }
+    ctx.rotate(-e.aim);
   } else if (e.shape === 'grd') {
     /* 手雷兵：方身板 + 斜挎的弹带，背后鼓着一个装雷的包 */
     ctx.rotate(e.aim);
@@ -8285,6 +8608,55 @@ function drawEnemy(e) {
     ctx.restore();
   }
 
+  /* ── 冰冻军团·投掷兵：手里攥着一支霜瓶，冷却好了会亮起来 ── */
+  if (e.type === 'cryoT') {
+    ctx.save();
+    ctx.rotate(e.aim);
+    const ready = e.potCd <= 0.4;
+    const k = ready ? 1 : 0.5;
+    const hx = e.r * 1.02, hy = -e.r * 0.44;
+    ctx.strokeStyle = '#1d4a63';
+    ctx.lineWidth = 3.6;
+    ctx.beginPath(); ctx.moveTo(e.r * 0.42, 0); ctx.lineTo(hx, hy); ctx.stroke();
+
+    ctx.fillStyle = ready ? 'rgba(236,252,255,0.96)' : 'rgba(176,228,250,0.72)';
+    drawRoundRect(hx - 4.2, hy - 6.4, 8.4, 12.8, 4);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(110,212,255,0.95)';
+    ctx.lineWidth = 1.3;
+    drawRoundRect(hx - 4.2, hy - 6.4, 8.4, 12.8, 4);
+    ctx.stroke();
+
+    const fg = ctx.createRadialGradient(hx, hy, 0, hx, hy, 13);
+    fg.addColorStop(0, 'rgba(206,246,255,' + (0.5 * k) + ')');
+    fg.addColorStop(1, 'rgba(90,190,255,0)');
+    ctx.fillStyle = fg;
+    ctx.beginPath(); ctx.arc(hx, hy, 13, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+
+  /* ── 冰冻军团·喷射兵：一根粗冷雾管，管口挂着一团白气 ── */
+  if (e.type === 'cryoS') {
+    ctx.save();
+    ctx.rotate(e.aim);
+    const lit = e.sprayT > 0 ? 1 : 0.34;
+    ctx.fillStyle = '#16394d';
+    drawRoundRect(e.r * 0.42, -5.4, e.r * 1.0, 10.8, 3);
+    ctx.fill();
+    ctx.fillStyle = '#08202c';
+    drawRoundRect(e.r * 1.34, -7.6, 8, 15.2, 2.6);
+    ctx.fill();
+
+    const mr = 9 + lit * 12 + Math.sin(G.time * 24) * 2;
+    const mg = ctx.createRadialGradient(e.r * 1.5, 0, 0, e.r * 1.5, 0, mr);
+    mg.addColorStop(0, 'rgba(244,254,255,' + (0.82 * lit) + ')');
+    mg.addColorStop(0.42, 'rgba(160,225,255,' + (0.55 * lit) + ')');
+    mg.addColorStop(1, 'rgba(110,190,255,0)');
+    ctx.fillStyle = mg;
+    ctx.beginPath(); ctx.arc(e.r * 1.5, 0, mr, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+
   /* ── 阿萨拉手雷兵：一只手举着雷，冷却好了就抖一下表示要扔 ── */
   if (e.type === 'nader') {
     ctx.save();
@@ -8483,6 +8855,7 @@ function drawBullets() {
 function drawFlameCones() {
   for (const e of G.enemies) {
     if (e.type === 'flamer') drawFlameCone(e);
+    else if (e.type === 'cryoS') drawSprayCone(e);
   }
 }
 
@@ -8721,6 +9094,60 @@ function drawIceBolts() {
     ctx.beginPath();
     ctx.moveTo(8, 0); ctx.lineTo(-3, -4.2); ctx.lineTo(-1, 0); ctx.lineTo(-3, 4.2);
     ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+}
+
+/* 投掷兵的霜瓶：地上先亮一圈冰圈预警，瓶在空中翻转着飞 */
+function drawIcePots() {
+  for (const pt of G.icepots) {
+    const k = Math.min(1, pt.t / pt.dur);
+
+    if (fogVisibleAt(pt.tx, pt.ty)) {
+      ctx.save();
+      ctx.globalAlpha = 0.12 + k * 0.2;
+      ctx.fillStyle = '#7fd4ff';
+      ctx.beginPath(); ctx.arc(pt.tx, pt.ty, pt.radius, 0, TAU); ctx.fill();
+
+      ctx.globalAlpha = 0.32 + k * 0.45;
+      ctx.strokeStyle = '#9fe8ff';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([7, 7]);
+      ctx.beginPath(); ctx.arc(pt.tx, pt.ty, pt.radius, 0, TAU); ctx.stroke();
+      ctx.setLineDash([]);
+
+      /* 往里缩的倒计时环：缩到中心就是砸下来那一刻 */
+      ctx.globalAlpha = 0.4 + k * 0.45;
+      ctx.strokeStyle = '#eaf9ff';
+      ctx.lineWidth = 2.4;
+      ctx.beginPath(); ctx.arc(pt.tx, pt.ty, Math.max(3, pt.radius * (1 - k * 0.86)), 0, TAU); ctx.stroke();
+      ctx.restore();
+    }
+
+    const bx = pt.x, by = pt.y - pt.h;
+    if (!fogVisibleAt(bx, by)) continue;
+
+    ctx.globalAlpha = 0.24;
+    ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.ellipse(pt.x, pt.y, 6, 3.4, 0, 0, TAU); ctx.fill();
+    ctx.globalAlpha = 1;
+
+    const g = ctx.createRadialGradient(bx, by, 0, bx, by, 18);
+    g.addColorStop(0, 'rgba(235,252,255,0.72)');
+    g.addColorStop(1, 'rgba(90,190,255,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(bx, by, 18, 0, TAU); ctx.fill();
+
+    ctx.save();
+    ctx.translate(bx, by);
+    ctx.rotate(pt.rot);
+    ctx.fillStyle = 'rgba(226,248,255,0.95)';
+    drawRoundRect(-4.5, -6.5, 9, 13, 4);
+    ctx.fill();
+    ctx.strokeStyle = '#4fb8ea';
+    ctx.lineWidth = 1.5;
+    drawRoundRect(-4.5, -6.5, 9, 13, 4);
+    ctx.stroke();
     ctx.restore();
   }
 }
@@ -10108,6 +10535,7 @@ function update(dt) {
   updateSmokes(dt);
   updateGls(dt);
   updateIceBolts(dt);
+  updateIcePots(dt);
   updateMolotovs(dt);
   updateRockets(dt);
   updateFires(dt);
@@ -10469,6 +10897,7 @@ function render() {
 
   drawBullets();
   drawIceBolts();
+  drawIcePots();
   drawNades();
   drawGls();
   drawSmokes();
@@ -11421,7 +11850,8 @@ function refreshMapPanel() {
   const units = (G.units && G.units.length) ? G.units : null;
   const bossN = units ? units.filter(u => u.type === 'boss').length : 0;
   const list = units ? units.map(u => u.type) : squad;
-  const c = { runner: 0, shooter: 0, brute: 0, sniper: 0, rocket: 0, flamer: 0, cryo: 0, nader: 0 };
+  const c = { runner: 0, shooter: 0, brute: 0, sniper: 0, rocket: 0, flamer: 0,
+              cryo: 0, cryoT: 0, cryoS: 0, nader: 0 };
   for (const t of list) if (c[t] !== undefined) c[t]++;
   const comp = [];
   if (c.runner) comp.push(ENEMY_SHORT.runner + ' ' + c.runner);
@@ -11431,6 +11861,8 @@ function refreshMapPanel() {
   if (c.rocket) comp.push(ENEMY_SHORT.rocket + ' ' + c.rocket);
   if (c.flamer) comp.push(ENEMY_SHORT.flamer + ' ' + c.flamer);
   if (c.cryo) comp.push(ENEMY_SHORT.cryo + ' ' + c.cryo);
+  if (c.cryoT) comp.push(ENEMY_SHORT.cryoT + ' ' + c.cryoT);
+  if (c.cryoS) comp.push(ENEMY_SHORT.cryoS + ' ' + c.cryoS);
   if (c.nader) comp.push(ENEMY_SHORT.nader + ' ' + c.nader);
   if (bossN) comp.push(ENEMY_SHORT.boss + ' ' + bossN);
   // 容器构成：一眼看出这张图肥不肥
@@ -11983,6 +12415,7 @@ function startRaid() {
   G.frosts = [];
   G.smokes = [];
   G.gls = [];
+  G.icepots = [];
   G.fires = [];
   G.molotovs = [];
   G.rockets = [];
@@ -12011,10 +12444,12 @@ function startRaid() {
   // 初始驻军：地图里布了点就按兵种落位；否则按 squad 随机铺到据点附近
   if (G.units && G.units.length) {
     for (const u of G.units) spawnEnemy(u.type, u.x, u.y);
-    /* 新兵种保底：内置地图的布点是写死的，不含冰冻军团与手雷兵。
+    /* 新兵种保底：内置地图的布点是写死的，不含冰冻军团三兄弟与手雷兵。
        地图里没有就各补两个，落在据点附近的可通行处，免得整局见不到新兵种。 */
     const hasType = t => G.units.some(u => u.type === t);
     if (!hasType('cryo')) { spawnEnemy('cryo'); spawnEnemy('cryo'); }
+    if (!hasType('cryoT')) { spawnEnemy('cryoT'); spawnEnemy('cryoT'); }
+    if (!hasType('cryoS')) { spawnEnemy('cryoS'); spawnEnemy('cryoS'); }
     if (!hasType('nader')) { spawnEnemy('nader'); spawnEnemy('nader'); }
   } else {
     const squad = (G.squad && G.squad.length) ? G.squad : DEFAULT_SQUAD;
