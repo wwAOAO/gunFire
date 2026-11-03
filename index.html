@@ -1033,46 +1033,49 @@ const MELEE_ORDER = ['knife_tactical', 'knife_blackhawk'];
 const STARTER_MELEE = 'knife_tactical';
 
 /* ── 医疗包 ──
-   一支包 = 一个耐久池，用起来分两段：
-   wind 启动读条（掏出来、拆包装、扎进去，这段时间不回血、也最怕被打断），
-   读条走完才开始按 hps 每秒回血，回的血从 dur 里扣。
-   血满了自动停手，剩下的耐久留到下一次。
+   一支包 = 一个耐久池，用起来是一整条读条，长度由「这次要回多少血」决定：
+     总读条 = wind（启动）+ ceil(缺口 / 每秒回血)
+   例：血上限 100、当前 20 血、战地箱（30 血/秒、启动 3.5s）→ 缺 80，
+   80/30 = 2.67 向上取整 3s，总共读 6.5s，读完血满。
+   启动段一滴血都不回；过了启动段才开始按 hps 每秒回血，
+   回的血从 dur 里扣，血满了自动停手，剩下的耐久留到下一次。
+   中途右键打断：已经灌进去的血留着，剩下的窗口作废（耐久按实际回血扣，不返还）。
    perk：move 挂水不减速 / cure 开始回血即治伤口 + 止痛。 */
 const MEDKITS = {
   inject_s: {
     name: '简易注射器', short: '简易针', code: 'SIMPLE INJECTOR',
     dur: 30, hps: 5, wind: 3.5, price: 50, color: '#7fe3a8', size: 0.55,
-    desc: '30 点耐久，5 血/秒，启动 3.5s。便宜、随身，扎一针先止血，量小但随时能续。',
+    desc: '30 点耐久，5 血/秒，启动 3.5s。读条按缺口补时（缺 30 血要读 3.5+6=9.5s）。便宜、随身，扎一针先止血。',
     perk: '',
   },
   inject_m: {
     name: '强效注射器', short: '强效针', code: 'COMBAT INJECTOR',
     dur: 60, hps: 12, wind: 3, price: 100, color: '#46e08a', size: 0.62,
-    desc: '60 点耐久，12 血/秒，启动 3s。打架首选：读条最短，五秒灌满一管血。',
+    desc: '60 点耐久，12 血/秒，启动 3s。缺 60 血读 3+5=8s，打架首选：单段读条最短。',
     perk: '',
   },
   kit_vehicle: {
     name: '车载急救包', short: '车载包', code: 'VEHICLE FIRST AID',
     dur: 90, hps: 6, wind: 5, price: 20, color: '#58c4d8', size: 0.82,
-    desc: '90 点耐久，6 血/秒，启动 5s。回血最慢，但挂水时照样跑得动——被追着撤的时候唯一能用的一支。',
+    desc: '90 点耐久，6 血/秒，启动 5s。回血最慢（缺 90 血要读 5+15=20s），但挂水时走路不减速——被追着撤的时候唯一能边走边灌的一支。',
     perk: 'move',
   },
   kit_field: {
     name: '野战急救包', short: '野战包', code: 'FIELD TRAUMA KIT',
-    dur: 220, hps: 20, wind: 4, price: 300, color: '#9ef2c8', size: 1.02,
-    desc: '220 点耐久，20 血/秒，启动 4s。四秒起效、二十血一秒，一支顶好几条命，配着掩体用。',
+    dur: 220, hps: 20, wind: 6, price: 300, color: '#9ef2c8', size: 1.02,
+    desc: '220 点耐久，20 血/秒，启动 6s（最长的启动）。缺 100 血读 6+5=11s，一支顶好几条命，配着掩体用。',
     perk: '',
   },
   box_outdoor: {
     name: '户外医疗箱', short: '户外箱', code: 'OUTDOOR MED BOX',
     dur: 350, hps: 20, wind: 4, price: 500, color: '#7fd4ff', size: 1.32,
-    desc: '350 点耐久，20 血/秒，启动 4s。开箱即处理伤口、注射止痛剂（30 秒减伤 10%）。',
+    desc: '350 点耐久，20 血/秒，启动 4s。缺 100 血读 4+5=9s；开箱即处理伤口、注射止痛剂（30 秒减伤 10%）。',
     perk: 'cure', pain: 30,
   },
   box_battle: {
     name: '战地医疗箱', short: '战地箱', code: 'BATTLEFIELD MED CRATE',
     dur: 800, hps: 30, wind: 3.5, price: 800, color: '#ffd66b', size: 1.66,
-    desc: '800 点耐久，30 血/秒，启动 3.5s。顶级大箱，治伤口 + 60 秒止痛，一支撑满一个据点。',
+    desc: '800 点耐久，30 血/秒，启动 3.5s。缺 80 血读 3.5+3=6.5s、缺 100 血读 3.5+4=7.5s；治伤口 + 60 秒止痛，一支撑满一个据点。',
     perk: 'cure', pain: 60,
   },
 };
@@ -2728,7 +2731,9 @@ const P = {
   medOn: null,        // 正在使用的治疗物品 key，null 表示没在用
   medKind: 'med',     // med / stop / surg —— 决定读条走完干什么
   medWind: 0,         // 启动读条剩余时间（读条期间不回血）
-  medWindT: 0,        // 这次读条总时长，用来算进度
+  medWindT: 0,        // 启动段总时长，用来算进度
+  medHealT: 0,        // 回血窗口剩余时间（启动段结束后才开始倒数）
+  medHealW: 0,        // 回血窗口总时长 = ceil(缺口 / 每秒回血)
   healAcc: 0,         // 累计回血，用来凑一个飘字，别每帧刷屏
   /* 创伤：流血 / 三处贯穿伤 / 手臂与腿部骨折 / 骨裂 / 虚弱 */
   deb: { bleed: 0, redHead: 0, redChest: 0, redAbdomen: 0, arm: 0, leg: 0, fissure: 0, weak: 0 },
@@ -3430,6 +3435,8 @@ function resetPlayer() {
   P.medOn = null;
   P.medWind = 0;
   P.medWindT = 0;
+  P.medHealT = 0;
+  P.medHealW = 0;
   P.medKind = 'med';
   P.healAcc = 0;
   MED_SEL.down = false;
@@ -3920,7 +3927,7 @@ function equipSlot(slot) {
   P.meleeCd = 0;
   P.ads = 0;
   P.adsPrev = 0;
-  if (slot !== 'medkit') { P.medOn = null; P.medWind = 0; }   // 药收回去了，读条自然作废（不算打断）
+  if (slot !== 'medkit') { P.medOn = null; P.medWind = 0; P.medHealT = 0; }   // 药收回去了，读条自然作废（不算打断）
   const g = slotGunId(slot);
   if (g) P.weapon = g;
   P.fireCd = Math.max(P.fireCd, 0.14);
@@ -4093,6 +4100,19 @@ function careWindSec(base) {
   return base * (armHurt() ? DEBUFF.armHeal : 1);
 }
 
+/* 医疗包这次要读多久 —— 读条长度由「要回多少血」决定：
+   回血窗口 = ceil(缺口 / 实际每秒回血)，加上启动段。血越满读得越短。
+   窗口按「缺口」和「这支还剩的耐久」取小：耐久只够回一半，就没必要读完。 */
+function medReadPlan(M, s) {
+  const need = Math.max(0, P.maxHp - P.hp);
+  const eff = P.deb.bleed > 0 ? WOUND_HEAL_K : 1;         // 还在流血：包扎效率打折
+  const hps = Math.max(0.5, M.hps * eff);
+  const canPay = Math.max(0, s ? s.left : 0);             // 耐久只够回这么多
+  const heal = Math.min(need, canPay > 0 ? canPay : need);
+  const win = Math.max(1, Math.ceil(heal / hps));         // 向上取整到整秒
+  return { need, heal, hps, win, wind: careWindSec(M.wind), total: careWindSec(M.wind) + win };
+}
+
 function careBusy() { return !!(P.medOn || P.medCd > 0); }
 
 /* 统一的"使用"入口：care key → 对应分支 */
@@ -4128,10 +4148,13 @@ function startMedHeal(id) {
   P.carePick = P.medOn;
   P.healAcc = 0;
   P.medCd = 0.35;
-  P.medWind = careWindSec(M.wind);   // 先走启动读条，读条期间一滴血都不回
-  P.medWindT = P.medWind;
+  const plan = medReadPlan(M, s);
+  P.medWind = plan.wind;             // 先走启动读条，读条期间一滴血都不回
+  P.medWindT = plan.wind;
+  P.medHealW = plan.win;             // 之后的回血窗口：缺多少血就读多少秒
+  P.medHealT = plan.win;
 
-  popup(P.x, P.y - 34, M.name + ' · 启动 ' + M.wind + 's', M.color, 13);
+  popup(P.x, P.y - 34, M.name + ' · 读条 ' + plan.total.toFixed(1) + 's', M.color, 13);
   Sfx.tone(420, 0.08, 0.05, 'sine', 620);
   return true;
 }
@@ -4192,6 +4215,8 @@ function stopCare(msg, cd) {
   if (!P.medOn) return;
   P.medOn = null;
   P.medWind = 0;
+  P.medHealT = 0;               // 剩下的回血窗口作废（已经灌进去的血留着）
+  P.medHealW = 0;
   P.medCd = Math.max(P.medCd, cd || 0.25);
   if (msg) uiToast(msg, 'small');
 }
@@ -4280,7 +4305,7 @@ function activeMedPerk() {
 
 function updateMedHeal(dt) {
   if (!P.medOn) return;
-  if (!P.alive || P.curSlot !== 'medkit' || isDowned()) { P.medOn = null; P.medWind = 0; return; }
+  if (!P.alive || P.curSlot !== 'medkit' || isDowned()) { P.medOn = null; P.medWind = 0; P.medHealT = 0; return; }
 
   const key = P.medOn;
   const kind = careKindOf(key);
@@ -4341,7 +4366,7 @@ function updateMedHeal(dt) {
       if (had) popup(P.x, P.y - 48, '伤口处理 · 止痛 ' + M.pain + 's', '#9fffd0', 14);
     }
     Sfx.heal();
-    popup(P.x, P.y - 44, '开始回血', M.color, 12);
+    popup(P.x, P.y - 44, '开始回血 · ' + P.medHealT.toFixed(1) + 's', M.color, 12);
   }
 
   /* ── 持续回血：只有医疗包走这一段 ── */
@@ -4369,6 +4394,15 @@ function updateMedHeal(dt) {
   P.hp += heal;
   s.left = Math.max(0, s.left - heal);
   P.healAcc += heal;
+
+  /* 回血窗口每秒都在烧：烧完就收手。窗口按「起手时的缺口」定死，
+     中途又挨了打导致没回满，就自己再读一次 —— 不自动补时。 */
+  P.medHealT = Math.max(0, P.medHealT - dt);
+  if (P.medHealT <= 0) {
+    P.medOn = null;
+    if (P.hp < P.maxHp - 0.01) uiToast('读条走完了 · 还没回满，再按 5 续一次', 'small');
+    return;
+  }
 
   if (P.healAcc >= 10) {
     popup(P.x + rand(-10, 10), P.y - 36, '+' + Math.round(P.healAcc), M.color, 13);
@@ -9780,7 +9814,7 @@ function drawPlayerMedkit(rec) {
   }
   ctx.restore();
 
-  /* 外圈：读条阶段是琥珀色启动进度，医疗包的回血阶段是剩余耐久 */
+  /* 外圈：一整条读条 —— 琥珀色启动段 + 药色的回血窗口，走完就收手 */
   if (P.medOn) {
     const ct = careKindOf(P.medOn), ci = careIdOf(P.medOn);
     const winding = P.medWind > 0;
@@ -9789,8 +9823,7 @@ function drawPlayerMedkit(rec) {
       ratio = clamp(1 - P.medWind / Math.max(0.01, P.medWindT), 0, 1);
     } else if (ct === 'med') {
       const MM = MEDKITS[ci] || MEDKITS[STARTER_MEDKIT];
-      const s = medUnit(ci);
-      ratio = s ? clamp(s.left / MM.dur, 0, 1) : 0;
+      ratio = clamp(1 - P.medHealT / Math.max(0.01, P.medHealW), 0, 1);   // 回血窗口进度
       col = MM.color;
     }
     ctx.strokeStyle = 'rgba(8,18,26,0.55)';
@@ -9919,13 +9952,22 @@ function drawPlayer() {
     ctx.restore();
   }
 
-  /* 启动读条提示画在未旋转的坐标系里，不然文字会跟着朝向倒过来 */
+  /* 读条剩余画在未旋转的坐标系里，不然文字会跟着朝向倒过来 */
   if (P.medOn && P.medWind > 0) {
     ctx.save();
     ctx.textAlign = 'center';
     ctx.font = '700 10px ui-monospace, Consolas, monospace';
     ctx.fillStyle = 'rgba(255,214,107,0.95)';
     ctx.fillText('启动 ' + P.medWind.toFixed(1) + 's', P.x, P.y + P.r + 22);
+    ctx.restore();
+    ctx.textAlign = 'left';
+  } else if (P.medOn && careKindOf(P.medOn) === 'med') {
+    const MM = MEDKITS[careIdOf(P.medOn)] || MEDKITS[STARTER_MEDKIT];
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.font = '700 10px ui-monospace, Consolas, monospace';
+    ctx.fillStyle = MM.color;
+    ctx.fillText('回血 ' + P.medHealT.toFixed(1) + 's', P.x, P.y + P.r + 22);
     ctx.restore();
     ctx.textAlign = 'left';
   }
@@ -11977,7 +12019,16 @@ function drawMedSelect(mono) {
   if (picked) {
     const k = careKindOf(picked);
     let hint = '';
-    if (k === 'med') hint = '回血 · ' + careName(picked) + ' 还剩耐久 ' + Math.ceil(medLeftOf(careIdOf(picked)));
+    if (k === 'med') {
+      const mid = careIdOf(picked);
+      const MM = MEDKITS[mid] || MEDKITS[STARTER_MEDKIT];
+      if (P.hp >= P.maxHp - 0.01) hint = '生命值已满 · 读条长度按缺口算，缺得少读得短';
+      else {
+        const plan = medReadPlan(MM, medUnit(mid));
+        hint = '读条 ' + plan.total.toFixed(1) + 's（启动 ' + MM.wind + 's + 回 ' +
+               Math.round(plan.heal) + ' 血 ' + plan.win + 's）· 耐久 ' + Math.ceil(medLeftOf(mid));
+      }
+    }
     else if (k === 'stop') {
       const S = STOPS[careIdOf(picked)];
       if (S && S.pain) hint = P.painT > 0
@@ -12453,7 +12504,9 @@ function drawHUD() {
       winding ? (careKindOf(P.medOn) === 'surg'
         ? ('手术中 ' + P.medWind.toFixed(1) + 's · 右键收手')
         : ('启动中 ' + P.medWind.toFixed(1) + 's · 右键收手'))
-        : (P.medOn ? (careKindOf(P.medOn) === 'med' ? '回血中 · 右键收手' : '处理中 · 右键收手')
+        : (P.medOn ? (careKindOf(P.medOn) === 'med'
+            ? ('回血 ' + P.medHealT.toFixed(1) + 's · 右键收手')
+            : '处理中 · 右键收手')
           : '短按 5 用上次那种 · 长按 5 换药'),
       wx, stateY);
   }
