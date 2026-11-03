@@ -362,6 +362,42 @@
 
   .stashnote { margin-top:16px; font-size:11px; color:#3f5d72; letter-spacing:.05em; line-height:1.7; }
   .stashnote b { color:#ffb02e; }
+
+  /* ── 整备（弹挂 / 口袋 / 背包）── */
+  .lo-wrap { display:flex; gap:18px; min-height:0; flex:1; }
+  .lo-panel { width:340px; flex:none; display:flex; flex-direction:column; min-height:0; }
+  .lo-main { flex:1; display:flex; flex-direction:column; min-height:0; overflow-y:auto; }
+  .lo-ttl { font-size:12px; letter-spacing:.28em; color:#8fd8f2; margin:10px 0 8px; font-weight:800; }
+  .lo-ttl b { color:#ffd08a; margin-left:10px; letter-spacing:.06em; font-weight:700; font-size:11px; }
+  .lo-stock { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:4px; padding-right:4px; }
+  .lo-row {
+    display:flex; align-items:center; gap:10px; padding:7px 10px;
+    border:1px solid rgba(80,140,185,.18); border-radius:4px; background:rgba(12,22,32,.55);
+    cursor:pointer; user-select:none;
+  }
+  .lo-row:hover { border-color:rgba(67,217,245,.5); }
+  .lo-row.off { opacity:.38; cursor:default; }
+  .lo-row .nm { font-size:12px; font-weight:700; color:#cfe8f5; flex:1; }
+  .lo-row .sub { font-size:10px; color:#5e87a0; }
+  .lo-row .ct { font-size:12px; font-weight:800; color:#ffd08a; font-variant-numeric:tabular-nums; }
+  .lo-grid { display:grid; grid-template-columns:repeat(auto-fill, 86px); gap:8px; }
+  .lo-cell {
+    height:86px; border:1px solid rgba(80,140,185,.22); border-radius:4px;
+    background:rgba(10,18,26,.6); position:relative; cursor:pointer; user-select:none;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+    text-align:center; padding:4px;
+  }
+  .lo-cell:hover { border-color:rgba(67,217,245,.55); }
+  .lo-cell.held { border-color:#ffd08a; box-shadow:0 0 14px rgba(255,208,138,.25); }
+  .lo-cell .ic { font-size:20px; line-height:1; }
+  .lo-cell .nm { font-size:10px; font-weight:700; color:#cfe8f5; line-height:1.25; }
+  .lo-cell .sub { font-size:9px; color:#5e87a0; line-height:1.2; }
+  .lo-cell.empty { opacity:.45; }
+  .lo-foot { display:flex; align-items:center; gap:10px; margin-top:14px; }
+  .lo-hint { font-size:11px; color:#3f5d72; margin-left:auto; letter-spacing:.04em; }
+  .lo-holding { position:fixed; pointer-events:none; z-index:99; font-size:12px; font-weight:800;
+    color:#ffd08a; background:rgba(8,16,24,.9); border:1px solid rgba(255,208,138,.5);
+    padding:4px 10px; border-radius:4px; transform:translate(12px,12px); }
   .stashempty {
     grid-column:1 / -1; padding:46px 20px; text-align:center;
     border:1px dashed rgba(80,140,185,.22); border-radius:4px;
@@ -634,6 +670,7 @@
       <button id="shopBtn" class="btn ghost">军 火 库</button>
       <button id="gunsmithBtn" class="btn ghost">改 装 台<span id="modBadge" class="cnt hidden">0</span></button>
       <button id="stashBtn" class="btn ghost">仓 库<span id="stashBadge" class="cnt hidden">0</span></button>
+      <button id="loadoutBtn" class="btn ghost">整 备</button>
       <button id="mapBtn" class="btn ghost">地 图</button>
       <div class="stats" id="lobbyStats"></div>
       <button id="resetBtn" class="btn ghost danger small">重置存档</button>
@@ -672,6 +709,59 @@
       <button class="tab" data-tab="supply">补 给</button>
     </div>
     <div class="grid" id="shopGrid"></div>
+  </div>
+</div>
+
+<!-- ══════════ 整备（弹挂 / 口袋 / 背包） ══════════ -->
+<div id="loadout" class="overlay hidden">
+  <div class="frame">
+    <header class="topbar">
+      <div class="logo" style="font-size:22px">整 备</div>
+      <div class="wallet"><i>¥</i><b id="loCredit">0</b></div>
+      <button id="closeLoadout" class="btn ghost small">返回大厅</button>
+    </header>
+    <div class="lo-wrap">
+      <aside class="lo-panel">
+        <div class="lo-ttl">仓 库<b id="loStockNote"></b></div>
+        <div class="lo-stock" id="loStock"></div>
+      </aside>
+      <section class="lo-main">
+        <div class="lo-ttl">弹 挂<b id="loRigNote"></b></div>
+        <div class="lo-grid" id="loRig"></div>
+        <div class="lo-ttl">口 袋<b id="loPocketNote"></b></div>
+        <div class="lo-grid" id="loPocket"></div>
+        <div class="lo-ttl">背 包<b id="loPackNote"></b></div>
+        <div class="lo-grid" id="loPack"></div>
+        <div class="lo-foot">
+          <button id="loAutoBtn" class="btn ghost small">一 键 整 备</button>
+          <button id="loClearBtn" class="btn ghost small">全 部 卸 下</button>
+          <span class="lo-hint" id="loHint">点仓库拿东西，点格子放下；点格子拿起，点仓库 / 右键放回</span>
+        </div>
+      </section>
+    </div>
+    <span id="loHeldChip" class="lo-holding hidden"></span>
+  </div>
+</div>
+
+<!-- ══════════ 局内背包（Tab） ══════════ -->
+<div id="pack" class="overlay hidden">
+  <div class="frame">
+    <header class="topbar">
+      <div class="logo" style="font-size:22px">背 包</div>
+      <div class="wallet" style="font-size:12px;color:#5e87a0">时间已暂停 · 弹挂和口袋里的东西才能按 5 / R 直接用</div>
+      <button id="closePack" class="btn ghost small">关 闭 [Tab]</button>
+    </header>
+    <div class="lo-wrap">
+      <section class="lo-main">
+        <div class="lo-ttl" id="pkRigNote"></div>
+        <div class="lo-grid" id="pkRig"></div>
+        <div class="lo-ttl" id="pkPocketNote"></div>
+        <div class="lo-grid" id="pkPocket"></div>
+        <div class="lo-ttl" id="pkPackNote"></div>
+        <div class="lo-grid" id="pkPack"></div>
+        <div class="lo-foot"><span class="lo-hint">点格子拿起，再点一格放下 / 交换 · 背包里的药要先倒进弹挂或口袋才能用</span></div>
+      </section>
+    </div>
   </div>
 </div>
 
@@ -1224,7 +1314,8 @@ const DEFAULT_SAVE = () => ({
      免得新口径上架后存档里缺桶、写库存时踩 undefined。 */
   ammo: freshAmmo(),
   ammoPick: { '919': 1 },     // 每个口径选用哪一级弹
-  ammoPacks: 0,               // 弹药包：出击备弹上限 +50%
+  gearOwned: {},              // 背包 / 弹挂扩容：一次性购买（pack_assault / pack_large / rig_ext）
+  carry: null,                // 随身容器：{ rig:[弹挂], pocket:[口袋], pack:[背包] } —— 懒初始化，见 ensureCarry()
   pistolAmmo: 0,              // 已废弃：老档的「手枪弹盒」，迁移时折算成 9×19 白弹
   stash: {},          // 仓库里的收集品：{ 收集品id: 数量 }
   modBag: {},         // 配件库存：{ 配件id: 数量 }
@@ -1330,7 +1421,7 @@ function loadSave() {
     if (!raw) return base;
     const d = JSON.parse(raw);
     const owned = migrateWeaponIds(Object.assign({}, DEFAULT_SAVE().owned, d.owned || {}));
-    return {
+    const S = {
       credits: typeof d.credits === 'number' ? d.credits : base.credits,
       operator: OP_IDS[d.operator] ? d.operator : base.operator,
       owned: owned,
@@ -1345,13 +1436,15 @@ function loadSave() {
       carePick: normCareKey(d.carePick || d.medPick),
       ammo: cleanAmmo(d.ammo, owned, d.pistolAmmo),
       ammoPick: cleanAmmoPick(d.ammoPick),
-      ammoPacks: d.ammoPacks | 0,
+      gearOwned: cleanGearOwned(d.gearOwned),
+      carry: rawCarry(d.carry),
       pistolAmmo: 0,
       stash: cleanStash(d.stash),
       modBag: cleanModBag(d.modBag),
       mods: cleanGunMods(d.mods),
       stats: Object.assign({ raids: 0, extracts: 0, deaths: 0, loot: 0, kills: 0, sold: 0 }, d.stats || {}),
     };
+    return S;
   } catch (e) { return base; }
 }
 
@@ -2139,9 +2232,148 @@ function opDef() { return OPERATORS[SAVE.operator] || null; }
 function exoOn() { return !!(P.op && P.op.x && P.op.x.on); }
 
 
-const SUPPLY = {
-  ammoPack:{ name: '弹药包',  price: 800, desc: '出击时备弹上限 +50%，等于能多带半份子弹进图。可叠加。' },
+/* 扩容装备：一次性购买，永久生效（SAVE.gearOwned 记账）。
+   弹药包已下架 —— 备弹现在是弹挂里的实体格子，带多少由格子容量说了算。 */
+const GEAR = {
+  pack_assault: { name: '突击背包', price: 600, desc: '背包 +4 格。搜刮的药和器械先塞背包，Tab 随时倒进弹挂。' },
+  pack_large:   { name: '大型背包', price: 1500, desc: '背包 +8 格。搬家式的搜刮选手用它，一趟顶两趟。' },
+  rig_ext:      { name: '扩展弹挂', price: 900, desc: '弹挂 +4 格。多四格就是多四条命，或者四份备弹。' },
 };
+
+/* ── 随身容器 ──
+   弹挂 rig（快捷可用：按 5 打药、R 换弹都从这儿读）
+   口袋 pocket ×4（同上，快捷可用）
+   背包 pack（仓库格：Tab 打开倒腾，里面的东西不能直接用）
+   格子 = null 或 { t:'med'|'stop'|'surg'|'ammo', ... }，一格一件（弹药格按口径装）。 */
+const RIG_BASE = 8, POCKET_N = 4, PACK_BASE = 6;
+function rigCap() { return RIG_BASE + ((SAVE.gearOwned && SAVE.gearOwned.rig_ext) ? 4 : 0); }
+function packCap() {
+  return PACK_BASE + ((SAVE.gearOwned && SAVE.gearOwned.pack_assault) ? 4 : 0)
+       + ((SAVE.gearOwned && SAVE.gearOwned.pack_large) ? 8 : 0);
+}
+function pocketCap() { return POCKET_N; }
+/* 一格备弹的容量：这个口径下已拥有枪里弹匣最大的那把 × 2 发 */
+function ammoCellCap(cal, owned) {
+  let mag = 0;
+  for (const id of WEAPON_ORDER) {
+    if (owned && !owned[id]) continue;
+    if (calOfWeapon(id) !== cal) continue;
+    mag = Math.max(mag, weaponStats(id).mag || 0);
+  }
+  return Math.max(20, mag * 2);
+}
+function emptyCells(n) { const a = []; for (let i = 0; i < n; i++) a.push(null); return a; }
+function emptyCarry() { return { rig: emptyCells(rigCap()), pocket: emptyCells(pocketCap()), pack: emptyCells(packCap()) }; }
+
+/* 格子清洗：未知物品 / 超上限的数值一律砍掉，返回合法格子或 null */
+function cellValid(c) {
+  if (!c || typeof c !== 'object') return null;
+  if (c.t === 'med' && MEDKITS[c.id]) {
+    const left = Number(c.left);
+    return { t: 'med', id: c.id, left: clamp(left > 0.01 ? left : MEDKITS[c.id].dur, 0, MEDKITS[c.id].dur) };
+  }
+  if (c.t === 'stop' && STOPS[c.id]) return { t: 'stop', id: c.id };
+  if (c.t === 'surg' && SURGERIES[c.id]) {
+    return { t: 'surg', id: c.id, uses: clamp(Math.floor(Number(c.uses)) || 0, 0, SURGERIES[c.id].uses) };
+  }
+  if (c.t === 'ammo' && CALIBERS[c.cal]) {
+    let lv = Math.floor(Number(c.lv));
+    if (!Number.isFinite(lv) || !calHasTier(c.cal, lv)) lv = defaultTierOf(c.cal);
+    const cap = ammoCellCap(c.cal, SAVE.owned);
+    return { t: 'ammo', cal: c.cal, lv, n: clamp(Math.floor(Number(c.n)) || 0, 0, cap) };
+  }
+  return null;
+}
+
+/* 溢出格子回仓库：医疗包 / 止血止痛 / 手术次数 / 弹药发数 */
+function mergeCarryOverflow(S, overflow) {
+  if (!overflow || !overflow.length) return;
+  for (const c of overflow) {
+    if (c.t === 'med') {
+      const s = S.meds[c.id] || (S.meds[c.id] = { n: 0, left: 0 });
+      s.n = Math.min(99, (s.n | 0) + 1);
+    } else if (c.t === 'stop') {
+      S.stops[c.id] = Math.min(99, ((S.stops[c.id] | 0) + 1));
+    } else if (c.t === 'surg') {
+      const s = S.surgs[c.id] || (S.surgs[c.id] = { uses: 0 });
+      s.uses = Math.min(SURGERIES[c.id].uses, (s.uses | 0) + c.uses);
+    } else if (c.t === 'ammo') {
+      addAmmoStock(c.cal, c.lv, c.n);
+    }
+  }
+}
+
+function cleanGearOwned(raw) {
+  const out = {};
+  for (const k of ['pack_assault', 'pack_large', 'rig_ext']) out[k] = raw && raw[k] ? 1 : 0;
+  return out;
+}
+
+/* loadSave 阶段只留原始结构 —— 数据表（WEAPON_ORDER 等）在这之后才初始化，
+   格子的真正清洗放到 ensureCarry()（大厅渲染 / 出击前的运行期）里做。 */
+function rawCarry(v) {
+  if (!v || typeof v !== 'object') return null;
+  if (!Array.isArray(v.rig) || !Array.isArray(v.pocket) || !Array.isArray(v.pack)) return null;
+  return { rig: v.rig.slice(), pocket: v.pocket.slice(), pack: v.pack.slice() };
+}
+
+/* 懒初始化 / 懒清洗随身容器（大厅渲染与出击前都会调）：
+   老档没有 carry → 按默认布局从仓库抓一份；有 carry → 逐格校验、按当前容量截断，
+   装不下的格子原物回仓，别凭空消失。 */
+function ensureCarry() {
+  if (SAVE.carry && Array.isArray(SAVE.carry.rig)) {
+    const overflow = [];
+    const zones = [['rig', SAVE.carry.rig, rigCap()], ['pocket', SAVE.carry.pocket, pocketCap()], ['pack', SAVE.carry.pack, packCap()]];
+    for (const [z, arr, cap] of zones) {
+      const valid = arr.map(cellValid);
+      arr.length = cap;
+      for (let i = 0; i < cap; i++) arr[i] = valid[i] || null;
+      for (let i = cap; i < valid.length; i++) if (valid[i]) overflow.push(valid[i]);
+    }
+    mergeCarryOverflow(SAVE, overflow);
+    if (overflow.length) saveGame();
+    return SAVE.carry;
+  }
+  const carry = emptyCarry();
+  /* 口袋：先塞两支绷带 */
+  for (let i = 0; i < 2 && i < pocketCap(); i++) {
+    if (((SAVE.stops && SAVE.stops.bandage) | 0) > 0) {
+      SAVE.stops.bandage--;
+      carry.pocket[i] = { t: 'stop', id: 'bandage' };
+    }
+  }
+  /* 弹挂：一支简易针 + 每个有枪有弹的口径一格备弹（都从仓库真扣） */
+  if (((SAVE.meds && SAVE.meds[STARTER_MEDKIT] && SAVE.meds[STARTER_MEDKIT].n) | 0) > 0) {
+    SAVE.meds[STARTER_MEDKIT].n--;
+    carry.rig[0] = { t: 'med', id: STARTER_MEDKIT, left: MEDKITS[STARTER_MEDKIT].dur };
+  }
+  let ai = 1;
+  for (const cal of CAL_ORDER) {
+    if (ai >= rigCap()) break;
+    const hasGun = WEAPON_ORDER.some(id => SAVE.owned[id] && calOfWeapon(id) === cal);
+    if (!hasGun) continue;
+    const lv = ammoPickOf(cal);
+    const take = takeAmmoStock(cal, lv, Math.min(ammoCellCap(cal, SAVE.owned), ammoStock(cal, lv)));
+    if (take <= 0) continue;
+    carry.rig[ai++] = { t: 'ammo', cal, lv, n: take };
+  }
+  SAVE.carry = carry;
+  saveGame();
+  return carry;
+}
+
+/* 容量变化后（买了扩容）把格子数组补齐/截断，溢出回仓 */
+function trimCarryToCap() {
+  if (!SAVE.carry) return;
+  const c = SAVE.carry;
+  const zones = [[c.rig, rigCap()], [c.pocket, pocketCap()], [c.pack, packCap()]];
+  for (const [arr, cap] of zones) {
+    const overflow = [];
+    while (arr.length < cap) arr.push(null);
+    while (arr.length > cap) { const x = arr.pop(); if (x) overflow.push(x); }
+    mergeCarryOverflow(SAVE, overflow);
+  }
+}
 
 
 const ENEMY_TYPES = {
@@ -2604,9 +2836,18 @@ window.addEventListener('keydown', e => {
   keys[k] = true;
 
   if (k === 'escape') {
-    if (G.scene === 'playing') pauseRaid();
+    if (G.packOpen) closePackPanel();
+    else if (G.scene === 'playing') pauseRaid();
     else if (G.scene === 'paused') resumeRaid();
+    else if (G.scene === 'lobby' && !$('loadout').classList.contains('hidden')) closeLoadout();
     else if (G.scene === 'lobby' && !$('maps').classList.contains('hidden')) closeMaps();
+  }
+  /* Tab：开着就关（面板开着时 scene 是 paused，要在场景守卫之前接住）；没开且在局内才打开 */
+  if (k === 'tab' && !e.repeat) {
+    e.preventDefault();
+    if (G.packOpen) closePackPanel();
+    else if (G.scene === 'playing') openPackPanel();
+    return;
   }
   if (G.scene !== 'playing') return;
   if (k === 'f' && !e.repeat) searchInteract();   // 点一下开箱，不用长按
@@ -2639,6 +2880,7 @@ window.addEventListener('blur', () => {
   MAG_AIM.down = false; MAG_AIM.on = false; MAG_AIM.hold = 0;
   HOLDV.down = false; HOLDV.hold = 0;
   HOLDX.down = false; HOLDX.hold = 0;
+  if (G.packOpen) closePackPanel();
 });
 
 canvas.addEventListener('mousemove', e => {
@@ -2692,6 +2934,7 @@ const G = {
   shakeY: 0,
   searchTarget: null,
   lootPanel: null,     // 开箱中的战利品面板
+  packOpen: false,     // Tab 背包面板开着（时间暂停）
   extractT: 0,
   extractHold: 6,
   inExtract: null,
@@ -3526,32 +3769,35 @@ function resetPlayer() {
   P.swingT = 0;
   P.swingHit = 0;
 
-  /* 装弹：按口径选用的弹级，从库存里真扣发数。
-     能带的量 = 弹匣 + 弹匣×reserveMul（弹药包再 +50%）；
-     库存不够就带多少算多少 —— 没子弹的枪就是根烧火棍。 */
-  const ammoMul = 1 + SAVE.ammoPacks * 0.5;
+  /* 随身容器：把大厅整备好的弹挂 / 口袋 / 背包深拷一份带进来。
+     撤离成功原样写回，阵亡就地清空 —— 带进去的就是你丢得起的。 */
+  const car = ensureCarry();
+  P.rig = car.rig.map(c => c ? Object.assign({}, c) : null);
+  P.pocket = car.pocket.map(c => c ? Object.assign({}, c) : null);
+  P.pack = car.pack.map(c => c ? Object.assign({}, c) : null);
+  P.carePick = normCareKey(SAVE.carePick);
+
+  /* 装弹：备弹不再自动从仓库扣 —— 弹挂里装了什么格就是什么。
+     弹匣从对应口径的弹药格里真扣发数；格子空着就是烧火棍。
+     弹级以格子记录的为准（大厅整备时装入那一刻选的弹级）。 */
   P.ammo = {};
-  let tookAny = 0;
   for (const id of Object.keys(P.owned)) {
     const WS = weaponStats(id);
     const cal = calOfWeapon(id);
-    const lv = ammoPickOf(cal);
-    const cap = WS.mag + (WS.reserveMul > 0 ? Math.round(WS.mag * WS.reserveMul * ammoMul) : 0);
-    const take = takeAmmoStock(cal, lv, Math.min(cap, ammoStock(cal, lv)));
-    const inMag = Math.min(WS.mag, take);
-    P.ammo[id] = { mag: inMag, reserve: take - inMag, tier: lv, cal };
-    tookAny += take;
+    const src = ammoCellFor(cal);          // 弹挂/口袋里这个口径的弹药格
+    const lv = src ? src.cell.lv : ammoPickOf(cal);
+    const inMag = src ? drainReserve(cal, Math.min(WS.mag, src.cell.n)) : 0;
+    P.ammo[id] = { mag: inMag, tier: lv, cal };
   }
-  if (tookAny) saveGame();
 
-  /* 提醒：哪个口径一颗子弹都没有 */
+  /* 提醒：哪个口径一颗子弹都没有（弹匣 + 弹挂备弹都空） */
   {
     const dry = [];
     for (const id of Object.keys(P.owned)) {
       const a = P.ammo[id];
-      if (!a || a.mag + a.reserve <= 0) dry.push(weaponStats(id).short);
+      if (!a || a.mag + reserveOf(calOfWeapon(id)) <= 0) dry.push(weaponStats(id).short);
     }
-    if (dry.length) uiToast('没子弹：' + dry.join(' / ') + ' · 去军需处买弹药', 'warn');
+    if (dry.length) uiToast('没子弹：' + dry.join(' / ') + ' · 弹挂里装点备弹', 'warn');
   }
 
   {
@@ -3559,33 +3805,71 @@ function resetPlayer() {
     P.armorDR = AR.dr;
     P.armorLoad = AR.load || 0;      // 负重：影响走速与跑步耗体力
   }
-
-  /* 医疗：把大厅库存拷一份带进来 —— 打完剩下的耐久再写回去 */
-  P.meds = {};
-  for (const id of MEDKIT_ORDER) {
-    const s = (SAVE.meds && SAVE.meds[id]) || {};
-    P.meds[id] = { n: Math.max(0, s.n | 0), left: Math.max(0, Number(s.left) || 0) };
-  }
-  P.carePick = normCareKey(SAVE.carePick);
-
-  /* 止血与手术包：同样拷一份带进来，用剩的再写回去 */
-  P.stops = {};
-  for (const id of STOP_ORDER) P.stops[id] = Math.max(0, (SAVE.stops && SAVE.stops[id]) | 0);
-  P.surgs = {};
-  for (const id of SURG_ORDER) {
-    const u = (SAVE.surgs && SAVE.surgs[id] && SAVE.surgs[id].uses) | 0;
-    P.surgs[id] = { uses: Math.max(0, Math.min(u, SURGERIES[id].uses)) };
-  }
 }
 
 function currentAmmo() {
-  if (!P.weapon) return { mag: 0, reserve: 0 };     // 空手：没有弹匣可谈
+  if (!P.weapon) return { mag: 0 };                 // 空手：没有弹匣可谈
   if (!P.ammo[P.weapon]) {
     /* 没登记过的枪（理论上不会）当成空枪，绝不凭空发子弹 */
     const cal = calOfWeapon(P.weapon);
-    P.ammo[P.weapon] = { mag: 0, reserve: 0, tier: ammoPickOf(cal), cal };
+    P.ammo[P.weapon] = { mag: 0, tier: ammoPickOf(cal), cal };
   }
   return P.ammo[P.weapon];
+}
+
+/* ── 弹药格：备弹不再是枪上的一个数字，而是弹挂/口袋里的实体格子 ── */
+/* 这个口径的备弹格（弹挂优先于口袋；多格时返回第一格） */
+function ammoCellFor(cal) {
+  const zones = carryZones();
+  for (const arr of zones) for (const c of arr) if (c && c.t === 'ammo' && c.cal === cal) return { cell: c };
+  return null;
+}
+/* 这个口径身上还剩几发备弹 */
+function reserveOf(cal) {
+  let n = 0;
+  for (const arr of carryZones()) for (const c of arr) if (c && c.t === 'ammo' && c.cal === cal) n += c.n | 0;
+  return n;
+}
+/* 加备弹：先填已有格，再开新格（弹挂优先）。返回实际装进格子的发数。 */
+function addReserve(cal, n) {
+  let left = Math.max(0, Math.round(n));
+  if (left <= 0) return 0;
+  const cap = ammoCellCap(cal, P.owned);
+  for (const arr of carryZones()) {
+    for (const c of arr) {
+      if (c && c.t === 'ammo' && c.cal === cal && c.n < cap) {
+        const add = Math.min(cap - c.n, left);
+        c.n += add; left -= add;
+        if (left <= 0) return n;
+      }
+    }
+  }
+  while (left > 0) {
+    const slot = freeCellFor('ammo');
+    if (!slot) break;                        // 身上没格子了：装不下的就地丢弃
+    const arr = allCarryZones()[slot.zone];
+    const add = Math.min(cap, left);
+    arr[slot.i] = { t: 'ammo', cal, lv: (P.ammo[P.weapon] && P.ammo[P.weapon].cal === cal) ? P.ammo[P.weapon].tier : ammoPickOf(cal), n: add };
+    left -= add;
+  }
+  return n - left;
+}
+/* 扣备弹：先弹挂后口袋、先空格子。返回实际扣到的发数。 */
+function drainReserve(cal, n) {
+  let need = Math.max(0, Math.round(n));
+  let got = 0;
+  for (const arr of carryZones()) {
+    for (let i = 0; i < arr.length; i++) {
+      const c = arr[i];
+      if (c && c.t === 'ammo' && c.cal === cal && c.n > 0) {
+        const take = Math.min(c.n, need);
+        c.n -= take; got += take; need -= take;
+        if (c.n <= 0) arr[i] = null;         // 打空的格子腾出来
+        if (need <= 0) return got;
+      }
+    }
+  }
+  return got;
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -3598,43 +3882,110 @@ function currentAmmo() {
    key 统一写成 'med:inject_s' 这种形式，短按 5 直接用 carePick。
    ══════════════════════════════════════════════════════════ */
 
-function medUnit(id) { return (P.meds && P.meds[id]) || null; }
-function medCount(id) {
-  const s = medUnit(id);
-  return s ? (s.n | 0) + (s.left > 0.01 ? 1 : 0) : 0;
+/* ── 局内格子访问 ──
+   快捷可用 = 弹挂 + 口袋（按 5 打药、R 换弹只认这两个容器）；
+   背包里的东西要先 Tab 打开背包倒过来才能用。 */
+function carryZones() { return [P.rig, P.pocket]; }
+function allCarryZones() { return [P.rig, P.pocket, P.pack]; }
+function usableCellList() {
+  const out = [];
+  carryZones().forEach((arr, zi) => { for (let i = 0; i < arr.length; i++) if (arr[i]) out.push({ zone: zi, i, cell: arr[i] }); });
+  return out;
 }
+/* 找一个空格子放东西：先背包（storage），再弹挂、口袋（快捷）。
+   返回 { zone, i } 或 null。 */
+function freeCellFor(t) {
+  const zones = allCarryZones();
+  for (const pass of [2, 0, 1]) {              // pack → rig → pocket
+    const arr = zones[pass];
+    for (let i = 0; i < arr.length; i++) {
+      if (arr[i]) continue;
+      /* 弹药格只进弹挂和口袋 —— 背包里不装散弹 */
+      if (t === 'ammo' && pass === 2) continue;
+      return { zone: pass, i };
+    }
+  }
+  return null;
+}
+function removeCell(zone, i) { allCarryZones()[zone][i] = null; }
+function carryCellTotal() {
+  let n = 0;
+  for (const arr of allCarryZones()) for (const c of arr) if (c) n++;
+  return n;
+}
+
+function medUnit(id) {
+  for (const z of carryZones()) for (const c of z) if (c && c.t === 'med' && c.id === id) return c;
+  return null;
+}
+function medCount(id) { return medUnit(id) ? 1 : 0; }
 function medTotal() {
   let n = 0;
-  for (const id of MEDKIT_ORDER) n += medCount(id);
+  for (const { cell } of usableCellList()) if (cell.t === 'med') n++;
   return n;
 }
 function medOwnedIds() { return MEDKIT_ORDER.filter(id => medCount(id) > 0); }
-/* 拆开那支还剩多少；没拆开就是全新一支的满耐久 */
+/* 当前那支的剩余耐久；没有就是 0 */
 function medLeftOf(id) {
-  const s = medUnit(id);
-  if (!s) return 0;
-  if (s.left > 0.01) return s.left;
-  return s.n > 0 ? MEDKITS[id].dur : 0;
+  const c = medUnit(id);
+  return c ? Math.max(0, c.left) : 0;
+}
+/* 用完一支：把那格清空（一格一件，没有"下一支"的概念了） */
+function consumeMedUnit(id) {
+  const zones = carryZones();
+  for (let zi = 0; zi < zones.length; zi++) {
+    const arr = zones[zi];
+    for (let i = 0; i < arr.length; i++) {
+      const c = arr[i];
+      if (c && c.t === 'med' && c.id === id) { arr[i] = null; return; }
+    }
+  }
 }
 
-/* 止血消耗品的个数 */
+/* 止血消耗品：一份一格 */
 function stopCount(id) {
-  return (P.stops && (P.stops[id] | 0)) || 0;
+  let n = 0;
+  for (const { cell } of usableCellList()) if (cell.t === 'stop' && cell.id === id) n++;
+  return n;
 }
 function stopTotal() {
   let n = 0;
-  for (const id of STOP_ORDER) n += stopCount(id);
+  for (const { cell } of usableCellList()) if (cell.t === 'stop') n++;
   return n;
 }
-/* 手术包还剩几次刀 */
+/* 手术包还剩几次刀：各格剩余次数求和 */
 function surgUses(id) {
-  const s = P.surgs && P.surgs[id];
-  return s ? (s.uses | 0) : 0;
+  let n = 0;
+  for (const { cell } of usableCellList()) if (cell.t === 'surg' && cell.id === id) n += cell.uses | 0;
+  return n;
 }
 function surgTotal() {
   let n = 0;
-  for (const id of SURG_ORDER) n += surgUses(id);
+  for (const { cell } of usableCellList()) if (cell.t === 'surg') n += cell.uses | 0;
   return n;
+}
+/* 用掉一次手术刀：所在格次数 -1，用光清格 */
+function consumeSurgUse(id) {
+  for (const arr of carryZones()) {
+    for (let i = 0; i < arr.length; i++) {
+      const c = arr[i];
+      if (c && c.t === 'surg' && c.id === id && (c.uses | 0) > 0) {
+        c.uses--;
+        if (c.uses <= 0) arr[i] = null;
+        return;
+      }
+    }
+  }
+}
+
+/* 用完一份止血 / 止痛：把那格清空 */
+function consumeStopUnit(id) {
+  for (const arr of carryZones()) {
+    for (let i = 0; i < arr.length; i++) {
+      const c = arr[i];
+      if (c && c.t === 'stop' && c.id === id) { arr[i] = null; return; }
+    }
+  }
 }
 
 /* 治疗物品的通用查询 */
@@ -3713,12 +4064,18 @@ function careAutoPick() {
   }
 
   /* ④ 回血：先接着烧已经拆开的那支（拆封就归你了，不烧完等于扔钱），
-     都没有半支的才去拆新的 —— 优先上次那种，否则第一支有货的 */
+     多支半的先烧剩得最少的；都是满的才去拆新的 —— 优先上次那种，否则第一支有货的 */
   if (P.hp < P.maxHp - 0.01) {
     const last = P.carePick;
     const lid = last && careKindOf(last) === 'med' ? careIdOf(last) : '';
-    const open = MEDKIT_ORDER.filter(id => { const s = medUnit(id); return s && s.left > 0.01; });
-    if (open.length) return careKeyMake('med', open.indexOf(lid) >= 0 ? lid : open[0]);
+    const opened = usableCellList().filter(r => r.cell.t === 'med');
+    if (opened.length) {
+      opened.sort((a, b) => (a.cell.left / MEDKITS[a.cell.id].dur) - (b.cell.left / MEDKITS[b.cell.id].dur));
+      const minR = opened[0].cell.left / MEDKITS[opened[0].cell.id].dur;
+      const tied = opened.filter(r => r.cell.left / MEDKITS[r.cell.id].dur <= minR + 1e-6);
+      const pick = tied.find(r => r.cell.id === lid) || opened[0];
+      return careKeyMake('med', pick.cell.id);
+    }
     if (lid && medCount(lid) > 0) return careKeyMake('med', lid);
     const own = medOwnedIds();
     if (own.length) return careKeyMake('med', own[0]);
@@ -3732,25 +4089,42 @@ function careIdleMsg() {
   return '没有能用的治疗物品了 · 回大厅补给';
 }
 
-/* 入袋：局内拾到 / 开箱拿到的医疗包 */
+/* 入袋：局内拾到 / 开箱拿到的医疗物品。一格一件，
+   先塞背包（不能直接用），背包满了才进弹挂 / 口袋（快捷可用）。
+   返回实际带走的件数。 */
 function addMed(id, n) {
   const key = MEDKITS[id] ? id : STARTER_MEDKIT;
-  if (!P.meds) P.meds = {};
-  const s = P.meds[key] || (P.meds[key] = { n: 0, left: 0 });
-  s.n = Math.min(99, (s.n | 0) + Math.max(1, n | 0));
-  if (medCount(careIdOf(P.carePick)) <= 0) P.carePick = careKeyMake('med', key);
+  let placed = 0;
+  for (let k = 0; k < Math.max(1, n | 0); k++) {
+    const slot = freeCellFor('med');
+    if (!slot) break;
+    allCarryZones()[slot.zone][slot.i] = { t: 'med', id: key, left: MEDKITS[key].dur };
+    placed++;
+  }
+  if (placed > 0 && medCount(careIdOf(P.carePick)) <= 0) P.carePick = careKeyMake('med', key);
+  return placed;
 }
 function addStop(id, n) {
   const key = STOPS[id] ? id : 'bandage';
-  if (!P.stops) P.stops = {};
-  P.stops[key] = Math.min(99, (P.stops[key] | 0) + Math.max(1, n | 0));
-}function addSurg(id, n) {
+  let placed = 0;
+  for (let k = 0; k < Math.max(1, n | 0); k++) {
+    const slot = freeCellFor('stop');
+    if (!slot) break;
+    allCarryZones()[slot.zone][slot.i] = { t: 'stop', id: key };
+    placed++;
+  }
+  return placed;
+}
+function addSurg(id, n) {
   const key = SURGERIES[id] ? id : SURG_ORDER[0];
-  if (!P.surgs) P.surgs = {};
-  const s = P.surgs[key] || (P.surgs[key] = { uses: 0 });
-  const before = s.uses | 0;
-  s.uses = Math.min(SURGERIES[key].uses, before + Math.max(1, n | 0));
-  return s.uses - before;            // 0 = 本来就带满了，这件带不走
+  let placed = 0;
+  for (let k = 0; k < Math.max(1, n | 0); k++) {
+    const slot = freeCellFor('surg');
+    if (!slot) break;
+    allCarryZones()[slot.zone][slot.i] = { t: 'surg', id: key, uses: SURGERIES[key].uses };
+    placed++;
+  }
+  return placed * SURGERIES[key].uses;   // 换算成"几把刀"，0 = 带不走
 }
 
 /* 大厅里查存档的那一套（与局内的 medCount / medTotal 对应） */
@@ -4099,7 +4473,7 @@ function startReload() {
   if (!P.weapon) return;
   const W = weaponStats(P.weapon);
   const a = currentAmmo();
-  if (P.reloading > 0 || a.mag >= W.mag || a.reserve <= 0) return;
+  if (P.reloading > 0 || a.mag >= W.mag || reserveOf(a.cal || calOfWeapon(P.weapon)) <= 0) return;
   P.burstLeft = 0;
   /* 手臂骨折时单手换弹，慢一截；止痛能压住 */
   P.reloading = W.reload * (armHurt() ? DEBUFF.armReload : 1);
@@ -4110,9 +4484,8 @@ function finishReload() {
   const W = weaponStats(P.weapon);
   const a = currentAmmo();
   const need = W.mag - a.mag;
-  const take = Math.min(need, Math.max(0, a.reserve));
+  const take = drainReserve(a.cal || calOfWeapon(P.weapon), need);
   a.mag += take;
-  a.reserve -= take;
 }
 
 /* 扣扳机：全自动按住就连，半自动每发都要重新按，点射一次打三发 */
@@ -4244,7 +4617,7 @@ function startMedHeal(id) {
   if (!key || !MEDKITS[key]) { uiToast('没有医疗包了 · 回大厅补给', 'small warn'); return false; }
   const M = MEDKITS[key];
   const s = medUnit(key);
-  if (!s || (s.n <= 0 && s.left <= 0.01)) {
+  if (!s || s.left <= 0.01) {
     uiToast(M.name + ' 用完了', 'small warn');
     P.carePick = careKeyMake('med', careIdOf(carePickNow() || careKeyMake('med', key)));
     return false;
@@ -4252,7 +4625,6 @@ function startMedHeal(id) {
   if (P.hp >= P.maxHp - 0.01) { uiToast('生命值已满，不用包扎', 'small'); P.medCd = 0.5; return false; }
   if (careBusy()) return false;
 
-  if (s.left <= 0.01) { s.n--; s.left = M.dur; }   // 拆一支新的
   P.medOn = careKeyMake('med', key);
   P.medKind = 'med';
   P.carePick = P.medOn;
@@ -4274,7 +4646,7 @@ function startStopBleed(id) {
   if (!P.alive) return false;
   const key = STOPS[id] ? id : 'bandage';
   const S = STOPS[key];
-  if ((P.stops[key] | 0) <= 0) { uiToast(S.name + ' 用完了', 'small warn'); return false; }
+  if (stopCount(key) <= 0) { uiToast(S.name + ' 用完了', 'small warn'); return false; }
   if (S.pain) {
     if (P.painT > 0) { uiToast('止痛还在生效 · 剩 ' + Math.ceil(P.painT) + 's', 'small'); P.medCd = 0.4; return false; }
   } else if (P.deb.bleed <= 0) {
@@ -4290,7 +4662,7 @@ function startStopBleed(id) {
   P.medWindT = P.medWind;
 
   popup(P.x, P.y - 34, S.name + (S.pain ? ' · 服用' : ' · 止血'), S.color, 13);
-  if (S.pain && (P.stops[key] | 0) > 1) uiToast(S.name + ' · 单次止痛 ' + S.pain + 's · 用完这剂还剩 ' + ((P.stops[key] | 0) - 1) + ' 次', 'small');
+  if (S.pain && stopCount(key) > 1) uiToast(S.name + ' · 单次止痛 ' + S.pain + 's · 身上还有 ' + (stopCount(key) - 1) + ' 份', 'small');
   Sfx.tone(420, 0.08, 0.05, 'sine', 600);
   return true;
 }
@@ -4450,16 +4822,16 @@ function updateMedHeal(dt) {
     /* 急救消耗品：读条完直接结算，一次性 */
     if (kind === 'stop') {
       const S = STOPS[id] || STOPS.bandage;
-      P.stops[id] = Math.max(0, (P.stops[id] | 0) - 1);
+      consumeStopUnit(id);
       if (S.pain) {
         P.painT = Math.max(P.painT, S.pain);
         popup(P.x, P.y - 46, '止痛 ' + S.pain + 's', S.color, 14);
-        if ((P.stops[id] | 0) > 0) popup(P.x, P.y - 62, S.short + ' 还剩 ' + (P.stops[id] | 0) + ' 次', 'rgba(190,230,250,0.9)', 12);
+        if (stopCount(id) > 0) popup(P.x, P.y - 62, S.short + ' 还剩 ' + stopCount(id) + ' 份', 'rgba(190,230,250,0.9)', 12);
       } else {
         stopBleeding(S.layers);
       }
       Sfx.heal();
-      if ((P.stops[id] | 0) <= 0) uiToast(S.name + ' 用完了', 'small warn');
+      if (stopCount(id) <= 0) uiToast(S.name + ' 用完了', 'small warn');
       P.medOn = null;
       P.medCd = Math.max(P.medCd, 0.5);
       backToGun();
@@ -4471,12 +4843,11 @@ function updateMedHeal(dt) {
       const S = SURGERIES[id] || SURGERIES.surg_simple;
       const t = surgTarget();
       if (!t) { uiToast('没有需要手术的伤', 'small'); P.medOn = null; P.medCd = 0.4; backToGun(); return; }
-      const s = P.surgs[id] || (P.surgs[id] = { uses: 0 });
-      if ((s.uses | 0) <= 0) { uiToast(S.name + ' 用完了', 'small warn'); P.medOn = null; backToGun(); return; }
-      s.uses = Math.max(0, (s.uses | 0) - 1);
+      if (surgUses(id) <= 0) { uiToast(S.name + ' 用完了', 'small warn'); P.medOn = null; backToGun(); return; }
+      consumeSurgUse(id);
       applySurgery();
       Sfx.heal();
-      if ((s.uses | 0) <= 0) uiToast(S.name + ' 用完了', 'small warn');
+      if (surgUses(id) <= 0) uiToast(S.name + ' 用完了', 'small warn');
       P.medOn = null;
       P.medCd = Math.max(P.medCd, 0.6);
       backToGun();
@@ -4504,12 +4875,11 @@ function updateMedHeal(dt) {
   if (!s) { P.medOn = null; return; }
 
   if (P.hp >= P.maxHp - 0.01) { P.medOn = null; uiToast('生命值已满', 'small'); backToGun(); return; }
-  /* 这一支的耐久耗光就收手 —— 想接着灌得重新起手、再走一次启动读条，
-     不能让"多带几支"变成一次读条喝到满血 */
+  /* 这一支的耐久耗光就扔格收手 —— 想接着灌得换一支、再走一次启动读条 */
   if (s.left <= 0.01) {
+    consumeMedUnit(id);                          // 用完的空格清出来
     P.medOn = null;                              // 自然用完不留冷却：换一支立刻能起手
-    if (s.n > 0) uiToast(M.name + ' 这支用完了 · 还有 ' + s.n + ' 支（再按 5 起手）', 'small');
-    else uiToast(M.name + ' 用完了', 'small warn');
+    uiToast(M.name + ' 这支用完了', 'small');
     backToGun();
     return;
   }
@@ -4764,7 +5134,7 @@ function updatePlayer(dt) {
     if (mouse.pressed) toggleMedkit();     // 左键开始 / 停止包扎
   } else {
     const wa = currentAmmo();
-    if (wa.mag <= 0 && P.reloading <= 0 && wa.reserve > 0) startReload();
+    if (wa.mag <= 0 && P.reloading <= 0 && reserveOf(wa.cal || calOfWeapon(P.weapon)) > 0) startReload();
     tryFire(mouse.pressed);
   }
   mouse.pressed = false;      // 一次按下只算一次扣扳机
@@ -8125,8 +8495,8 @@ function collectPickup(p) {
   } else if (p.kind === 'ammo') {
     const a = currentAmmo();
     if (P.weapon) {
-      a.reserve += weaponStats(P.weapon).mag * 2;
-      popup(P.x, P.y - 30, '弹药补给 +' + weaponStats(P.weapon).mag * 2 + ' 发', ammoTier(a.tier).color, 14);
+      const got = addReserve(calOfWeapon(P.weapon), weaponStats(P.weapon).mag * 2);
+      popup(P.x, P.y - 30, '弹药补给 +' + got + ' 发' + (got < weaponStats(P.weapon).mag * 2 ? ' · 弹挂满了' : ''), ammoTier(a.tier).color, 14);
     } else {
       P.hp = Math.min(P.maxHp, P.hp + 8);
       popup(P.x, P.y - 30, '没有枪，先回血', '#8ef2ff', 14);
@@ -8838,8 +9208,7 @@ function addAmmo(mags) {
   }
   if (!w) return 0;
   const n = weaponStats(w).mag * mags;
-  P.ammo[w].reserve += n;
-  return n;
+  return addReserve(calOfWeapon(w), n);
 }
 
 /* 翻到某一件时才真正入账。
@@ -8856,20 +9225,21 @@ function applyLootItem(it, c) {
   else if (it.kind === 'ammo') {
     const got = addAmmo(it.mags || 1);
     it.got = got;                       // 只用于飘字，面板上仍显示「×2 匣」
-    if (got <= 0) { ok = false; it.blocked = '没有能用的枪'; }
+    if (got <= 0) { ok = false; it.blocked = '弹挂里装不下'; }
   }
   else if (it.kind === 'weapon') {
     const w = it.weapon;
     const WS = weaponStats(w);
     if (P.owned[w]) {
-      // 已经有一把了：拆成两个弹匣的备弹
-      const a = P.ammo[w] || (P.ammo[w] = { mag: 0, reserve: 0, tier: ammoPickOf(calOfWeapon(w)), cal: calOfWeapon(w) });
-      a.reserve += WS.mag * 2;
+      // 已经有一把了：拆成两个弹匣的备弹塞进弹挂
+      const got = addReserve(calOfWeapon(w), WS.mag * 2);
+      if (got <= 0) { /* 枪留着，弹丢地上 */ }
     } else {
-      /* 局内缴获的枪自带两个弹匣的子弹（不扣库存） */
+      /* 局内缴获的枪自带两个弹匣的子弹（塞进弹挂，装不下就少带点） */
       const cal = calOfWeapon(w);
       P.owned[w] = true;
-      P.ammo[w] = { mag: WS.mag, reserve: WS.mag * 2, tier: ammoPickOf(cal), cal };
+      P.ammo[w] = { mag: WS.mag, tier: ammoPickOf(cal), cal };
+      addReserve(cal, WS.mag * 2);
       const sl = stowGun(w);
       if (sl) {
         const sd = SLOT_DEFS.find(d => d.id === sl);
@@ -12540,7 +12910,7 @@ function drawHUD() {
     ctx.fillText(CAL.short + ' · ' + AT.grade + ' ' + AT.name + ' · 穿甲 ' + AT.lv, wx, wy - 90);
 
     const magStr = String(a.mag).padStart(2, '0');
-    const resStr = '/ ' + a.reserve;
+    const resStr = '/ ' + reserveOf(a.cal || calOfWeapon(P.weapon));
     ctx.font = '800 34px ' + mono;
     const magW = ctx.measureText(magStr).width;
     ctx.font = '700 16px ' + mono;
@@ -13973,14 +14343,14 @@ function refreshLobby() {
   const stopN = saveStopTotal();
   const surgN = saveSurgTotal();
   const pickKey = saveCarePick();
+  const carryN = SAVE.carry ? SAVE.carry.rig.concat(SAVE.carry.pocket, SAVE.carry.pack).filter(c => c && c.t !== 'ammo').length : 0;
   slotList.appendChild(makeSlot({
     ico: '✚',
     nm: '医疗 ×' + medN + ' · 急救 ×' + stopN + ' · 手术 ' + surgN + ' 次',
-    ds: '首选 ' + careName(pickKey) + ' · 弹药包 ×' + SAVE.ammoPacks +
-        ' · 备弹上限 +' + (SAVE.ammoPacks * 50) + '%',
+    ds: '首选 ' + careName(pickKey) + ' · 随身已装 ' + carryN + ' 件（弹挂 ' + rigCap() + ' / 口袋 ' + pocketCap() + ' / 背包 ' + packCap() + ' 格）',
     val: '补给',
     empty: medN + stopN + surgN === 0,
-    onClick: () => openShop('supply'),
+    onClick: () => openLoadout(),
   }));
 
   $('lobbyStats').innerHTML =
@@ -15023,26 +15393,26 @@ function refreshShop() {
       grid.appendChild(el);
     }
 
-    for (const key in SUPPLY) {
-      const s = SUPPLY[key];
-      let count = 0, ownedTag = '';
-      if (key === 'ammoPack') { count = SAVE.ammoPacks; ownedTag = '持有 ×' + count; }
-
+    /* 扩容装备：背包 / 弹挂，一次性购买永久生效 */
+    for (const key in GEAR) {
+      const s = GEAR[key];
+      const owned = !!(SAVE.gearOwned && SAVE.gearOwned[key]);
       const canAfford = SAVE.credits >= s.price;
 
       const el = document.createElement('div');
-      el.className = 'item';
+      el.className = 'item' + (owned ? ' owned' : '');
       el.innerHTML =
         '<div class="top"><span class="nm">' + s.name + '</span>' +
-        '<span class="tag">' + ownedTag + '</span></div>' +
+        (owned ? '<span class="tag own">已拥有</span>' : '<span class="tag">扩容</span>') + '</div>' +
         '<div class="ds">' + s.desc + '</div>' +
+        '<div class="ds" style="color:#6fb0cf">弹挂 ' + rigCap() + ' 格 · 口袋 ' + pocketCap() + ' 格 · 背包 ' + packCap() + ' 格</div>' +
         '<div class="buyrow">' +
           '<span class="price"><i>¥</i>' + fmtMoney(s.price) + '</span>' +
-          '<button class="buybtn"' + (canAfford ? '' : ' disabled') + '>' +
-          (canAfford ? '购买' : '资金不足') + '</button>' +
+          '<button class="buybtn' + (owned ? ' owned' : '') + '"' + (owned || !canAfford ? ' disabled' : '') + '>' +
+          (owned ? '已拥有' : (canAfford ? '购买' : '资金不足')) + '</button>' +
         '</div>';
 
-      el.querySelector('.buybtn').addEventListener('click', () => buySupply(key));
+      if (!owned) el.querySelector('.buybtn').addEventListener('click', () => buyGear(key));
       grid.appendChild(el);
     }
   }
@@ -15210,14 +15580,416 @@ function selectAmmo(cal, lv) {
   uiToast('已选用 ' + CALIBERS[cal].short + ' ' + ammoTier(lv).grade + ' 弹', 'small');
 }
 
-function buySupply(key) {
-  const s = SUPPLY[key];
-  if (!s || SAVE.credits < s.price) return;
+function buyGear(key) {
+  const s = GEAR[key];
+  if (!s || !SAVE.gearOwned || SAVE.gearOwned[key]) return;
+  if (SAVE.credits < s.price) return;
   SAVE.credits -= s.price;
-  if (key === 'ammoPack') SAVE.ammoPacks++;
+  SAVE.gearOwned[key] = 1;
+  trimCarryToCap();                // 容量变了，格子数组跟着补齐
   saveGame();
   Sfx.init(); Sfx.resume(); Sfx.pickup();
   refreshShop();
+  uiToast('已购入 ' + s.name, 'small');
+}
+
+/* ══════════════════════════════════════════════════════════
+   整备界面：仓库 ↔ 弹挂 / 口袋 / 背包
+   ──────────────────────────────────────────────────────────
+   点仓库拿东西 → 点格子放下；点格子拿起 → 点仓库 / 右键放回。
+   装格 = 从仓库真扣，放回 = 真还（用剩的耐久 / 次数 / 发数都保留）。
+   ══════════════════════════════════════════════════════════ */
+const LO_UI = { held: null };
+
+function cellIcon(c) {
+  if (!c) return '';
+  if (c.t === 'med') return '✚';
+  if (c.t === 'stop') return '✦';
+  if (c.t === 'surg') return '⚕';
+  if (c.t === 'ammo') return '▣';
+  return '?';
+}
+function cellName(c) {
+  if (!c) return '';
+  if (c.t === 'med') return (MEDKITS[c.id] || MEDKITS[STARTER_MEDKIT]).short;
+  if (c.t === 'stop') return (STOPS[c.id] || STOPS.bandage).short;
+  if (c.t === 'surg') return (SURGERIES[c.id] || SURGERIES.surg_simple).short;
+  if (c.t === 'ammo') return CALIBERS[c.cal].short;
+  return '?';
+}
+function cellSub(c) {
+  if (!c) return '';
+  if (c.t === 'med') {
+    const M = MEDKITS[c.id];
+    const l = Math.round(c.left);
+    return (l >= M.dur - 0.5) ? ('耐久 ' + M.dur) : ('剩 ' + l + '/' + M.dur);
+  }
+  if (c.t === 'stop') return '一次性';
+  if (c.t === 'surg') return '剩 ' + (c.uses | 0) + '/' + SURGERIES[c.id].uses + ' 次';
+  if (c.t === 'ammo') {
+    const T = ammoTier(c.lv == null ? 1 : c.lv);
+    return T.grade + ' · ' + (c.n | 0) + ' 发';
+  }
+  return '';
+}
+function cellColor(c) {
+  if (!c) return '#8fd8f2';
+  if (c.t === 'med') return (MEDKITS[c.id] || MEDKITS[STARTER_MEDKIT]).color;
+  if (c.t === 'stop') return (STOPS[c.id] || STOPS.bandage).color;
+  if (c.t === 'surg') return (SURGERIES[c.id] || SURGERIES.surg_simple).color;
+  if (c.t === 'ammo') return ammoTier(c.lv == null ? 1 : c.lv).color;
+  return '#8fd8f2';
+}
+
+/* 格子 → 仓库（真还）。用剩的耐久 / 次数 / 发数都留着。 */
+function cellToStock(c) {
+  if (!c) return;
+  if (c.t === 'med') {
+    const M = MEDKITS[c.id];
+    const s = SAVE.meds[c.id] || (SAVE.meds[c.id] = { n: 0, left: 0 });
+    if (c.left >= M.dur - 0.5) s.n = Math.min(99, (s.n | 0) + 1);
+    else if ((Number(s.left) || 0) <= 0.01) s.left = Math.max(0, c.left);
+    else {
+      const total = (Number(s.left) || 0) + Math.max(0, c.left);
+      s.n = Math.min(99, (s.n | 0) + Math.floor(total / M.dur));
+      s.left = total % M.dur;
+    }
+  } else if (c.t === 'stop') {
+    SAVE.stops[c.id] = Math.min(99, ((SAVE.stops[c.id] | 0) + 1));
+  } else if (c.t === 'surg') {
+    const s = SAVE.surgs[c.id] || (SAVE.surgs[c.id] = { uses: 0 });
+    s.uses = Math.min(SURGERIES[c.id].uses, (s.uses | 0) + (c.uses | 0));
+  } else if (c.t === 'ammo') {
+    addAmmoStock(c.cal, c.lv, c.n | 0);
+  }
+}
+/* 仓库 → 手上：拿一件出来（真扣）。返回格子对象。 */
+function stockTakeCell(kind, id) {
+  if (kind === 'med') {
+    const s = SAVE.meds[id] || { n: 0, left: 0 };
+    if ((Number(s.left) || 0) > 0.01) {
+      const c = { t: 'med', id, left: s.left };
+      s.left = 0;
+      return c;
+    }
+    if ((s.n | 0) <= 0) return null;
+    s.n--;
+    return { t: 'med', id, left: MEDKITS[id].dur };
+  }
+  if (kind === 'stop') {
+    if (((SAVE.stops[id] || 0) | 0) <= 0) return null;
+    SAVE.stops[id]--;
+    return { t: 'stop', id };
+  }
+  if (kind === 'surg') {
+    const s = SAVE.surgs[id] || { uses: 0 };
+    if ((s.uses | 0) <= 0) return null;
+    const c = { t: 'surg', id, uses: Math.min(SURGERIES[id].uses, s.uses | 0) };
+    s.uses = Math.max(0, (s.uses | 0) - c.uses);
+    return c;
+  }
+  return null;
+}
+function stockTakeAmmo(cal) {
+  const lv = ammoPickOf(cal);
+  const cap = ammoCellCap(cal, SAVE.owned);
+  const take = takeAmmoStock(cal, lv, Math.min(cap, ammoStock(cal, lv)));
+  return take > 0 ? { t: 'ammo', cal, lv, n: take } : null;
+}
+
+function loSetHeld(c) {
+  LO_UI.held = c;
+  const el = $('loHeldChip');
+  if (!el) return;
+  if (c) {
+    el.textContent = '手持 · ' + cellName(c) + (c.t === 'ammo' ? ' ' + (c.n | 0) + ' 发' : '');
+    el.style.borderColor = cellColor(c);
+    el.classList.remove('hidden');
+  } else el.classList.add('hidden');
+}
+
+function openLoadout() {
+  ensureCarry();
+  trimCarryToCap();
+  loSetHeld(null);
+  $('loCredit').textContent = fmtMoney(SAVE.credits);
+  $('loadout').classList.remove('hidden');
+  renderLoadout();
+}
+function closeLoadout() {
+  $('loadout').classList.add('hidden');
+  loSetHeld(null);
+  saveGame();
+  refreshLobby();
+}
+
+function renderLoadout() {
+  const stockEl = $('loStock');
+  stockEl.innerHTML = '';
+
+  /* 仓库：医疗包 */
+  for (const id of MEDKIT_ORDER) {
+    const M = MEDKITS[id];
+    const have = saveMedCount(id);
+    const el = document.createElement('div');
+    el.className = 'lo-row' + (have <= 0 ? ' off' : '');
+    el.innerHTML = '<span class="nm" style="color:' + M.color + '">' + M.short + '</span>' +
+      '<span class="sub">' + M.dur + ' 耐久 · ' + M.hps + '/s</span>' +
+      '<span class="ct">×' + have + '</span>';
+    if (have > 0) el.addEventListener('click', () => {
+      if (LO_UI.held) { cellToStock(LO_UI.held); loSetHeld(null); }
+      const c = stockTakeCell('med', id);
+      if (c) { loSetHeld(c); Sfx.tone(560, 0.05, 0.04, 'square'); }
+      renderLoadout();
+    });
+    stockEl.appendChild(el);
+  }
+  /* 仓库：急救 / 止痛 */
+  for (const id of STOP_ORDER) {
+    const S = STOPS[id];
+    const have = (SAVE.stops[id] | 0);
+    const el = document.createElement('div');
+    el.className = 'lo-row' + (have <= 0 ? ' off' : '');
+    el.innerHTML = '<span class="nm" style="color:' + S.color + '">' + S.short + '</span>' +
+      '<span class="sub">' + (S.pain ? '止痛 ' + S.pain + 's' : (S.layers > 1 ? '全止血' : '止 1 层')) + '</span>' +
+      '<span class="ct">×' + have + '</span>';
+    if (have > 0) el.addEventListener('click', () => {
+      if (LO_UI.held) { cellToStock(LO_UI.held); loSetHeld(null); }
+      const c = stockTakeCell('stop', id);
+      if (c) { loSetHeld(c); Sfx.tone(560, 0.05, 0.04, 'square'); }
+      renderLoadout();
+    });
+    stockEl.appendChild(el);
+  }
+  /* 仓库：手术包 */
+  for (const id of SURG_ORDER) {
+    const S = SURGERIES[id];
+    const have = ((SAVE.surgs[id] && SAVE.surgs[id].uses) | 0);
+    const el = document.createElement('div');
+    el.className = 'lo-row' + (have <= 0 ? ' off' : '');
+    el.innerHTML = '<span class="nm" style="color:' + S.color + '">' + S.short + '</span>' +
+      '<span class="sub">' + S.uses + ' 次 · ' + S.sec + 's</span>' +
+      '<span class="ct">' + have + ' 次</span>';
+    if (have > 0) el.addEventListener('click', () => {
+      if (LO_UI.held) { cellToStock(LO_UI.held); loSetHeld(null); }
+      const c = stockTakeCell('surg', id);
+      if (c) { loSetHeld(c); Sfx.tone(560, 0.05, 0.04, 'square'); }
+      renderLoadout();
+    });
+    stockEl.appendChild(el);
+  }
+  /* 仓库：弹药 —— 点一下拿一格（按选用弹级、上限 = 弹匣×2） */
+  for (const cal of CAL_ORDER) {
+    const C = CALIBERS[cal];
+    const have = ammoStock(cal, ammoPickOf(cal));
+    const hasGun = WEAPON_ORDER.some(w => SAVE.owned[w] && calOfWeapon(w) === cal);
+    const el = document.createElement('div');
+    el.className = 'lo-row' + (have <= 0 || !hasGun ? ' off' : '');
+    el.innerHTML = '<span class="nm">' + C.short + '</span>' +
+      '<span class="sub">' + ammoTier(ammoPickOf(cal)).grade + ' · 格上限 ' + ammoCellCap(cal, SAVE.owned) + '</span>' +
+      '<span class="ct">' + have + ' 发</span>';
+    if (have > 0 && hasGun) el.addEventListener('click', () => {
+      if (LO_UI.held) { cellToStock(LO_UI.held); loSetHeld(null); }
+      const c = stockTakeAmmo(cal);
+      if (c) { loSetHeld(c); Sfx.tone(560, 0.05, 0.04, 'square'); }
+      renderLoadout();
+    });
+    stockEl.appendChild(el);
+  }
+  $('loStockNote').textContent = '点一下拿在手上';
+
+  /* 三个容器 */
+  const zones = [
+    ['loRig', SAVE.carry.rig, 'loRigNote', '弹 挂 · 快捷可用 · ' + rigCap() + ' 格'],
+    ['loPocket', SAVE.carry.pocket, 'loPocketNote', '口 袋 · 快捷可用 · ' + pocketCap() + ' 格'],
+    ['loPack', SAVE.carry.pack, 'loPackNote', '背 包 · Tab 里倒腾 · ' + packCap() + ' 格'],
+  ];
+  for (const [gridId, arr, noteId, noteTxt] of zones) {
+    $(noteId).textContent = noteTxt;
+    const grid = $(gridId);
+    grid.innerHTML = '';
+    arr.forEach((c, i) => {
+      const el = document.createElement('div');
+      el.className = 'lo-cell' + (c ? '' : ' empty');
+      if (c) {
+        el.innerHTML = '<span class="ic" style="color:' + cellColor(c) + '">' + cellIcon(c) + '</span>' +
+          '<span class="nm">' + cellName(c) + '</span>' +
+          '<span class="sub">' + cellSub(c) + '</span>';
+      } else el.innerHTML = '<span class="sub">空</span>';
+
+      el.addEventListener('click', () => {
+        const zone = gridId === 'loRig' ? 0 : (gridId === 'loPocket' ? 1 : 2);
+        if (LO_UI.held) {
+          if (LO_UI.held.t === 'ammo' && zone === 2) { uiToast('备弹不进背包 · 放弹挂或口袋', 'small warn'); return; }
+          if (!c) { arr[i] = LO_UI.held; loSetHeld(null); }         // 放下
+          else {                                                     // 交换
+            if (c.t === 'ammo' && zone === 2) { uiToast('备弹不进背包', 'small warn'); return; }
+            const tmp = c;
+            arr[i] = LO_UI.held;
+            loSetHeld(tmp);
+          }
+          Sfx.tone(620, 0.05, 0.04, 'square');
+        } else if (c) {                                              // 拿起
+          arr[i] = null;
+          loSetHeld(c);
+          Sfx.tone(500, 0.05, 0.04, 'square');
+        }
+        saveGame();
+        renderLoadout();
+      });
+      el.addEventListener('contextmenu', e => {                      // 右键放回仓库
+        e.preventDefault();
+        if (!c || LO_UI.held) return;
+        cellToStock(c);
+        arr[i] = null;
+        Sfx.tone(440, 0.05, 0.04, 'square');
+        saveGame();
+        renderLoadout();
+      });
+      grid.appendChild(el);
+    });
+  }
+
+  $('loCredit').textContent = fmtMoney(SAVE.credits);
+}
+
+/* 一键整备：弹药格补满 → 空弹挂格补口径格 → 口袋塞绷带 → 剩余空格按
+   绷带 / 止痛 / 医疗包 / 手术包 顺序塞满（弹挂优先，背包垫底） */
+function autoRestock() {
+  const C = SAVE.carry;
+  let did = 0;
+  for (const c of C.rig) {
+    if (c && c.t === 'ammo') {
+      const cap = ammoCellCap(c.cal, SAVE.owned);
+      const add = takeAmmoStock(c.cal, c.lv, cap - (c.n | 0));
+      if (add > 0) { c.n = (c.n | 0) + add; did++; }
+    }
+  }
+  for (const cal of CAL_ORDER) {
+    const slot = C.rig.findIndex(x => !x);
+    if (slot < 0) break;
+    if (C.rig.some(x => x && x.t === 'ammo' && x.cal === cal)) continue;
+    const hasGun = WEAPON_ORDER.some(w => SAVE.owned[w] && calOfWeapon(w) === cal);
+    if (!hasGun) continue;
+    const c = stockTakeAmmo(cal);
+    if (c) { C.rig[slot] = c; did++; }
+  }
+  const fillOrder = [];
+  for (const id of STOP_ORDER) fillOrder.push({ kind: 'stop', id, n: (SAVE.stops[id] | 0) });
+  for (const id of MEDKIT_ORDER) {
+    const s = SAVE.meds[id] || { n: 0 };
+    for (let k = 0; k < (s.n | 0); k++) fillOrder.push({ kind: 'med', id });
+  }
+  for (const id of SURG_ORDER) fillOrder.push({ kind: 'surg', id, n: ((SAVE.surgs[id] && SAVE.surgs[id].uses) | 0) });
+  const zones = [C.rig, C.pocket, C.pack];
+  for (const it of fillOrder) {
+    for (let k = 0; k < (it.n == null ? 1 : it.n); k++) {
+      let placed = false;
+      for (const arr of zones) {
+        const slot = arr.findIndex(x => !x);
+        if (slot < 0) continue;
+        let c = null;
+        if (it.kind === 'stop') c = stockTakeCell('stop', it.id);
+        else if (it.kind === 'med') c = stockTakeCell('med', it.id);
+        else c = stockTakeCell('surg', it.id);
+        if (c) { arr[slot] = c; did++; placed = true; }
+        break;
+      }
+      if (!placed) break;
+    }
+  }
+  saveGame();
+  renderLoadout();
+  if (did) uiToast('整备完成 · 动了 ' + did + ' 格', 'small');
+  else uiToast('没有可整备的（仓库没货或格子已满）', 'small');
+}
+
+/* 全部卸下：所有格子原物回仓 */
+function clearCarryAll() {
+  const C = SAVE.carry;
+  for (const arr of [C.rig, C.pocket, C.pack]) {
+    for (let i = 0; i < arr.length; i++) {
+      if (arr[i]) { cellToStock(arr[i]); arr[i] = null; }
+    }
+  }
+  saveGame();
+  renderLoadout();
+  uiToast('已全部卸下回仓库', 'small');
+}
+
+/* ══════════════════════════════════════════════════════════
+   局内背包：按 Tab 打开，时间暂停，格子之间倒腾
+   ──────────────────────────────────────────────────────────
+   弹挂 / 口袋 = 快捷可用（按 5 打药、R 换弹认这两个容器）；
+   背包 = 仓库格，里面的东西要倒进弹挂 / 口袋才能用。
+   ══════════════════════════════════════════════════════════ */
+const PK_UI = { held: null };
+const PK_ZONES = [
+  ['pkRig', () => P.rig, 0, '弹 挂 · 快捷可用'],
+  ['pkPocket', () => P.pocket, 1, '口 袋 · 快捷可用'],
+  ['pkPack', () => P.pack, 2, '背 包 · 只能中转'],
+];
+
+function togglePackPanel() {
+  if (G.packOpen) closePackPanel();
+  else openPackPanel();
+}
+function openPackPanel() {
+  if (G.scene !== 'playing' || !P.alive || isDowned()) return;
+  if (P.medOn) endCareBack('已收手');                 // 收拾背包前先把手上的药收了
+  G.packOpen = true;
+  PK_UI.held = null;
+  G.scene = 'paused';
+  mouse.down = false; mouse.pressed = false;
+  MED_SEL.down = false; MED_SEL.open = false;
+  renderPackPanel();
+  $('pack').classList.remove('hidden');
+}
+function closePackPanel() {
+  if (!G.packOpen) return;
+  G.packOpen = false;
+  $('pack').classList.add('hidden');
+  G.scene = 'playing';
+  lastT = 0;
+}
+
+function renderPackPanel() {
+  for (const [gridId, getArr, zone, noteTxt] of PK_ZONES) {
+    const noteEl = $(gridId + 'Note');
+    if (noteEl) noteEl.textContent = noteTxt + ' · ' + getArr().filter(c => c).length + '/' + getArr().length + ' 格';
+    const grid = $(gridId);
+    grid.innerHTML = '';
+    const arr = getArr();
+    arr.forEach((c, i) => {
+      const el = document.createElement('div');
+      el.className = 'lo-cell' + (c ? '' : ' empty');
+      if (c) {
+        el.innerHTML = '<span class="ic" style="color:' + cellColor(c) + '">' + cellIcon(c) + '</span>' +
+          '<span class="nm">' + cellName(c) + '</span>' +
+          '<span class="sub">' + cellSub(c) + '</span>';
+      } else el.innerHTML = '<span class="sub">空</span>';
+
+      el.addEventListener('click', () => {
+        if (PK_UI.held) {
+          if (PK_UI.held.t === 'ammo' && zone === 2) { uiToast('备弹不进背包 · 放弹挂或口袋', 'small warn'); return; }
+          if (!c) { arr[i] = PK_UI.held; PK_UI.held = null; }
+          else {
+            if (c.t === 'ammo' && zone === 2) { uiToast('备弹不进背包', 'small warn'); return; }
+            const tmp = c;
+            arr[i] = PK_UI.held;
+            PK_UI.held = tmp;
+          }
+          Sfx.tone(620, 0.05, 0.04, 'square');
+        } else if (c) {
+          arr[i] = null;
+          PK_UI.held = c;
+          Sfx.tone(500, 0.05, 0.04, 'square');
+        }
+        renderPackPanel();
+      });
+      grid.appendChild(el);
+    });
+  }
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -15356,19 +16128,12 @@ function endRaid(success) {
     }
     SAVE.equippedMelee = P.melee;
     if (P.melee) SAVE.ownedMelee[P.melee] = true;
-    /* 医疗包按"用剩多少"带回去：拆开那支的剩余耐久也保留 */
-    SAVE.meds = {};
-    for (const id of MEDKIT_ORDER) {
-      const s = P.meds[id] || { n: 0, left: 0 };
-      SAVE.meds[id] = { n: Math.max(0, s.n | 0), left: Math.max(0, s.left || 0) };
-    }
-    /* 止血件与手术包也按"用剩多少"带回去 */
-    SAVE.stops = {};
-    for (const id of STOP_ORDER) SAVE.stops[id] = Math.max(0, P.stops[id] | 0);
-    SAVE.surgs = {};
-    for (const id of SURG_ORDER) {
-      SAVE.surgs[id] = { uses: Math.max(0, Math.min(SURGERIES[id].uses, surgUses(id))) };
-    }
+    /* 随身容器原样带回：用剩的耐久 / 次数 / 发数都留在格子里，下次出击接着带 */
+    SAVE.carry = {
+      rig: P.rig.map(c => c ? Object.assign({}, c) : null),
+      pocket: P.pocket.map(c => c ? Object.assign({}, c) : null),
+      pack: P.pack.map(c => c ? Object.assign({}, c) : null),
+    };
     SAVE.carePick = normCareKey(P.carePick);
 
     // 搜到的配件入库，之后才能在改装台上装
@@ -15410,16 +16175,22 @@ function endRaid(success) {
 
     SAVE.equippedArmor = 0;
     SAVE.armorMax = 0;
-    SAVE.meds = {};                 // 带进去的药全丢，跟手雷一样
-    SAVE.stops = {};                // 绷带、止血带也一起丢
-    SAVE.surgs = {};                // 手术包用得只剩一次也留不下
+    /* 身上带的东西全丢：弹挂、口袋、背包清空（当初装格时就从仓库扣掉了，
+       现在格子里剩多少就丢多少 —— 这就是"撤离才算是你的"的代价） */
+    const lostCarry = carryCellTotal();
+    const lostReserve = (function () {
+      let n = 0;
+      for (const arr of allCarryZones()) for (const c of arr) if (c && c.t === 'ammo') n += c.n | 0;
+      return n;
+    })();
+    SAVE.carry = emptyCarry();
 
     rows.push(['丢失收集品', lostN + ' 件 · 价值 ¥' + fmtMoney(G.lootValue), 'neg']);
     rows.push(['损失武器', lostWeapon ? lostWeapon : '无', lostWeapon ? 'neg' : 'neu']);
     rows.push(['损失配件', (lostModN + foundN) ? (lostModN + foundN) + ' 件（随枪）' : '无', (lostModN + foundN) ? 'neg' : 'neu']);
     rows.push(['近战武器', '随身带走 · 不丢', 'neu']);
     rows.push(['损失护甲', lostArmor ? lostArmor : '无', lostArmor ? 'neg' : 'neu']);
-    rows.push(['损失补给', '医疗包 ×' + medTotal(), 'neg']);
+    rows.push(['损失随身物资', '格子 ×' + lostCarry + (lostReserve ? ' · 备弹 ' + lostReserve + ' 发' : ''), lostCarry ? 'neg' : 'neu']);
 
     Sfx.death();
     showResult(false, '行 动 失 败', 'KILLED IN ACTION', rows, '剩余资金 ¥' + fmtMoney(SAVE.credits));
@@ -15493,6 +16264,18 @@ $('deployBtn').addEventListener('click', startRaid);
 $('opBtn').addEventListener('click', openOperators);
 $('shopBtn').addEventListener('click', () => openShop('weapon'));
 $('closeShop').addEventListener('click', closeShop);
+$('loadoutBtn').addEventListener('click', openLoadout);
+$('closeLoadout').addEventListener('click', closeLoadout);
+$('loAutoBtn').addEventListener('click', autoRestock);
+$('loClearBtn').addEventListener('click', clearCarryAll);
+$('closePack').addEventListener('click', closePackPanel);
+$('loadout').addEventListener('mousemove', e => {
+  const chip = $('loHeldChip');
+  if (chip && LO_UI.held) {
+    chip.style.left = e.clientX + 'px';
+    chip.style.top = e.clientY + 'px';
+  }
+});
 $('closeOps').addEventListener('click', closeOperators);
 $('stashBtn').addEventListener('click', openStash);
 $('gunsmithBtn').addEventListener('click', () => openGunsmith());
