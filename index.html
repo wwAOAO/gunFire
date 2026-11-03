@@ -1201,7 +1201,7 @@ function normCareKey(v) {
 }
 
 const DEFAULT_SAVE = () => ({
-  credits: 3500,
+  credits: 10000,
   /* 出战干员：决定局内能按 V / X / G / C 放什么（技能表在 OPERATORS 里） */
   operator: 'redwolf',
   /* 新档一把枪都没有：G17 也要去军火库买，只有匕首是白送的 */
@@ -2498,6 +2498,7 @@ function skillGDown() {
   if (G.scene !== 'playing') return;
   const op = opDef();
   if (!op || !P.alive) return;
+  if (P.medOn) { uiToast('正在处理伤口 · 右键先收手', 'small'); return; }
 
   /* 已经在手持模式里：再按一次对应的键就收起来 */
   if (modeOn()) {
@@ -2532,6 +2533,7 @@ function skillVDown() {
   if (G.scene !== 'playing') return;
   const op = opDef();
   if (!op || !P.alive) return;
+  if (P.medOn) { uiToast('正在处理伤口 · 右键先收手', 'small'); return; }
 
   if (modeOn()) {
     if (P.op.mode.k === 'v') exitMode();
@@ -2566,6 +2568,7 @@ function skillXDown() {
   if (G.scene !== 'playing') return;
   const op = opDef();
   if (!op || !P.alive) return;
+  if (P.medOn) { uiToast('正在处理伤口 · 右键先收手', 'small'); return; }
 
   if (modeOn()) {
     if (P.op.mode.k === 'x') exitMode();
@@ -2648,7 +2651,7 @@ canvas.addEventListener('mousedown', e => {
   if (e.button === 2) {
     mouse.right = true;                              // 右键 = 开镜
     /* 手上是药的时候右键不开镜，改成"收手"：读条 / 回血都能随时掐掉 */
-    if (G.scene === 'playing' && P.medOn) stopCare('已收手');
+    if (G.scene === 'playing' && P.medOn) endCareBack('已收手');
   }
 });
 window.addEventListener('mouseup', e => {
@@ -2790,6 +2793,7 @@ const P = {
   chillTick: 0,
   inFrost: false,     // 本帧是否站在霜区里
   medCd: 0,
+  careFrom: null,     // 进医疗槽之前手里拿的是哪个槽 —— 治疗结束换回去
   burnT: 0,        // 被燃烧瓶点燃的剩余时间
   burnTick: 0,     // 灼烧结算节奏
   hurtDir: 0,      // 最近一次受击的来源方向（世界角）
@@ -3479,6 +3483,7 @@ function resetPlayer() {
   P.muzzle = 0;
   P.alive = true;
   P.medCd = 0;
+  P.careFrom = null;
   P.medOn = null;
   P.medWind = 0;
   P.medWindT = 0;
@@ -4025,6 +4030,7 @@ function equipSlot(slot) {
     return;
   }
   if (modeOn()) exitMode(true);          // 换枪就把手上的技能装置收起来
+  if (slot === 'medkit' && P.curSlot !== 'medkit') P.careFrom = P.curSlot;   // 记住从哪把枪切过来的
   P.curSlot = slot;
   P.burstLeft = 0;
   P.reloading = 0;
@@ -4327,28 +4333,36 @@ function stopCare(msg, cd) {
 /* 老名字还留着：外面有几处是按"包扎"来调用的 */
 function stopMedHeal(msg) { stopCare(msg); }
 
-/* 左键 / 再按 5：在"开始使用"和"收手"之间切换。
-   用哪一种不看你上次挑了啥，而是按「止血 → 止痛 → 手术 → 回血」现挑（careAutoPick）。 */
+/* 手上还端着医疗槽的话，把进医疗槽之前那把枪换回来 */
+function backToGun() {
+  if (!P.alive || P.curSlot !== 'medkit') return;
+  const back = P.careFrom;
+  P.careFrom = null;
+  if (back && back !== 'medkit' && back !== P.curSlot && slotReady(back)) equipSlot(back);
+}
+
+/* 治疗结束（打完 / 收手）：停手 + 换回之前的枪 */
+function endCareBack(msg, cd) {
+  if (P.medOn) stopCare(msg, cd);
+  backToGun();
+}
+
+/* 按 5 / 左键：开始或停止治疗 —— 不再切到医疗槽，原地就用，枪一直在手上 */
 function toggleMedkit() {
   if (!P.alive) return;
-  if (P.medOn) { stopCare('已停止'); return; }
+  if (P.medOn) { endCareBack('已停止'); return; }
   const key = careAutoPick();
   if (!key) { uiToast(careIdleMsg(), 'small'); return; }
-  if (P.curSlot !== 'medkit') {
-    equipSlot('medkit');
-    if (P.curSlot !== 'medkit') return;   // 掏不出来（没药了）
-    P.medCd = 0;
-  }
+  if (modeOn()) exitMode(true);          // 手上有技能装置先收起来
   startCare(key);
 }
 
-/* 长按 5 选中即用：掏出医疗槽 → 直接进启动读条，不用再按一次 5 */
+/* 长按 5 选中即用：原地进启动读条，不换手里的枪 */
 function useCareNow(key) {
   if (!P.alive || !key) return false;
-  if (P.curSlot === 'medkit' && P.medOn === key) return true;   // 正在用的就是这一种，别把读条重开
-  if (P.curSlot !== 'medkit') equipSlot('medkit');
-  if (P.curSlot !== 'medkit') return false;      // 掏不出来（没药了）
-  if (P.medOn) stopCare();                       // 正在用别的：先收手再换
+  if (P.medOn === key) return true;   // 正在用的就是这一种，别把读条重开
+  if (modeOn()) exitMode(true);
+  if (P.medOn) stopCare();
   P.carePick = key;
   P.medCd = 0;                                   // 换药不算"刚收手"的那 0.25s 抖动
   return startCare(key);
@@ -4416,7 +4430,7 @@ function activeMedPerk() {
 
 function updateMedHeal(dt) {
   if (!P.medOn) return;
-  if (!P.alive || P.curSlot !== 'medkit' || isDowned()) { P.medOn = null; P.medWind = 0; P.medHealT = 0; return; }
+  if (!P.alive || isDowned()) { P.medOn = null; P.medWind = 0; P.medHealT = 0; P.medHealW = 0; P.careFrom = null; return; }
 
   const key = P.medOn;
   const kind = careKindOf(key);
@@ -4448,6 +4462,7 @@ function updateMedHeal(dt) {
       if ((P.stops[id] | 0) <= 0) uiToast(S.name + ' 用完了', 'small warn');
       P.medOn = null;
       P.medCd = Math.max(P.medCd, 0.5);
+      backToGun();
       return;
     }
 
@@ -4455,15 +4470,16 @@ function updateMedHeal(dt) {
     if (kind === 'surg') {
       const S = SURGERIES[id] || SURGERIES.surg_simple;
       const t = surgTarget();
-      if (!t) { uiToast('没有需要手术的伤', 'small'); P.medOn = null; P.medCd = 0.4; return; }
+      if (!t) { uiToast('没有需要手术的伤', 'small'); P.medOn = null; P.medCd = 0.4; backToGun(); return; }
       const s = P.surgs[id] || (P.surgs[id] = { uses: 0 });
-      if ((s.uses | 0) <= 0) { uiToast(S.name + ' 用完了', 'small warn'); P.medOn = null; return; }
+      if ((s.uses | 0) <= 0) { uiToast(S.name + ' 用完了', 'small warn'); P.medOn = null; backToGun(); return; }
       s.uses = Math.max(0, (s.uses | 0) - 1);
       applySurgery();
       Sfx.heal();
       if ((s.uses | 0) <= 0) uiToast(S.name + ' 用完了', 'small warn');
       P.medOn = null;
       P.medCd = Math.max(P.medCd, 0.6);
+      backToGun();
       return;
     }
 
@@ -4487,20 +4503,21 @@ function updateMedHeal(dt) {
   const s = medUnit(id);
   if (!s) { P.medOn = null; return; }
 
-  if (P.hp >= P.maxHp - 0.01) { P.medOn = null; uiToast('生命值已满', 'small'); return; }
+  if (P.hp >= P.maxHp - 0.01) { P.medOn = null; uiToast('生命值已满', 'small'); backToGun(); return; }
   /* 这一支的耐久耗光就收手 —— 想接着灌得重新起手、再走一次启动读条，
      不能让"多带几支"变成一次读条喝到满血 */
   if (s.left <= 0.01) {
     P.medOn = null;                              // 自然用完不留冷却：换一支立刻能起手
     if (s.n > 0) uiToast(M.name + ' 这支用完了 · 还有 ' + s.n + ' 支（再按 5 起手）', 'small');
     else uiToast(M.name + ' 用完了', 'small warn');
+    backToGun();
     return;
   }
 
   /* 还在流血的时候包扎效率很低，止血带能先解决这个问题 */
   const eff = P.deb.bleed > 0 ? WOUND_HEAL_K : 1;
   const heal = Math.min(M.hps * eff * dt, s.left, P.maxHp - P.hp);
-  if (heal <= 0) { P.medOn = null; return; }
+  if (heal <= 0) { P.medOn = null; backToGun(); return; }
 
   P.hp += heal;
   s.left = Math.max(0, s.left - heal);
@@ -4512,6 +4529,7 @@ function updateMedHeal(dt) {
   if (P.medHealT <= 0) {
     P.medOn = null;
     if (P.hp < P.maxHp - 0.01) uiToast('读条走完了 · 还没回满，再按 5 续一次', 'small');
+    backToGun();
     return;
   }
 
@@ -4607,7 +4625,8 @@ function updatePlayer(dt) {
   const aCfg = adsOf(wNow);
   const gunOut = P.curSlot !== 'melee' && P.curSlot !== 'medkit';
   const adsOn = mouse.right && gunOut && P.alive && P.reloading <= 0 && !P.sprinting
-                && P.concuss <= 0 && !dashOn() && !knockOn() && !modeOn() && !isDowned();
+                && P.concuss <= 0 && !dashOn() && !knockOn() && !modeOn() && !isDowned()
+                && !P.medOn && P.medCd <= 0;
   /* 手臂断了抬枪又慢又抖，止痛之后能压住 */
   const adsTime = aCfg.time * (armHurt() ? DEBUFF.armAds : 1) * (1 + 0.12 * P.chill);
   P.ads = clamp(P.ads + (adsOn ? dt / adsTime : -dt / (adsTime * 0.75)), 0, 1);
@@ -4620,7 +4639,7 @@ function updatePlayer(dt) {
   if (P.sprinting) spd *= SPRINT.mul;                // 按住 Shift：跑步
   else if (P.exhaust > 0) spd *= SPRINT.exhaustMul;  // 体力见底：先喘几口
   if (P.curSlot === 'melee') spd *= 1.06;            // 收枪持刀：跑得更利索
-  else if (P.curSlot === 'medkit' && activeMedPerk() !== 'move') spd *= 0.92;   // 一边包扎一边走，慢一点
+  else if (P.medOn && activeMedPerk() !== 'move') spd *= 0.92;   // 一边包扎一边走，慢一点
   /* 创伤：流血越多越虚；腿断了直接掉一半多；骨裂再叠一层，止痛都救不回来 */
   if (P.deb.bleed > 0) spd *= 1 - Math.min(0.20, 0.05 * P.deb.bleed);
   /* 久经沙场：腿断 / 骨裂 / 冻伤三条减速各按自己的抗性打折（改 SKILL.tough 即刻生效）
@@ -4733,7 +4752,10 @@ function updatePlayer(dt) {
     if (P.reloading <= 0) { P.reloading = 0; finishReload(); }
   }
 
-  if (modeOn()) {
+  if (P.medOn) {
+    /* 治疗中：枪还在手上但腾不出手 —— 左键不出枪、不挥刀；
+       右键在 mousedown 里已改成"收手" */
+  } else if (modeOn()) {
     updateModeInput(dt);                   // 手上拿着雷 / 弓 / 装置：左键右键都归技能管
     mouse.pressed = false;
   } else if (P.curSlot === 'melee') {
@@ -6005,7 +6027,7 @@ function updateModeInput(dt) {
       if (placeCover(M.vert)) { consumeOp('v'); exitMode(); }
       return;
     } else if (M.id === 'healgun') {
-      fireHealDart();
+      fireHealDart(); exitMode(); return;   // 一针一按：打完就收，再用重按 X
     } else if (M.id === 'gl') {
       /* 三发共用一个落点：按下那一刻锁定准星位置，之后动鼠标不会把弹撒出去 */
       const S = P.op.v;
@@ -6016,7 +6038,7 @@ function updateModeInput(dt) {
       consumeOp('v');
       kineticKick();
       popup(P.x, P.y - 46, '三 头 犬', '#ffd66b', 12);
-      if (S.use <= 0) exitMode();       // 最后一组打完自动收手
+      exitMode();                       // 一组一按：打完就收，想再放重按 V
       return;
     } else if (M.id === 'loiter') {
       fireLoiter(mouse.right);
@@ -10022,8 +10044,8 @@ function drawPlayer() {
   /* 手持物画在身体之上：枪身从胸口伸出去，不会被躯干和朝向箭头盖掉 */
   if (P.curSlot === 'melee') {
     drawPlayerBlade(rec);
-  } else if (P.curSlot === 'medkit') {
-    drawPlayerMedkit(rec);
+  } else if (P.curSlot === 'medkit' || P.medOn) {
+    drawPlayerMedkit(rec);          // 原地治疗：枪背在后面，药拿在手上
   } else {
     const wObj = weaponStats(P.weapon);
     const gun = drawPlayerGun(wObj, rec);
@@ -12633,6 +12655,20 @@ function drawHUD() {
             : '处理中 · 右键收手')
           : '短按 5 自动用药 · 长按 5 换药'),
       wx, stateY);
+  }
+
+  /* 原地治疗：枪还在手上（上面是枪的面板），把治疗状态单独画一行 */
+  if (P.medOn && P.curSlot !== 'medkit') {
+    const winding2 = P.medWind > 0;
+    ctx.textAlign = 'right';
+    ctx.font = '700 11px ' + mono;
+    ctx.fillStyle = winding2 ? '#ffd66b' : '#8fffc4';
+    ctx.fillText(winding2 ? (careKindOf(P.medOn) === 'surg'
+        ? '手术中 ' + P.medWind.toFixed(1) + 's · 右键收手'
+        : '启动中 ' + P.medWind.toFixed(1) + 's · 右键收手')
+      : (careKindOf(P.medOn) === 'med'
+        ? '回血 ' + P.medHealT.toFixed(1) + 's · 右键收手'
+        : '处理中 · 右键收手'), wx, wy + 32);
   }
 
   if (inHand && P.reloading > 0) {
