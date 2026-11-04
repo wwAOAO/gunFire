@@ -551,7 +551,8 @@ war/
 ├── editor.html             地图编辑器（同样单文件）
 ├── maps/
 │   ├── zero-dam.json       内置地图「零号大坝·普通」的独立数据副本
-│   └── zero-dam-plan.png   平面图
+│   ├── zero-dam-plan.png   平面图
+│   └── space-base-plan.png 「航天基地·机密」平面图（由 .tmps/render_plan.js 生成）
 └── .gitignore
 ```
 
