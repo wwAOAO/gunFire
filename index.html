@@ -1643,10 +1643,14 @@ const DEFAULT_SAVE = () => ({
   operator: 'redwolf',
   /* 新档一把枪都没有：G17 也要去军火库买，只有匕首是白送的 */
   owned: {},
-  /* 护甲是仓库里的实体件：armorStash = { 弹级: 件数 }，wornArmor = 穿的那件（0 = 裸奔）。
+  /* 护甲是仓库里的实体件：armorPieces = [{ lv, hp, max }]，wornPiece = 身上穿的那件（null = 裸奔）。
      穿上 = 从仓库拿出一件；阵亡丢的是身上这件，仓库里的还在。 */
-  armorStash: { 1: 0, 2: 0, 3: 0 },
-  wornArmor: 0,
+  /* 护甲按「件」记：每件 { lv, hp, max } —— 各自有耐久，磨了/修了都记在件上。
+     wornPiece = 身上穿的那件（穿走就不在 pieces 里；null = 裸奔） */
+  armorPieces: [],
+  wornPiece: null,
+  /* 甲修包库存：n 是没开封的份数，left 是当前拆开那份的剩余点数 */
+  repairs: {},
   /* 出击配装：主武器 / 副武器（都只能放长枪）/ 手枪。空槽是 null */
   loadout: { primary: null, secondary: null, pistol: null },
   ownedMelee: { [STARTER_MELEE]: true },
@@ -1779,12 +1783,13 @@ function loadSave() {
       credits: typeof d.credits === 'number' ? d.credits : base.credits,
       operator: OP_IDS[d.operator] ? d.operator : base.operator,
       owned: owned,
-      armorStash: AR.stash,
-      wornArmor: AR.worn,
+      armorPieces: AR.pieces,
+      wornPiece: AR.worn,
       loadout: cleanLoadout(d, owned),
       ownedMelee: cleanOwnedMelee(d.ownedMelee),
       equippedMelee: MELEES[d.equippedMelee] ? d.equippedMelee : STARTER_MELEE,
       meds: cleanMeds(d.meds, d.medkits),
+      repairs: cleanRepairs(d.repairs),
       stops: cleanStops(d.stops),
       surgs: cleanSurgs(d.surgs),
       carePick: normCareKey(d.carePick || d.medPick),
@@ -1859,6 +1864,24 @@ function cleanMeds(raw, legacyCount) {
   const lc = Math.floor(Number(legacyCount) || 0);
   if (lc > 0 && !(raw && raw[STARTER_MEDKIT])) {
     out[STARTER_MEDKIT].n = Math.min(99, out[STARTER_MEDKIT].n + lc);
+  }
+  return out;
+}
+
+/* 甲修包清洗：和医疗包同一套 n/left 记账 */
+function cleanRepairs(raw) {
+  const out = {};
+  for (const id of REPAIR_ORDER) out[id] = { n: 0, left: 0 };
+  if (raw && typeof raw === 'object') {
+    for (const id of REPAIR_ORDER) {
+      const v = raw[id];
+      if (!v || typeof v !== 'object') continue;
+      const n = Math.floor(Number(v.n) || 0);
+      out[id].n = n > 0 ? Math.min(n, 99) : 0;
+      const left = Number(v.left);
+      out[id].left = left > 0 ? Math.min(left, REPAIRS[id].dur) : 0;
+      if (out[id].left < 0.5) out[id].left = 0;
+    }
   }
   return out;
 }
@@ -2376,12 +2399,57 @@ function penTableText(pen) {
   return '对甲 1-6 级 ' + parts.join('/');
 }
 
+/* 护甲：仓库里的一件件实体（每件有自己的耐久），穿上 = 从仓库拿出那一件。
+   lv 是甲级 —— 决定「几级弹才打得进」（与敌人护甲同一张对照表 penRatio）；
+   hp/max 是耐久 —— 挡弹会磨甲，磨光就裸奔；dr 只对没弹级的伤害（爆炸/近战/火/冻）生效；
+   eff 是维修效率：甲修包修甲时，恢复 X 点耐久，上限掉 X/eff —— 效率越高修得越不亏。 */
 const ARMORS = [
-  { id: 0, name: '无护甲',   short: '无护甲',   dr: 0,    price: 0,    load: 0,   desc: '没有任何防护，承受全额伤害 —— 但身上最轻，走得最快、跑得最久。' },
-  { id: 1, name: '轻型护甲', short: '轻型护甲', dr: 0.20, price: 700,  load: 0.6, desc: '轻便的防弹背心，减免 20% 伤害，几乎不影响脚步。' },
-  { id: 2, name: '战术护甲', short: '战术护甲', dr: 0.35, price: 2000, load: 1.3, desc: '复合插板，减免 35% 伤害；负重让走路慢一点、跑起来更喘。' },
-  { id: 3, name: '重型护甲', short: '重型护甲', dr: 0.50, price: 4600, load: 2.2, desc: '全覆式重甲，减免 50% 伤害 —— 代价是脚步最沉，跑不了几秒。' },
+  { id: 0, name: '无护甲',   short: '无护甲',   lv: 0, dr: 0,    hp: 0,   price: 0,     load: 0,   eff: 0,   effName: '—',
+    desc: '没有任何防护，承受全额伤害 —— 但身上最轻，走得最快、跑得最久。' },
+  { id: 1, name: '轻型护甲', short: '轻型护甲', lv: 1, dr: 0.10, hp: 60,  price: 700,   load: 0.6, eff: 0.9, effName: '高',
+    desc: '轻便的防弹背心。1 级甲：同级弹减半，2 级弹 75% 穿入，3 级弹以上全穿。耐久 60，维修效率高（修一次几乎不掉上限）。' },
+  { id: 2, name: '战术护甲', short: '战术护甲', lv: 2, dr: 0.15, hp: 90,  price: 2000,  load: 1.3, eff: 0.9, effName: '高',
+    desc: '复合插板。2 级甲：1 级弹被完全挡下，同级弹减半，3 级弹 75% 穿入。耐久 90，维修效率高。' },
+  { id: 3, name: '重型护甲', short: '重型护甲', lv: 3, dr: 0.20, hp: 130, price: 4600,  load: 2.2, eff: 0.7, effName: '中',
+    desc: '全覆式重甲。3 级甲：1-2 级弹全挡，同级弹减半，4 级弹 75% 穿入。耐久 130，维修效率中。' },
+  { id: 4, name: '精英护甲', short: '精英护甲', lv: 4, dr: 0.25, hp: 170, price: 9600,  load: 2.8, eff: 0.7, effName: '中',
+    desc: '特种部队制式。4 级甲：1-3 级弹全挡，同级弹减半，5 级弹 75% 穿入。耐久 170，维修效率中。' },
+  { id: 5, name: '特勤护甲', short: '特勤护甲', lv: 5, dr: 0.30, hp: 220, price: 18000, load: 3.4, eff: 0.5, effName: '低',
+    desc: '哈夫克高层同款。5 级甲：1-4 级弹全挡，同级弹减半，6 级弹 75% 穿入。耐久 220，维修效率低（修一次掉不少上限）。' },
+  { id: 6, name: '动力装甲', short: '动力装甲', lv: 6, dr: 0.35, hp: 300, price: 36000, load: 4.0, eff: 0.5, effName: '低',
+    desc: '外骨骼框架 + 陶瓷复合板。6 级甲：1-5 级弹全挡，只有 6 级弹能对穿。耐久 300，又重又难修。' },
 ];
+/* 甲的耐久条颜色随等级走（和敌人装甲同色系） */
+function armorLvColor(lv) {
+  return ['#5e87a0', '#8fd8f2', '#7fd4a8', '#ffd24a', '#ff9b6b', '#ff5c7a', '#c96bff'][lv | 0] || '#5e87a0';
+}
+
+/* ── 甲修包：修护甲用的消耗品，跟医疗包一样有耐久（点数）。
+   点数消耗 = 恢复的护甲耐久；上限损失 = 恢复的耐久 ÷ 甲的维修效率。
+   capLv：能修的最高甲级 —— 蓝修 1-3 级，紫修 1-4，金修 1-5，红修全甲。 ── */
+const REPAIRS = {
+  repair_b: {
+    name: '甲修包 · 蓝', short: '蓝甲修', code: 'ARMOR KIT II',
+    dur: 30, capLv: 3, wind: 2.4, price: 600, color: '#4aa8ff', size: 0.55,
+    desc: '30 点甲修剂，可修 3 级及以下护甲。恢复多少耐久就耗多少点数；甲的上限按维修效率再掉一份。',
+  },
+  repair_p: {
+    name: '甲修包 · 紫', short: '紫甲修', code: 'ARMOR KIT IV',
+    dur: 75, capLv: 4, wind: 3.0, price: 1600, color: '#b46bff', size: 0.62,
+    desc: '75 点甲修剂，可修 4 级及以下护甲。纳米补料，补完的板子略逊新板（上限照掉）。',
+  },
+  repair_g: {
+    name: '甲修包 · 金', short: '金甲修', code: 'ARMOR KIT V',
+    dur: 120, capLv: 5, wind: 3.6, price: 3600, color: '#ffc94a', size: 0.78,
+    desc: '120 点甲修剂，可修 5 级及以下护甲。军规陶瓷修补剂，一次能顶回来小半件甲。',
+  },
+  repair_r: {
+    name: '甲修包 · 红', short: '红甲修', code: 'ARMOR KIT VI',
+    dur: 200, capLv: 6, wind: 4.2, price: 7200, color: '#ff5c5c', size: 0.95,
+    desc: '200 点甲修剂，可修全部 6 级护甲。动力装甲的专用修复液，什么甲都能喂饱。',
+  },
+};
+const REPAIR_ORDER = ['repair_b', 'repair_p', 'repair_g', 'repair_r'];
 
 /* ══════════════════════════════════════════════════════════
    干员
@@ -2680,6 +2748,10 @@ function cellValid(c) {
     const left = Number(c.left);
     return { t: 'med', id: c.id, left: clamp(left > 0.01 ? left : MEDKITS[c.id].dur, 0, MEDKITS[c.id].dur) };
   }
+  if (c.t === 'repair' && REPAIRS[c.id]) {
+    const left = Number(c.left);
+    return { t: 'repair', id: c.id, left: clamp(left > 0.01 ? left : REPAIRS[c.id].dur, 0, REPAIRS[c.id].dur) };
+  }
   if (c.t === 'stop' && STOPS[c.id]) return { t: 'stop', id: c.id };
   if (c.t === 'surg' && SURGERIES[c.id]) {
     return { t: 'surg', id: c.id, uses: clamp(Math.floor(Number(c.uses)) || 0, 0, SURGERIES[c.id].uses) };
@@ -2702,6 +2774,9 @@ function mergeCarryOverflow(S, overflow) {
   for (const c of overflow) {
     if (c.t === 'med') {
       const s = S.meds[c.id] || (S.meds[c.id] = { n: 0, left: 0 });
+      s.n = Math.min(99, (s.n | 0) + 1);
+    } else if (c.t === 'repair') {
+      const s = S.repairs[c.id] || (S.repairs[c.id] = { n: 0, left: 0 });
       s.n = Math.min(99, (s.n | 0) + 1);
     } else if (c.t === 'stop') {
       S.stops[c.id] = Math.min(99, ((S.stops[c.id] | 0) + 1));
@@ -2747,22 +2822,46 @@ function cleanWorn(raw, gear) {
   return out;
 }
 
-/* 护甲改仓库件数制：armorStash = { 弹级: 件数 }，wornArmor = 身上穿的那件（0 = 没穿）。
-   老档的 armorMax（护甲等级）→ 每级补一件进仓库，equippedArmor 照穿。 */
+/* 护甲改「件」制：armorPieces = [{ lv, hp, max }, ...]，wornPiece = 身上那件（或 null）。
+   老档 armorStash { 弹级: 件数 } → 每件按满耐久展开；wornArmor（等级）→ 拿一件穿成 wornPiece。 */
 function cleanArmor(d) {
-  const stash = { 1: 0, 2: 0, 3: 0 };
-  let worn = 0;
-  if (d.armorStash && typeof d.armorStash === 'object') {
-    for (let t = 1; t <= 3; t++) stash[t] = Math.min(9, Math.max(0, Math.floor(Number(d.armorStash[t])) || 0));
-    worn = Math.floor(Number(d.wornArmor)) || 0;
+  const pieces = [];
+  let worn = null;
+  const push = (lv, hp, max) => {
+    const A = ARMORS[lv | 0];
+    if (!A || A.lv <= 0) return;
+    const m = Math.max(1, Math.round(max != null ? max : A.hp));
+    pieces.push({ lv: A.lv, hp: clamp(Math.round(hp != null ? hp : A.hp), 0, m), max: m });
+  };
+  if (Array.isArray(d.armorPieces)) {
+    for (const p of d.armorPieces.slice(0, 36)) {
+      if (!p || typeof p !== 'object') continue;
+      push(p.lv, p.hp, p.max);
+    }
+  } else if (d.armorStash && typeof d.armorStash === 'object') {
+    for (let t = 1; t <= 6; t++) {
+      const n = Math.min(9, Math.max(0, Math.floor(Number(d.armorStash[t])) || 0));
+      for (let k = 0; k < n; k++) push(t);
+    }
+    /* 老档的 wornArmor 指的是「仓库里拿走一件穿上」—— 从件里挑一件出来当穿着件 */
+    const wl = Math.floor(Number(d.wornArmor)) || 0;
+    const k = wl ? pieces.findIndex(p => p.lv === wl) : -1;
+    if (k >= 0) worn = pieces.splice(k, 1)[0];
   } else {
+    /* 更老的档：armorMax = 护甲等级上限，equippedArmor = 穿的那级 —— 每级补一件 */
     const mx = d.armorMax | 0;
-    for (let t = 1; t <= 3; t++) if (t <= mx) stash[t] = 1;
-    worn = d.equippedArmor | 0;
+    for (let t = 1; t <= 6; t++) if (t <= mx) push(t);
+    const wl = d.equippedArmor | 0;
+    const k = wl ? pieces.findIndex(p => p.lv === wl) : -1;
+    if (k >= 0) worn = pieces.splice(k, 1)[0];
   }
-  if (!(worn >= 1 && worn <= 3) || stash[worn] <= 0) worn = 0;
-  if (worn > 0) stash[worn]--;          // 穿上的这件从仓库里出来
-  return { stash, worn };
+  if (!worn && d.wornPiece && typeof d.wornPiece === 'object' && ARMORS[d.wornPiece.lv | 0] && ARMORS[d.wornPiece.lv | 0].lv > 0) {
+    const A = ARMORS[d.wornPiece.lv | 0];
+    const m = Math.max(1, Math.round(Number(d.wornPiece.max)) || A.hp);
+    worn = { lv: A.lv, hp: clamp(Math.round(Number(d.wornPiece.hp)) || 0, 0, m), max: m };
+  }
+  if (worn && !(worn.lv >= 1 && worn.lv <= 6)) worn = null;
+  return { pieces, worn };
 }
 
 /* loadSave 阶段只留原始结构 —— 数据表（WEAPON_ORDER 等）在这之后才初始化，
@@ -2836,21 +2935,21 @@ function trimCarryToCap() {
 const ENEMY_TYPES = {
   /* 阿萨拉小兵：全家最小的个头、跑得最快，边冲边短点射，贴脸还有一记近身 */
   /* 突击兵是全线唯一无甲的：RIP 修脚弹就是给他们准备的 */
-  runner:  { hp: 34,  r: 11, speed: 134, dmg: 9,  score: 12,  armor: 0,
+  runner:  { hp: 34,  r: 11, speed: 134, dmg: 9,  score: 12,  armor: 0, pen: 1,
              color: '#ff4d6d', glow: '#ff2d55', shape: 'tri',
              sight: 320, fov: 1.0,
              burst: { n: 3, gap: 0.11, dmg: 5.2, spd: 560, spread: 0.055, cd: [1.9, 2.7], range: 520 } },
   /* 阿萨拉盾兵：中等身板，正面一块厚盾挡子弹（能被打碎），盾后探头点射 */
-  shooter: { hp: 34,  r: 17, speed: 83, dmg: 8,  score: 22,  armor: 2,  color: '#ffa23a', glow: '#ff8a1f', shape: 'sq',
+  shooter: { hp: 34,  r: 17, speed: 83, dmg: 8,  score: 22,  armor: 2,  pen: 1, color: '#ffa23a', glow: '#ff8a1f', shape: 'sq',
              sight: 350, fov: 0.9, keep: 300, shield: 120, shieldArc: 0.78,
              burst: { n: 2, gap: 0.18, dmg: 6.5, spd: 560, spread: 0.045, cd: [2.1, 2.9], range: 620 } },
   /* 阿萨拉机枪兵：大块头、慢吞吞，一挺加特林先转后喷，血厚得像堵墙 */
-  brute:   { hp: 280, r: 29, speed: 46,  dmg: 24, score: 48,  armor: 4,  color: '#b46bff', glow: '#a040ff', shape: 'hex',
+  brute:   { hp: 280, r: 29, speed: 46,  dmg: 24, score: 48,  armor: 4,  pen: 2, color: '#b46bff', glow: '#a040ff', shape: 'hex',
              sight: 300, fov: 1.15, keep: 330,
              gat: { spin: 0.55, rounds: 20, rate: 0.075, cd: [2.1, 3.1],
                     spd: 780, dmg: 6, spread: 0.05, bloom: 0.05, range: 820 } },
   /* BOSS「赤霄」：守着据点不动窝，扛一挺重机枪打压制，燃烧瓶封锁走位，翻滚拉开距离 */
-  boss:    { hp: 1400, r: 44, speed: 77, dmg: 36, score: 450,  armor: 5, color: '#ff2d55', glow: '#ff0040', shape: 'boss',
+  boss:    { hp: 1400, r: 44, speed: 77, dmg: 36, score: 450,  armor: 5, pen: 3, color: '#ff2d55', glow: '#ff0040', shape: 'boss',
              sight: 520, fov: 1.45, keep: 330, leash: 260,
              // 重机枪：预热 → 长点射 → 过热冷却；后坐力会让弹道越打越散
              hmg: { spin: 0.44, rounds: 26, rate: 0.05, cd: [2.6, 3.6],
@@ -2860,7 +2959,7 @@ const ENEMY_TYPES = {
   /* BOSS「安全总监」（哈夫克专属）：M700 狙击、连发狙、放自爆小车、
      无人作战小车护卫、发现干员就呼叫增援并持续标记位置一分钟。
      每局在航天基地核心控制区随机位置出生（不走增援波）。 */
-  director: { hp: 1050, r: 32, speed: 64, dmg: 22, score: 520, armor: 5, color: '#ffb02e', glow: '#ff7a1f', shape: 'dir',
+  director: { hp: 1050, r: 32, speed: 64, dmg: 22, score: 520, armor: 5, pen: 5, color: '#ffb02e', glow: '#ff7a1f', shape: 'dir',
               sight: 680, fov: 1.4, keep: 430, leash: 320,
               // M700：激光锁定 1.05 秒 → 三连发狙（连发间隔 0.17 秒），一梭子能撕掉大半管血
               snipe: { charge: 1.05, dmg: 27, spd: 1650, spread: 0.006, cd: [2.8, 3.8], range: 700, burst: 3, gap: 0.17 },
@@ -2868,7 +2967,7 @@ const ENEMY_TYPES = {
 
   /* 安全总监的护卫「无人作战小车」：跟在总监边上，机枪扫射 + 直飞炮弹。
      总监阵亡 → 自爆程序启动（1.2 秒后炸）；小车被击毁 → 对总监没影响。 */
-  escort:  { hp: 420, r: 23, speed: 58, dmg: 12, score: 130, armor: 3, color: '#aebccb', glow: '#7c93a6', shape: 'esc',
+  escort:  { hp: 420, r: 23, speed: 58, dmg: 12, score: 130, armor: 3, pen: 3, color: '#aebccb', glow: '#7c93a6', shape: 'esc',
              sight: 540, fov: 1.5, keep: 250,
              gat: { spin: 0.5, rounds: 12, rate: 0.085, cd: [2.4, 3.4],
                     spd: 760, dmg: 5.5, spread: 0.055, bloom: 0.06, range: 700 },
@@ -2881,7 +2980,7 @@ const ENEMY_TYPES = {
              boom: { radius: 118, dmg: 52, fuse: 0.45 } },
 
   /* 阿萨拉狙击兵：视野最远但视锥很窄，开火前有一道瞄准激光，一枪见血 */
-  sniper:  { hp: 30, r: 13, speed: 77, dmg: 10, score: 34,  armor: 1, color: '#5ce1e6', glow: '#18a8bd', shape: 'dia',
+  sniper:  { hp: 30, r: 13, speed: 77, dmg: 10, score: 34,  armor: 1, pen: 3, color: '#5ce1e6', glow: '#18a8bd', shape: 'dia',
              sight: 500, fov: 0.62, keep: 470,
              /* charge 是激光锁定的时间——看到红线就开始走位；dmg 38 一枪能打掉小半管血 */
              snipe: { charge: 0.9, dmg: 38, spd: 1500, spread: 0.006, cd: [2.4, 3.3], range: 520 } },
@@ -2944,6 +3043,7 @@ const SECRET = {
      封顶 5 级：再往上（6 级）就只有红弹 / 顶级弹啃得动，等于硬墙。
      顶到封顶的（赤霄 5→6 被截回 5）拿耐久补回来，重甲只是更耐磨，不换成「无解」。 */
   armorAdd: 1,
+  penAdd: 1,           // 敌人子弹弹级 +1（5 级弹开始撕 5 级甲）
   armorLvCap: 5,
   armorOverCapHp: 1.5,
   dmgMul: { runner: 1.35, shooter: 1.23, sniper: 0.84, rocket: 0.83, flamer: 1.33, brute: 1.33, boss: 1.33,
@@ -2979,6 +3079,7 @@ const TOP = {
   hpMul: 1.22,          // 在机密血量上再 ×1.22
   dmgMul: 1.12,         // 在机密伤害倍率上再 ×1.12
   armorAdd: 2,          // 穿甲的兵甲级 +2（封顶仍是 5 级）
+  penAdd: 2,            // 敌人子弹弹级 +2
   shieldMul: 1.15,
   playerInvuln: 0.26,
   firstWave: 42, gapBase: 38, gapK: 2, gapMin: 24,
@@ -3579,6 +3680,9 @@ const P = {
   adsPrev: 0,
   alive: true,
   armorDR: 0,
+  armorLv: 0,         // 身上这件的甲级（0 = 裸奔）
+  armorHp: 0,         // 当前耐久：挡弹会磨，磨光就没防护了
+  armorMax: 0,        // 耐久上限：修甲会掉上限（恢复 ÷ 维修效率）
   /* 医疗：meds 是这一局随身带的六种包，carePick 是上次用的那种治疗物品（短按 5 走自动阶梯，回血段优先沿用它的剩余耐久）
      key 形如 'med:inject_s' / 'stop:bandage' / 'surg:surg_dek' */
   meds: {},
@@ -4478,10 +4582,19 @@ function resetPlayer() {
   }
 
   {
-    const AR = ARMORS[SAVE.wornArmor] || ARMORS[0];
+    const pc = SAVE.wornPiece;
+    const AR = (pc && ARMORS[pc.lv]) || ARMORS[0];
+    P.armorLv = AR.lv | 0;
+    P.armorHp = AR.lv > 0 ? Math.max(0, Math.round(pc.hp)) : 0;
+    P.armorMax = AR.lv > 0 ? Math.max(1, Math.round(pc.max)) : 0;
     P.armorDR = AR.dr;
     P.armorLoad = AR.load || 0;      // 负重：影响走速与跑步耗体力
   }
+}
+
+/* 护甲当前的实际减免：件还在且没磨光才有效 —— 磨光就是裸奔 */
+function armDr() {
+  return (P.armorLv > 0 && P.armorHp > 0) ? P.armorDR : 0;
 }
 
 function currentAmmo() {
@@ -4635,6 +4748,25 @@ function consumeMedUnit(id) {
   }
 }
 
+/* 甲修包：局内的格子计数 —— 弹挂 / 口袋里那一份才快捷可用 */
+function repairUnit(id) {
+  for (const z of carryZones()) for (const c of z) if (c && c.t === 'repair' && c.id === id) return c;
+  return null;
+}
+function repairCount(id) { return repairUnit(id) ? 1 : 0; }
+function repairLeftOf(id) {
+  const c = repairUnit(id);
+  return c ? Math.max(0, c.left) : 0;
+}
+function consumeRepairUnit(id) {
+  for (const arr of carryZones()) {
+    for (let i = 0; i < arr.length; i++) {
+      const c = arr[i];
+      if (c && c.t === 'repair' && c.id === id) { arr[i] = null; return; }
+    }
+  }
+}
+
 /* 止血消耗品：一份一格 */
 function stopCount(id) {
   let n = 0;
@@ -4694,6 +4826,7 @@ function careName(key) {
   if (k === 'med') return (MEDKITS[id] || MEDKITS[STARTER_MEDKIT]).name;
   if (k === 'stop') return (STOPS[id] || STOPS.bandage).name;
   if (k === 'surg') return (SURGERIES[id] || SURGERIES.surg_simple).name;
+  if (k === 'repair') return (REPAIRS[id] || REPAIRS.repair_b).name;
   return '医疗包';
 }
 function careColor(key) {
@@ -4701,6 +4834,7 @@ function careColor(key) {
   if (k === 'med') return (MEDKITS[id] || MEDKITS[STARTER_MEDKIT]).color;
   if (k === 'stop') return (STOPS[id] || STOPS.bandage).color;
   if (k === 'surg') return (SURGERIES[id] || SURGERIES.surg_simple).color;
+  if (k === 'repair') return (REPAIRS[id] || REPAIRS.repair_b).color;
   return '#8fffc4';
 }
 /* 身上还带着的全部治疗物品，按「医疗包 → 止血 → 手术包」的顺序 */
@@ -4709,6 +4843,7 @@ function careOwnedKeys() {
   for (const id of MEDKIT_ORDER) if (medCount(id) > 0) out.push(careKeyMake('med', id));
   for (const id of STOP_ORDER) if (stopCount(id) > 0) out.push(careKeyMake('stop', id));
   for (const id of SURG_ORDER) if (surgUses(id) > 0) out.push(careKeyMake('surg', id));
+  for (const id of REPAIR_ORDER) if (repairCount(id) > 0) out.push(careKeyMake('repair', id));
   return out;
 }
 /* 「上次那种」：选择盘默认高亮谁、以及在没法自动判断时兜底用 */
@@ -4756,7 +4891,21 @@ function careAutoPick() {
     for (const id of SURG_ORDER) if (surgUses(id) > 0) return careKeyMake('surg', id);
   }
 
-  /* ④ 回血：先接着烧已经拆开的那支（拆封就归你了，不烧完等于扔钱），
+  /* ④ 修甲：甲还穿着、耐久缺了 5 点以上、身上带着修得动它的甲修包 ——
+     挑「够得着这支甲、点数又最省」的先用（剩得最少的优先烧） */
+  if (P.armorLv > 0 && P.armorMax - P.armorHp > 5) {
+    const kits = usableCellList().filter(r => r.cell.t === 'repair' && REPAIRS[r.cell.id].capLv >= P.armorLv && r.cell.left > 0.5);
+    if (kits.length) {
+      kits.sort((a, b) => {
+        const ra = a.cell.left / REPAIRS[a.cell.id].dur, rb = b.cell.left / REPAIRS[b.cell.id].dur;
+        if (Math.abs(ra - rb) > 1e-6) return ra - rb;                 // 先烧用得最多的那份
+        return REPAIRS[a.cell.id].capLv - REPAIRS[b.cell.id].capLv;   // 同样新鲜就先用小号的，大号留给大甲
+      });
+      return careKeyMake('repair', kits[0].cell.id);
+    }
+  }
+
+  /* ⑤ 回血：先接着烧已经拆开的那支（拆封就归你了，不烧完等于扔钱），
      多支半的先烧剩得最少的；都是满的才去拆新的 —— 优先上次那种，否则第一支有货的 */
   if (P.hp < P.maxHp - 0.01) {
     const last = P.carePick;
@@ -4778,7 +4927,9 @@ function careAutoPick() {
 
 /* 四步都走不通时该说什么 */
 function careIdleMsg() {
-  if (P.hp >= P.maxHp - 0.01) return '状态正常 · 没有要处理的伤';
+  const armorNeed = P.armorLv > 0 && P.armorMax - P.armorHp > 5;
+  if (P.hp >= P.maxHp - 0.01 && !armorNeed) return '状态正常 · 没有要处理的伤';
+  if (P.hp >= P.maxHp - 0.01) return '身上带着甲修包就能修甲 · 没有修得动这件的';
   return '没有能用的治疗物品了 · 回大厅补给';
 }
 
@@ -5300,6 +5451,7 @@ function startCare(key) {
   if (P.medCd > 0.05) { uiToast('手还没收回来 · ' + P.medCd.toFixed(1) + 's 后再起手', 'small'); return false; }
   if (k === 'stop') return startStopBleed(careIdOf(key));
   if (k === 'surg') return startSurgery(careIdOf(key));
+  if (k === 'repair') return startArmorRepair(careIdOf(key));
   return startMedHeal(careIdOf(key));
 }
 
@@ -5379,6 +5531,36 @@ function startSurgery(id) {
 
   popup(P.x, P.y - 34, S.name + ' · ' + t.label, S.color, 13);
   Sfx.tone(380, 0.1, 0.05, 'sine', 560);
+  return true;
+}
+
+/* 甲修包：读条完把护甲耐久敲回去 —— 点数消耗 = 恢复的耐久，上限损失 = 恢复 ÷ 维修效率 */
+function startArmorRepair(id) {
+  if (!P.alive) return false;
+  const key = REPAIRS[id] ? id : REPAIR_ORDER[0];
+  const R = REPAIRS[key];
+  if (repairCount(key) <= 0) { uiToast(R.name + ' 用完了 · 整备界面带一份出门', 'small warn'); return false; }
+  if (P.armorLv <= 0) { uiToast('身上没穿甲 · 修什么', 'small'); P.medCd = 0.4; return false; }
+  const missing = P.armorMax - P.armorHp;
+  if (missing <= 0.5) { uiToast('护甲完好 · 不用修', 'small'); P.medCd = 0.4; return false; }
+  if (P.armorLv > R.capLv) {
+    uiToast(ARMORS[P.armorLv].name + '（' + P.armorLv + ' 级）超出修护上限 · 需要 ' + (P.armorLv >= 6 ? '红甲修' : ['','蓝','蓝','蓝','紫','金','红'][P.armorLv] + '甲修以上'), 'small warn');
+    P.medCd = 0.4;
+    return false;
+  }
+  if (careBusy()) return false;
+
+  const restore = Math.min(repairLeftOf(key), missing);
+  P.medOn = careKeyMake('repair', key);
+  P.medKind = 'repair';
+  P.carePick = P.medOn;
+  P.medCd = 0.3;
+  P.medWind = careWindSec(R.wind);
+  P.medWindT = P.medWind;
+  P.medHealW = restore;              // 计划恢复量（结算时按剩余重算）
+
+  popup(P.x, P.y - 34, R.name + ' · 敲甲 ' + Math.round(restore) + ' 点', R.color, 13);
+  Sfx.tone(360, 0.1, 0.05, 'square', 520);
   return true;
 }
 
@@ -5525,6 +5707,36 @@ function updateMedHeal(dt) {
       }
       Sfx.heal();
       if (stopCount(id) <= 0) uiToast(S.name + ' 用完了', 'small warn');
+      P.medOn = null;
+      P.medCd = Math.max(P.medCd, 0.5);
+      backToGun();
+      return;
+    }
+
+    /* 甲修包：读条完结算 —— 恢复多少耐久耗多少点数，上限按维修效率掉 */
+    if (kind === 'repair') {
+      const R = REPAIRS[id] || REPAIRS.repair_b;
+      const s = repairUnit(id);
+      if (!s || s.left <= 0.01) { uiToast(R.name + ' 用完了', 'small warn'); P.medOn = null; backToGun(); return; }
+      if (P.armorLv <= 0) { uiToast('身上没穿甲', 'small'); P.medOn = null; backToGun(); return; }
+      const missing = P.armorMax - P.armorHp;
+      if (missing <= 0.5) { uiToast('护甲完好', 'small'); P.medOn = null; backToGun(); return; }
+      const A = ARMORS[P.armorLv];
+      /* 「修满但不溢出」：恢复 R 点耐久的同时上限掉 R/eff ——
+         要刚好填满而不把上限压到耐久以下，解 R = 缺口 × eff/(eff+1)。
+         甲修点数不够就按点数修，剩下的缺口留着下次。 */
+      const fillCap = missing * A.eff / (A.eff + 1);
+      const restore = Math.min(s.left, fillCap);
+      if (restore <= 0.5) { uiToast('修不动了', 'small'); P.medOn = null; backToGun(); return; }
+      s.left = Math.max(0, s.left - restore);
+      if (s.left <= 0.01) consumeRepairUnit(id);          // 点数烧完的空格清出来
+      const maxLoss = restore / A.eff;
+      P.armorHp += restore;
+      P.armorMax = Math.max(1, P.armorMax - maxLoss);
+      popup(P.x, P.y - 46, '修甲 +' + Math.round(restore) + ' · 上限 -' + Math.round(maxLoss), R.color, 14);
+      popup(P.x, P.y - 64, ARMORS[P.armorLv].short + ' 耐久 ' + Math.round(P.armorHp) + '/' + Math.round(P.armorMax), armorLvColor(P.armorLv), 12);
+      Sfx.heal();
+      if (repairCount(id) <= 0) uiToast(R.name + ' 用完了', 'small warn');
       P.medOn = null;
       P.medCd = Math.max(P.medCd, 0.5);
       backToGun();
@@ -5905,9 +6117,31 @@ function playerLethal() {
   return false;
 }
 
-function damagePlayer(amount, srcX, srcY, inv) {
+/* 护甲磨光：防护当场清零，全图都能看见你这块板子碎了 */
+function armorBreak() {
+  P.armorHp = 0;
+  P.armorDR = 0;
+  popup(P.x, P.y - 54, '护 甲 击 穿', '#ff6b81', 15);
+  burst(P.x, P.y, 14, { color: ['#8fd8f2', '#ffffff', '#ff8fa3'], life: 0.5, r: 3.5, spdMin: 80, spdMax: 320, glow: true });
+  Sfx.noiseBurst(0.25, 900, 1.4, 0.2);
+}
+
+function damagePlayer(amount, srcX, srcY, inv, pen) {
   if (P.invuln > 0 || !P.alive) return;
-  let dmg = amount * (1 - P.armorDR);
+  let dmg = amount;
+  /* 护甲：有耐久才生效 ——
+     带弹级的伤害（子弹）走弹级对照表：同级弹减半、低两级全挡、高两级全穿；挡下的部分磨甲；
+     没弹级的伤害（爆炸 / 近战 / 火 / 冻）吃固定减免。甲磨光了（armorHp 0）两条路都失效。 */
+  if (P.armorLv > 0 && P.armorHp > 0) {
+    if (typeof pen === 'number' && pen > 0) {
+      const ratio = penRatio(pen, P.armorLv);
+      dmg *= ratio;
+      P.armorHp = Math.max(0, P.armorHp - amount * (ratio > 0 ? 0.25 : 0.5));
+      if (P.armorHp <= 0) armorBreak();
+    } else {
+      dmg *= (1 - P.armorDR);
+    }
+  }
   if (P.painT > 0) dmg *= 1 - PAIN_DR;      // 止痛剂压着，挨打没那么疼
   rollTrauma(dmg, 'bullet');                // 掷创伤：流血 / 贯穿伤 / 骨折
   P.hp -= dmg;
@@ -6066,6 +6300,8 @@ function spawnEnemy(type, atX, atY, fac) {
   const addLv = sec ? (isTop() ? TOP.armorAdd : (SECRET.armorAdd || 0)) : 0;
   const rawLv = baseLv > 0 ? baseLv + addLv : baseLv;
   const armorLv = Math.min(rawLv, SECRET.armorLvCap || 6);
+  /* 子弹弹级：普通按类型表，机密 +1、绝密 +2（封顶 6）—— 高难图的枪才啃得动高级甲 */
+  const pen = Math.min(6, (T.pen || 0) + (sec ? (isTop() ? (TOP.penAdd || 2) : (SECRET.penAdd || 1)) : 0));
   const armorHp = Math.round(armorLv * 48 * ((sec && rawLv > armorLv) ? (SECRET.armorOverCapHp || 1) : 1));
   let x = atX, y = atY, nest = null;
 
@@ -6242,7 +6478,7 @@ function enemyShootAt(e, a, speed, dmg, r, color) {
     vx: Math.cos(a) * speed,
     vy: Math.sin(a) * speed,
     r: r || 4.0, dmg: dmg, color: color || '#ff5c7a',
-    life: 2.2, hostile: true, pierce: 0, knock: 0,
+    life: 2.2, hostile: true, pierce: 0, knock: 0, pen: e.pen || 0,
     side: e.faction || 'asara', src: e,      // 阵营归属：混战里同阵营不会误伤
   });
   burst(mx, my, 3, {
@@ -6294,7 +6530,7 @@ function enemyGatFire(e, sees, gatTab) {
     vx: Math.cos(a) * GAT.spd,
     vy: Math.sin(a) * GAT.spd,
     r: 4.6, dmg: GAT.dmg * (e.dmgMul || 1), color: '#ffb03a',
-    life: 1.8, hostile: true, pierce: 0, knock: 0,
+    life: 1.8, hostile: true, pierce: 0, knock: 0, pen: e.pen || 0,
   });
 
   burst(mx, my, 2, {
@@ -6321,7 +6557,7 @@ function sniperFire(e) {
     x: mx, y: my, px: mx, py: my,
     vx: Math.cos(a) * SN.spd, vy: Math.sin(a) * SN.spd,
     r: 3.2, dmg: SN.dmg * (e.dmgMul || 1), color: '#8ff6ff',
-    life: 1.3, hostile: true, pierce: 0, knock: 0, tracer: 74,
+    life: 1.3, hostile: true, pierce: 0, knock: 0, tracer: 74, pen: e.pen || 0,
   });
 
   // 枪口焰 + 一道空气被撕裂的细线
@@ -6354,7 +6590,7 @@ function directorSniperFire(e) {
     x: mx, y: my, px: mx, py: my,
     vx: Math.cos(a) * SN.spd, vy: Math.sin(a) * SN.spd,
     r: 4.2, dmg: SN.dmg * (e.dmgMul || 1), color: '#ffd66b',
-    life: 1.5, hostile: true, pierce: 0, knock: 40, tracer: 110,
+    life: 1.5, hostile: true, pierce: 0, knock: 40, tracer: 110, pen: e.pen || 0,
   });
 
   burst(mx, my, 9, {
@@ -8298,7 +8534,7 @@ function frostSprayHit(e, S) {
   if (Math.abs(angleDiff(Math.atan2(dy, dx), e.aim)) > S.arc) return;
   if (!losClear(e.x, e.y, P.x, P.y)) return;
 
-  let dmg = S.dmg * (e.dmgMul || 1) * (1 - P.armorDR);
+  let dmg = S.dmg * (e.dmgMul || 1) * (1 - armDr());
   if (P.painT > 0) dmg *= 1 - PAIN_DR;
   P.hp -= dmg;
   P.hurtFlash = Math.max(P.hurtFlash, 0.4);
@@ -9703,7 +9939,7 @@ function updateBullets(dt) {
 
       if (b.hostile) {
         if (P.alive && dist2(b.x, b.y, P.x, P.y) < (P.r + b.r) * (P.r + b.r)) {
-          damagePlayer(b.dmg, b.x, b.y, b.heavy ? 0.34 : 0);
+          damagePlayer(b.dmg, b.x, b.y, b.heavy ? 0.34 : 0, b.pen);
           burst(b.x, b.y, 6, { color: ['#ff4060', '#ffffff'], life: 0.3, r: 3, spdMin: 50, spdMax: 200, glow: true });
           G.bullets.splice(i, 1); removed = true; break;
         }
@@ -9927,7 +10163,7 @@ function bossHmgFire(e, sees) {
     vx: Math.cos(a) * H.spd,
     vy: Math.sin(a) * H.spd,
     r: 5.2, dmg: H.dmg * (e.dmgMul || 1), color: '#ffab4a',
-    life: 1.5, hostile: true, pierce: 0, knock: 0, heavy: true,
+    life: 1.5, hostile: true, pierce: 0, knock: 0, heavy: true, pen: e.pen || 0,
   });
 
   // 枪口焰
@@ -10073,7 +10309,7 @@ function updateFires(dt) {
 /* 火场伤害不吃受伤无敌帧，单独结算 */
 function burnPlayer(dmg, srcX, srcY) {
   if (!P.alive || !P.hp) return;
-  P.hp -= dmg * (1 - P.armorDR * 0.6);
+  P.hp -= dmg * (1 - armDr() * 0.6);
   rollTrauma(dmg, 'burn');                // 烧穿皮肤也会挂流血
   P.hurtFlash = Math.max(P.hurtFlash, 0.6);
   if (srcX !== undefined) {
@@ -11749,8 +11985,8 @@ function drawPlayer() {
   ctx.lineWidth = 2;
   ctx.stroke();
 
-  if (P.armorDR > 0) {
-    ctx.strokeStyle = 'rgba(120,200,255,' + (0.35 + P.armorDR * 0.7) + ')';
+  if (armDr() > 0) {
+    ctx.strokeStyle = 'rgba(120,200,255,' + (0.35 + armDr() * 0.7) + ')';
     ctx.lineWidth = 2.5;
     ctx.beginPath(); ctx.arc(0, 0, P.r + 4, 0, TAU); ctx.stroke();
   }
@@ -14395,18 +14631,18 @@ function drawHUD() {
   ctx.fillText(Math.ceil(P.hp) + ' / ' + P.maxHp, hpX + hpW - 6, hpY + 11);
   ctx.textAlign = 'left';
 
-  // 护甲
-  if (P.armorDR > 0) {
+  // 护甲：等级 + 耐久条（磨光就整条消失 —— 裸奔没有假安全感）
+  if (P.armorLv > 0 && P.armorHp > 0) {
     const ay = hpY + 20, aw = 150;
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
     drawRoundRect(hpX, ay, aw, 5, 2);
     ctx.fill();
-    ctx.fillStyle = 'rgba(120,200,255,0.85)';
-    drawRoundRect(hpX, ay, aw * (P.armorDR / 0.5), 5, 2);
+    ctx.fillStyle = armorLvColor(P.armorLv);
+    drawRoundRect(hpX, ay, aw * clamp(P.armorHp / Math.max(1, P.armorMax), 0, 1), 5, 2);
     ctx.fill();
     ctx.fillStyle = '#5f9fc4';
     ctx.font = '600 9px ' + mono;
-    ctx.fillText('ARMOR -' + Math.round(P.armorDR * 100) + '%', hpX + aw + 10, ay + 6);
+    ctx.fillText(P.armorLv + ' 级甲 · ' + Math.ceil(P.armorHp) + '/' + P.armorMax, hpX + aw + 10, ay + 6);
   }
 
   /* 体力条：常驻 —— 能不能跑全看这一条 */
@@ -15976,7 +16212,7 @@ function refreshLobby() {
 
   if (!SAVE.loadout) SAVE.loadout = { primary: null, secondary: null, pistol: null };
   if (!SAVE.worn) SAVE.worn = { rig: null, pack: null };
-  if (!SAVE.armorStash) SAVE.armorStash = { 1: 0, 2: 0, 3: 0 };
+  if (!Array.isArray(SAVE.armorPieces)) SAVE.armorPieces = [];
   /* 槽位消毒：枪被丢掉 / 卖掉之后，槽位上的指针要清掉 */
   for (const sl of GUN_SLOTS) {
     const id = SAVE.loadout[sl];
@@ -15985,7 +16221,7 @@ function refreshLobby() {
   if (SAVE.equippedMelee && !(SAVE.ownedMelee && SAVE.ownedMelee[SAVE.equippedMelee])) SAVE.equippedMelee = STARTER_MELEE;
 
   const LO = SAVE.loadout;
-  const armor = ARMORS[SAVE.wornArmor] || ARMORS[0];
+  const armor = (SAVE.wornPiece && ARMORS[SAVE.wornPiece.lv]) || ARMORS[0];
   const melee = MELEES[SAVE.equippedMelee] || MELEES[STARTER_MELEE];
 
   /* 出击装备摘要：改配装进「整备」界面（左装备 · 右仓库） */
@@ -16002,7 +16238,8 @@ function refreshLobby() {
   eqRow('副武器', LO.secondary ? weaponName(WEAPONS[LO.secondary]) : '空槽', LO.secondary ? caliberOf(LO.secondary).short : '', !LO.secondary);
   eqRow('手枪', LO.pistol ? weaponName(WEAPONS[LO.pistol]) : '空槽', LO.pistol ? caliberOf(LO.pistol).short : '', !LO.pistol);
   eqRow('近战', melee.name, '静音保底', false);
-  eqRow('护甲', armor.dr > 0 ? armor.name : '没穿', armor.dr > 0 ? ('减伤 ' + Math.round(armor.dr * 100) + '%') : '裸奔最快', !(armor.dr > 0));
+  eqRow('护甲', armor.dr > 0 ? armor.name : '没穿',
+    armor.dr > 0 ? (armor.lv + ' 级甲 · 耐久 ' + Math.round(SAVE.wornPiece.hp) + '/' + SAVE.wornPiece.max) : '裸奔最快', !(armor.dr > 0));
   eqRow('弹挂', SAVE.worn.rig ? GEAR[SAVE.worn.rig].name : '没穿', rigCap() + ' 格', !SAVE.worn.rig);
   eqRow('背包', SAVE.worn.pack ? GEAR[SAVE.worn.pack].name : '没穿', packCap() + ' 格', !SAVE.worn.pack);
   const medN = saveMedTotal(), stopN = saveStopTotal(), surgN = saveSurgTotal();
@@ -16912,18 +17149,20 @@ function refreshShop() {
   }
 
   if (shopTab === 'armor') {
+    /* 护甲：六件套，每件有自己的甲级 / 耐久 / 维修效率 —— 买的是「一件」实体 */
     for (const a of ARMORS) {
       if (a.id === 0) continue;
-      const have = (SAVE.armorStash && SAVE.armorStash[a.id]) | 0;
+      const have = (SAVE.armorPieces || []).filter(p => p.lv === a.lv).length;
       const canAfford = SAVE.credits >= a.price;
 
       const el = document.createElement('div');
       el.className = 'item' + (have > 0 ? ' owned' : '');
       el.innerHTML =
-        '<div class="top"><span class="nm">' + a.name + '</span>' +
-        (have > 0 ? '<span class="tag own">仓库 ×' + have + '</span>' : '<span class="tag">护甲</span>') + '</div>' +
+        '<div class="top"><span class="nm" style="color:' + armorLvColor(a.lv) + '">' + a.name + '</span>' +
+        (have > 0 ? '<span class="tag own">仓库 ×' + have + '</span>' : '<span class="tag">' + a.lv + ' 级甲</span>') + '</div>' +
         '<div class="ds">' + a.desc + '</div>' +
-        '<div class="bars">' + bar('防护', a.dr / 0.5) + '</div>' +
+        '<div class="bars">' + bar('耐久', a.hp / 300) + '</div>' +
+        '<div class="ds" style="color:#6fb0cf">耐久 ' + a.hp + ' · 爆炸/近战减免 ' + Math.round(a.dr * 100) + '% · 维修效率 ' + a.effName + '（' + Math.round(a.eff * 100) + '%）</div>' +
         '<div class="buyrow">' +
           '<span class="price"><i>¥</i>' + fmtMoney(a.price) + '</span>' +
           '<button class="buybtn"' + (!canAfford ? ' disabled' : '') + '>' +
@@ -16931,6 +17170,29 @@ function refreshShop() {
         '</div>';
 
       el.querySelector('.buybtn').addEventListener('click', () => buyArmor(a.id));
+      grid.appendChild(el);
+    }
+    /* 甲修包：跟医疗包一样的耐久消耗品 —— 蓝修 1-3 级 / 紫 1-4 / 金 1-5 / 红全甲 */
+    for (const id of REPAIR_ORDER) {
+      const R = REPAIRS[id];
+      const s = (SAVE.repairs && SAVE.repairs[id]) || { n: 0, left: 0 };
+      const held = (s.n | 0) + ((Number(s.left) || 0) > 0.01 ? 1 : 0);
+      const canAfford = SAVE.credits >= R.price;
+
+      const el = document.createElement('div');
+      el.className = 'item';
+      el.innerHTML =
+        '<div class="top"><span class="nm" style="color:' + R.color + '">' + R.name + '</span>' +
+        '<span class="tag">持有 ×' + held + '</span></div>' +
+        '<div class="ds">' + R.desc + '</div>' +
+        '<div class="ds" style="color:#6fb0cf">' + R.dur + ' 点 · 可修 ' + R.capLv + ' 级及以下 · 读条 ' + R.wind + 's · 整备/局内按 5 长按选用</div>' +
+        '<div class="buyrow">' +
+          '<span class="price"><i>¥</i>' + fmtMoney(R.price) + '</span>' +
+          '<button class="buybtn"' + (!canAfford ? ' disabled' : '') + '>' +
+          (canAfford ? '购买' : '资金不足') + '</button>' +
+        '</div>';
+
+      el.querySelector('.buybtn').addEventListener('click', () => buyRepair(id));
       grid.appendChild(el);
     }
   } else {
@@ -17096,12 +17358,25 @@ function buyArmor(id) {
   const a = ARMORS[id];
   if (!a || a.id === 0 || SAVE.credits < a.price) return;
   SAVE.credits -= a.price;
-  if (!SAVE.armorStash) SAVE.armorStash = { 1: 0, 2: 0, 3: 0 };
-  SAVE.armorStash[id] = Math.min(9, (SAVE.armorStash[id] | 0) + 1);
+  if (!SAVE.armorPieces) SAVE.armorPieces = [];
+  SAVE.armorPieces.push({ lv: a.lv, hp: a.hp, max: a.hp });
   saveGame();
   Sfx.init(); Sfx.resume(); Sfx.pickup();
   refreshShop();
   uiToast('已购入 ' + a.name + ' · 进仓库 · 整备界面穿上', 'small');
+}
+
+/* 买一份甲修包：进仓库（未拆封），整备界面抓进格子、局内按 5 用 */
+function buyRepair(id) {
+  const R = REPAIRS[id];
+  if (!R || SAVE.credits < R.price) return;
+  SAVE.credits -= R.price;
+  const s = SAVE.repairs[id] || (SAVE.repairs[id] = { n: 0, left: 0 });
+  s.n = Math.min(99, (s.n | 0) + 1);
+  saveGame();
+  Sfx.init(); Sfx.resume(); Sfx.pickup();
+  refreshShop();
+  uiToast('已购入 ' + R.name + ' · 进仓库 · 整备界面装进弹挂/背包', 'small');
 }
 
 /* 买一支医疗包：进背包（未开封），顺便帮第一次买的人把它设成默认 */
@@ -17207,6 +17482,7 @@ const LO_UI = { held: null };
 function cellIcon(c) {
   if (!c) return '';
   if (c.t === 'med') return '✚';
+  if (c.t === 'repair') return '⚒';
   if (c.t === 'stop') return '✦';
   if (c.t === 'surg') return '⚕';
   if (c.t === 'ammo') return '▣';
@@ -17221,6 +17497,7 @@ function cellIcon(c) {
 function cellName(c) {
   if (!c) return '';
   if (c.t === 'med') return (MEDKITS[c.id] || MEDKITS[STARTER_MEDKIT]).short;
+  if (c.t === 'repair') return (REPAIRS[c.id] || REPAIRS.repair_b).short;
   if (c.t === 'stop') return (STOPS[c.id] || STOPS.bandage).short;
   if (c.t === 'surg') return (SURGERIES[c.id] || SURGERIES.surg_simple).short;
   if (c.t === 'ammo') return CALIBERS[c.cal].short;
@@ -17238,6 +17515,11 @@ function cellSub(c) {
     const M = MEDKITS[c.id];
     const l = Math.round(c.left);
     return (l >= M.dur - 0.5) ? ('耐久 ' + M.dur) : ('剩 ' + l + '/' + M.dur);
+  }
+  if (c.t === 'repair') {
+    const R = REPAIRS[c.id];
+    const l = Math.round(c.left);
+    return (l >= R.dur - 0.5) ? (R.dur + ' 点 · 修' + R.capLv + '级甲') : ('剩 ' + l + '/' + R.dur);
   }
   if (c.t === 'stop') return '一次性';
   if (c.t === 'surg') return '剩 ' + (c.uses | 0) + '/' + SURGERIES[c.id].uses + ' 次';
@@ -17264,6 +17546,7 @@ function cellSub(c) {
 function cellColor(c) {
   if (!c) return '#8fd8f2';
   if (c.t === 'med') return (MEDKITS[c.id] || MEDKITS[STARTER_MEDKIT]).color;
+  if (c.t === 'repair') return (REPAIRS[c.id] || REPAIRS.repair_b).color;
   if (c.t === 'stop') return (STOPS[c.id] || STOPS.bandage).color;
   if (c.t === 'surg') return (SURGERIES[c.id] || SURGERIES.surg_simple).color;
   if (c.t === 'ammo') return ammoTier(c.lv == null ? 1 : c.lv).color;
@@ -17280,17 +17563,27 @@ function cellColor(c) {
    本来就记在所有权里，扔掉手上指针就行。 */
 function heldToStock(h) {
   if (!h) return;
-  if (h.t === 'med' || h.t === 'stop' || h.t === 'surg' || h.t === 'ammo') { cellToStock(h); return; }
+  if (h.t === 'med' || h.t === 'stop' || h.t === 'surg' || h.t === 'ammo' || h.t === 'repair') { cellToStock(h); return; }
   if (h.t === 'armor') {
-    if (!SAVE.armorStash) SAVE.armorStash = { 1: 0, 2: 0, 3: 0 };
-    SAVE.armorStash[h.id] = Math.min(9, ((SAVE.armorStash[h.id] | 0) + 1));
+    if (!Array.isArray(SAVE.armorPieces)) SAVE.armorPieces = [];
+    if (h.piece) SAVE.armorPieces.push(h.piece);          // 连耐久一起放回仓库
   }
 }
 
 /* 格子 → 仓库（真还）。用剩的耐久 / 次数 / 发数都留着。 */
 function cellToStock(c) {
   if (!c) return;
-  if (c.t === 'med') {
+  if (c.t === 'repair') {
+    const M = REPAIRS[c.id];
+    const s = SAVE.repairs[c.id] || (SAVE.repairs[c.id] = { n: 0, left: 0 });
+    if (c.left >= M.dur - 0.5) s.n = Math.min(99, (s.n | 0) + 1);
+    else if ((Number(s.left) || 0) <= 0.01) s.left = Math.max(0, c.left);
+    else {
+      const total = (Number(s.left) || 0) + Math.max(0, c.left);
+      s.n = Math.min(99, (s.n | 0) + Math.floor(total / M.dur));
+      s.left = total % M.dur;
+    }
+  } else if (c.t === 'med') {
     const M = MEDKITS[c.id];
     const s = SAVE.meds[c.id] || (SAVE.meds[c.id] = { n: 0, left: 0 });
     if (c.left >= M.dur - 0.5) s.n = Math.min(99, (s.n | 0) + 1);
@@ -17316,6 +17609,17 @@ function cellToStock(c) {
 }
 /* 仓库 → 手上：拿一件出来（真扣）。返回格子对象。 */
 function stockTakeCell(kind, id) {
+  if (kind === 'repair') {
+    const s = SAVE.repairs[id] || { n: 0, left: 0 };
+    if ((Number(s.left) || 0) > 0.01) {
+      const c = { t: 'repair', id, left: s.left };
+      s.left = 0;
+      return c;
+    }
+    if ((s.n | 0) <= 0) return null;
+    s.n--;
+    return { t: 'repair', id, left: REPAIRS[id].dur };
+  }
   if (kind === 'med') {
     const s = SAVE.meds[id] || { n: 0, left: 0 };
     if ((Number(s.left) || 0) > 0.01) {
@@ -17515,7 +17819,8 @@ function openLoadout() {
   trimCarryToCap();
   if (!SAVE.loadout) SAVE.loadout = { primary: null, secondary: null, pistol: null };
   if (!SAVE.worn) SAVE.worn = { rig: null, pack: null };
-  if (!SAVE.armorStash) SAVE.armorStash = { 1: 0, 2: 0, 3: 0 };
+  if (!Array.isArray(SAVE.armorPieces)) SAVE.armorPieces = [];
+  if (!SAVE.repairs) SAVE.repairs = {};
   /* 拖拽状态全部清零：上次丢 pointerup 卡死的「手持」不能带进新开的界面 */
   if (LO_DRAG.pending) { clearTimeout(LO_DRAG.timer); LO_DRAG.pending = null; }
   LO_DRAG.active = false;
@@ -17544,7 +17849,7 @@ const LO_SLOTS = [
   { id: 'loSlotMelee',     kind: 'melee',  cn: '近战',  ico: '†',
     get: () => SAVE.equippedMelee,     set: v => { SAVE.equippedMelee = v; } },
   { id: 'loSlotArmor',     kind: 'armor',  cn: '护甲',  ico: '⛨',
-    get: () => SAVE.wornArmor || null, set: v => { SAVE.wornArmor = v | 0; } },
+    get: () => SAVE.wornPiece,         set: v => { SAVE.wornPiece = v; } },
   { id: 'loSlotRig',       kind: 'rig',    cn: '弹挂',  ico: '▤',
     get: () => SAVE.worn.rig,          set: v => { SAVE.worn.rig = v; } },
   { id: 'loSlotPack',      kind: 'pack',   cn: '背包',  ico: '▩',
@@ -17566,13 +17871,10 @@ function loPlaceToSlot(slot) {
     if (h.t !== 'melee') { uiToast('这里放近战武器', 'small warn'); return true; }
     slot.set(h.id);
   } else if (slot.kind === 'armor') {
-    if (h.t !== 'armor') { uiToast('这里放护甲', 'small warn'); return true; }
+    if (h.t !== 'armor' || !h.piece) { uiToast('这里放护甲', 'small warn'); return true; }
     /* 换甲：身上那件先回仓库，再穿手上这件（拿的时候已经从仓库真扣） */
-    if (SAVE.wornArmor > 0) {
-      if (!SAVE.armorStash) SAVE.armorStash = { 1: 0, 2: 0, 3: 0 };
-      SAVE.armorStash[SAVE.wornArmor] = Math.min(9, ((SAVE.armorStash[SAVE.wornArmor] | 0) + 1));
-    }
-    slot.set(h.id);
+    if (SAVE.wornPiece) SAVE.armorPieces.push(SAVE.wornPiece);
+    slot.set(h.piece);
   } else {                                   // 弹挂 / 背包：换着穿，格子容量立刻变
     if (h.t !== 'gear') { uiToast('这里放' + (slot.kind === 'rig' ? '弹挂' : '背包'), 'small warn'); return true; }
     const g = GEAR[h.key];
@@ -17593,7 +17895,7 @@ function loTakeFromSlot(slot) {
   let revert;
   if (slot.kind === 'long' || slot.kind === 'pistol') { slot.set(null); loSetHeld({ t: 'gun', id: v }); revert = () => { if (LO_UI.held && LO_UI.held.t === 'gun') { slot.set(LO_UI.held.id); loSetHeld(null); } }; }
   else if (slot.kind === 'melee') { slot.set(null); loSetHeld({ t: 'melee', id: v }); revert = () => { if (LO_UI.held && LO_UI.held.t === 'melee') { slot.set(LO_UI.held.id); loSetHeld(null); } }; }
-  else if (slot.kind === 'armor') { slot.set(0); loSetHeld({ t: 'armor', id: v }); revert = () => { if (LO_UI.held && LO_UI.held.t === 'armor') { slot.set(LO_UI.held.id); loSetHeld(null); } }; }
+  else if (slot.kind === 'armor') { slot.set(null); loSetHeld({ t: 'armor', id: v.lv, piece: v }); revert = () => { if (LO_UI.held && LO_UI.held.t === 'armor') { slot.set(LO_UI.held.piece); loSetHeld(null); } }; }
   else { slot.set(null); trimCarryToCap(); loSetHeld({ t: 'gear', key: v }); revert = () => { if (LO_UI.held && LO_UI.held.t === 'gear') { slot.set(LO_UI.held.key); loSetHeld(null); trimCarryToCap(); } }; }
   Sfx.tone(500, 0.05, 0.04, 'square');
   return revert;
@@ -17623,8 +17925,9 @@ function renderLoSlot(slot) {
     } else { nm = '近战 · 空'; sub = '空手也保底一把匕首'; }
   } else if (slot.kind === 'armor') {
     if (v) {
-      const A = ARMORS[v];
-      ic = '⛨'; nm = A.name; sub = A.dr > 0 ? ('减伤 ' + Math.round(A.dr * 100) + '% · 负重 ' + A.load) : '无防护'; color = '#8fd8f2';
+      const A = ARMORS[v.lv];
+      ic = '⛨'; nm = A.name; color = armorLvColor(v.lv);
+      sub = A.lv + ' 级甲 · 耐久 ' + Math.round(v.hp) + '/' + v.max + ' · 负重 ' + A.load + (v.hp <= 0 ? ' · 已击穿！' : '');
     } else { nm = '护甲 · 没穿'; sub = '裸奔 · 走得最快'; }
   } else {
     if (v) {
@@ -17708,20 +18011,31 @@ function renderLoStock() {
      身上穿的那件也在列表里：先脱下来再拿，不然会出现幻影副本。
      数量为 0 且没穿的直接不显示 —— 只看自己有的东西 */
   sect('护 甲');
-  for (let t = 1; t <= 3; t++) {
-    const A = ARMORS[t];
-    const have = (SAVE.armorStash && SAVE.armorStash[t]) | 0;
-    const worn = SAVE.wornArmor === t;
-    if (have <= 0 && !worn) continue;
+  /* 仓库件：一件一行 —— 每件有自己的耐久，磨了/修了都记在件上 */
+  for (let i = SAVE.armorPieces.length - 1; i >= 0; i--) {
+    const pc = SAVE.armorPieces[i];
+    const A = ARMORS[pc.lv];
     row({
-      nm: A.name, color: '#8fd8f2',
-      sub: '减伤 ' + Math.round(A.dr * 100) + '% · 负重 ' + A.load + ' · 阵亡丢身上这件',
-      ct: worn ? ('已穿' + (have > 0 ? ' · 库存×' + have : '')) : '×' + have,
-      off: have <= 0 && !worn,
+      nm: A.name, color: armorLvColor(pc.lv),
+      sub: A.lv + ' 级甲 · 耐久 ' + Math.round(pc.hp) + '/' + pc.max + ' · 维修效率 ' + A.effName + ' · 阵亡丢身上这件',
+      ct: '在库 ×1',
       pick: () => {
-        if (SAVE.wornArmor === t) SAVE.wornArmor = 0;          // 脱下身上这件，不再扣仓库
-        else SAVE.armorStash[t] = Math.max(0, have - 1);
-        loSetHeld({ t: 'armor', id: t });
+        SAVE.armorPieces.splice(i, 1);
+        loSetHeld({ t: 'armor', id: pc.lv, piece: pc });
+      },
+    });
+  }
+  /* 身上穿的这件：单独一行，脱下来再穿别的 */
+  if (SAVE.wornPiece) {
+    const pc = SAVE.wornPiece;
+    const A = ARMORS[pc.lv];
+    row({
+      nm: A.name + '（已穿）', color: armorLvColor(pc.lv),
+      sub: A.lv + ' 级甲 · 耐久 ' + Math.round(pc.hp) + '/' + pc.max + ' · 维修效率 ' + A.effName,
+      ct: '已穿',
+      pick: () => {
+        SAVE.wornPiece = null;                                 // 脱下：手里拿着
+        loSetHeld({ t: 'armor', id: pc.lv, piece: pc });
       },
     });
   }
@@ -17807,6 +18121,19 @@ function renderLoStock() {
       nm: S.short, color: S.color, sub: S.uses + ' 次 · ' + S.sec + 's',
       ct: have + ' 次', off: have <= 0,
       pick: () => { const c = stockTakeCell('surg', id); if (c) loSetHeld(c); },
+    });
+  }
+  /* 甲修包：修护甲的消耗品，跟医疗包一样抓进格子带出门 */
+  for (const id of REPAIR_ORDER) {
+    const R = REPAIRS[id];
+    const ss = SAVE.repairs[id] || { n: 0, left: 0 };
+    const have = (ss.n | 0) + ((Number(ss.left) || 0) > 0.01 ? 1 : 0);
+    if (have <= 0) continue;
+    row({
+      nm: R.short, color: R.color,
+      sub: R.dur + ' 点 · 修 ' + R.capLv + ' 级及以下 · 读条 ' + R.wind + 's',
+      ct: '×' + have,
+      pick: () => { const c = stockTakeCell('repair', id); if (c) loSetHeld(c); },
     });
   }
 
@@ -17953,6 +18280,11 @@ function autoRestock() {
     for (let k = 0; k < (s.n | 0); k++) fillOrder.push({ kind: 'med', id });
   }
   for (const id of SURG_ORDER) fillOrder.push({ kind: 'surg', id, n: ((SAVE.surgs[id] && SAVE.surgs[id].uses) | 0) });
+  for (const id of REPAIR_ORDER) {
+    const ss = SAVE.repairs[id] || { n: 0 };
+    for (let k = 0; k < (ss.n | 0); k++) fillOrder.push({ kind: 'repair', id });
+    if ((Number(ss.left) || 0) > 0.01) fillOrder.push({ kind: 'repair', id });
+  }
   const zones = [C.rig, C.pocket, C.pack];
   for (const it of fillOrder) {
     for (let k = 0; k < (it.n == null ? 1 : it.n); k++) {
@@ -17963,6 +18295,7 @@ function autoRestock() {
         let c = null;
         if (it.kind === 'stop') c = stockTakeCell('stop', it.id);
         else if (it.kind === 'med') c = stockTakeCell('med', it.id);
+        else if (it.kind === 'repair') c = stockTakeCell('repair', it.id);
         else c = stockTakeCell('surg', it.id);
         if (c) { arr[slot] = c; did++; placed = true; }
         break;
@@ -18460,6 +18793,9 @@ function endRaid(success) {
     }
     SAVE.equippedMelee = P.melee;
     if (P.melee) SAVE.ownedMelee[P.melee] = true;
+    /* 身上这件护甲带着局内磨掉/修回的耐久原样回仓库档：撤离才算是你的 */
+    if (P.armorLv > 0) SAVE.wornPiece = { lv: P.armorLv, hp: Math.round(P.armorHp), max: Math.max(1, Math.round(P.armorMax)) };
+
     /* 随身容器原样带回：用剩的耐久 / 次数 / 发数都留在格子里，下次出击接着带 */
     SAVE.carry = {
       rig: P.rig.map(c => c ? Object.assign({}, c) : null),
@@ -18513,7 +18849,7 @@ function endRaid(success) {
       }
     }
     const lostWeapon = lostNames.length ? lostNames.join(' · ') : null;
-    const lostArmor = SAVE.wornArmor > 0 ? ARMORS[SAVE.wornArmor].name : null;
+    const lostArmor = SAVE.wornPiece ? ARMORS[SAVE.wornPiece.lv].name : null;
 
     /* 身上穿的弹挂 / 背包也一起丢：除了近战武器，身上带的一件不留 */
     const lostGear = [];
@@ -18527,7 +18863,7 @@ function endRaid(success) {
     const lostN = relicCount();
     const foundN = foundModIds().length;
 
-    SAVE.wornArmor = 0;    // 身上穿的这件护甲没了 —— 仓库里囤的还在
+    SAVE.wornPiece = null;  // 身上穿的这件护甲没了 —— 仓库里囤的还在
     /* 身上带的东西全丢：弹挂、口袋、背包清空（当初装格时就从仓库扣掉了，
        现在格子里剩多少就丢多少 —— 这就是"撤离才算是你的"的代价） */
     const lostCarry = carryCellTotal();
