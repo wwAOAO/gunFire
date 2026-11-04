@@ -6440,6 +6440,10 @@ function markEnemy(e, t) {
 }
 
 /* 手持模式的每帧：右键边沿、左键动作、引信计时 */
+/* 左键这一下被技能吃掉了：把按住状态一并吞掉，
+   不然「按下即发射 + 收技能」的出口会让还按着的左键漏给枪（下一帧全自动直接开火）。 */
+function swallowClick() { mouse.down = false; mouse.pressed = false; }
+
 function updateModeInput(dt) {
   const M = P.op && P.op.mode;
   if (!M) return;
@@ -6455,6 +6459,7 @@ function updateModeInput(dt) {
         const idx = G.loiters.indexOf(m);
         if (idx >= 0) G.loiters.splice(idx, 1);
       }
+      swallowClick();                // 这一击是引爆，别让按住的左键漏给枪
       exitMode(true);
       return;
     }
@@ -6487,17 +6492,17 @@ function updateModeInput(dt) {
       M.fuse = SKILL.frag.fuse;
       Sfx.tone(1200, 0.05, 0.03, 'square', 900);
     } else if (M.id === 'firebomb') {
-      firebombThrow(false); consumeOp('g'); exitMode(); return;
+      swallowClick(); firebombThrow(false); consumeOp('g'); exitMode(); return;
     } else if (M.id === 'shockbow') {
-      fireArrow('arc', M.bounce); consumeOp('v'); exitMode(); return;
+      swallowClick(); fireArrow('arc', M.bounce); consumeOp('v'); exitMode(); return;
     } else if (M.id === 'scanbow') {
-      fireArrow('scan', false); consumeOp('x'); exitMode(); return;
+      swallowClick(); fireArrow('scan', false); consumeOp('x'); exitMode(); return;
     } else if (M.id === 'coverdev') {
       /* 放不下就不扣储备、也不收起装置 —— 换个地方再来 */
-      if (placeCover(M.vert)) { consumeOp('v'); exitMode(); }
+      if (placeCover(M.vert)) { swallowClick(); consumeOp('v'); exitMode(); }
       return;
     } else if (M.id === 'healgun') {
-      fireHealDart(); exitMode(); return;   // 一针一按：打完就收，再用重按 X
+      swallowClick(); fireHealDart(); exitMode(); return;   // 一针一按：打完就收，再用重按 X
     } else if (M.id === 'gl') {
       /* 三发共用一个落点：按下那一刻锁定准星位置，之后动鼠标不会把弹撒出去 */
       const S = P.op.v;
@@ -6508,9 +6513,11 @@ function updateModeInput(dt) {
       consumeOp('v');
       kineticKick();
       popup(P.x, P.y - 46, '三 头 犬', '#ffd66b', 12);
-      exitMode();                       // 一组一按：打完就收，想再放重按 V
+      swallowClick();                   // 一组一按：打完就收，想再放重按 V
+      exitMode();
       return;
     } else if (M.id === 'loiter') {
+      swallowClick();
       fireLoiter(mouse.right);
       if (!mouse.right) exitMode();
       return;
