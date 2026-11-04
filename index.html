@@ -2126,8 +2126,9 @@ const SKILL = {
   /* 电击箭矢：射出后落地成 5 米电圈，持续电击 + 减速（骨折）；可反弹一次 */
   arc: { speed: 780, range: 30 * 18, zoneR: 5 * 18, zoneLife: 4.2, tick: 0.42,
          dmg: 9, cripple: 3.5, bounce: 1, healSlow: 5 },
-  /* 侦察箭矢：飞 200 米，沿途 9 米内敌人全部标记 */
-  scan: { speed: 1150, range: 200 * 18, mark: 9, scanR: 9 * 18, hitR: 26 },
+  /* 侦察箭矢：穿墙飞 200 米，沿途 9 米内敌人全部标记；
+     落地开出 10 米「侦察视野」8 秒 —— 无遮挡判定，隔墙整片亮 */
+  scan: { speed: 1150, range: 200 * 18, mark: 9, scanR: 9 * 18, hitR: 26, ping: 8, pingR: 10 * 18 },
 
   /* ── 蜂医（支援）── */
   /* 蜂巢烟：15 秒，被激素枪打中转化成 60 秒绿色治疗场 */
@@ -2219,7 +2220,7 @@ const OPERATORS = {
     },
     x: {
       name: '侦察箭矢', short: '侦察箭', tag: '大招', kind: 'scanbow',
-      desc: '按 X 张弓，左键射出侦察箭：以 1150 速度飞满 200 米（穿人而过），沿途 9 米内的敌人全部被标记 9 秒 —— 标记期间隔着迷雾、隔着墙都能看见他的位置。储备 1 支，CD 75 秒。',
+      desc: '按 X 张弓，左键射出侦察箭：无视地形穿墙飞满 200 米（穿人而过），沿途 9 米内的敌人全部被标记 9 秒 —— 标记期间隔着迷雾、隔着墙都能看见他的位置。落地后炸开一圈雷达：以落点为中心开出 10 米「侦察视野」持续 8 秒，无遮挡判定（墙后也整片亮），视野里的敌人全部标记、直接可见。储备 1 支，CD 75 秒。',
       cd: 75, charges: 1,
     },
     passive: {
@@ -3064,6 +3065,7 @@ const G = {
   frags: [],        // 露娜的破片手雷（引信在飞 / 在手上烧）
   arrows: [],       // 露娜的电击箭 / 侦察箭
   ezones: [],       // 电击箭落地的电圈
+  scanPings: [],    // 侦察箭落地的侦察视野（无遮挡开雾）
   healFields: [],   // 蜂医染出来的绿色治疗场
   drones: [],       // 蜂医的烟幕无人机
   covers: [],       // 乌鲁鲁的速凝掩体（同时挂在 obstacles 里挡人挡弹）
@@ -6650,6 +6652,21 @@ function arrowLand(a) {
     Sfx.tone(1800, 0.22, 0.05, 'sawtooth', 400);
     shake(5);
     popup(a.x, a.y - 26, '电 圈', '#8ef2b0', 12);
+  } else if (a.kind === 'scan') {
+    /* 侦察箭落地：开出无遮挡的侦察视野 + 圈内敌人全部标记（隔墙隔雾都算） */
+    const S = SKILL.scan;
+    G.scanPings.push({ x: a.x, y: a.y, r: S.pingR, t: S.ping, max: S.ping, seed: rand(0, 100) });
+    let n = 0;
+    for (const e of G.enemies) {
+      if (!e.alive) continue;
+      if (dist2(a.x, a.y, e.x, e.y) < S.pingR * S.pingR) { markEnemy(e, S.mark); n++; }
+    }
+    burst(a.x, a.y, 18, {
+      color: ['#ffffff', '#9ef7c8', '#5fe0b0'], life: 0.55, r: 3.6, spdMin: 40, spdMax: 240, glow: true,
+    });
+    Sfx.tone(1500, 0.18, 0.05, 'sine', 700);
+    Sfx.tone(2100, 0.3, 0.04, 'sine', 900);
+    popup(a.x, a.y - 26, n > 0 ? '侦 察 区 域 · ' + n + ' 个目标' : '侦 察 区 域', '#9ef7c8', 12);
   } else {
     burst(a.x, a.y, 14, {
       color: ['#ffffff', '#9ef7c8', '#5fe0b0'], life: 0.45, r: 3.4, spdMin: 40, spdMax: 200, glow: true,
@@ -6733,14 +6750,15 @@ function updateArrows(dt) {
     const step = Math.hypot(a.vx, a.vy) * dt;
     const n = Math.max(1, Math.ceil(step / 10));
     let stop = false;
+    const through = a.kind === 'scan';           // 侦察箭无视地形：穿墙飞满全程
     for (let k = 0; k < n; k++) {
       const dtt = dt / n;
       let nx = a.x + a.vx * dtt;
       let ny = a.y + a.vy * dtt;
-      if (nx < 10 || nx > WORLD.w - 10) { if (a.bounce > 0) { a.bounce--; a.bounces++; nx = clamp(nx, 10, WORLD.w - 10); a.vx *= -0.9; } else stop = true; }
-      if (ny < 10 || ny > WORLD.h - 10) { if (a.bounce > 0) { a.bounce--; a.bounces++; ny = clamp(ny, 10, WORLD.h - 10); a.vy *= -0.9; } else stop = true; }
-      if (!stop && pointInObstacle(nx, a.y)) { if (a.bounce > 0) { a.bounce--; a.bounces++; nx = a.x; a.vx *= -0.9; } else stop = true; }
-      if (!stop && pointInObstacle(a.x, ny)) { if (a.bounce > 0) { a.bounce--; a.bounces++; ny = a.y; a.vy *= -0.9; } else stop = true; }
+      if (nx < 10 || nx > WORLD.w - 10) { if (!through && a.bounce > 0) { a.bounce--; a.bounces++; nx = clamp(nx, 10, WORLD.w - 10); a.vx *= -0.9; } else stop = true; }
+      if (ny < 10 || ny > WORLD.h - 10) { if (!through && a.bounce > 0) { a.bounce--; a.bounces++; ny = clamp(ny, 10, WORLD.h - 10); a.vy *= -0.9; } else stop = true; }
+      if (!stop && !through && pointInObstacle(nx, a.y)) { if (a.bounce > 0) { a.bounce--; a.bounces++; nx = a.x; a.vx *= -0.9; } else stop = true; }
+      if (!stop && !through && pointInObstacle(a.x, ny)) { if (a.bounce > 0) { a.bounce--; a.bounces++; ny = a.y; a.vy *= -0.9; } else stop = true; }
       if (stop) break;
       a.x = nx; a.y = ny;
     }
@@ -6794,6 +6812,17 @@ function updateEZones(dt) {
       P.chill = Math.max(P.chill, 0.4);
     }
   }
+}
+
+/* ── 侦察视野：倒数到期，清空时通知迷雾强制刷一次 ── */
+function updateScanPings(dt) {
+  let n = G.scanPings.length;
+  for (let i = n - 1; i >= 0; i--) {
+    const sp = G.scanPings[i];
+    sp.t -= dt;
+    if (sp.t <= 0) G.scanPings.splice(i, 1);
+  }
+  if (G.scanPings.length !== n) FOG.pingN = -1;   // 数量变了，让 updateFog 强制重算
 }
 
 /* ── 蜂医 G：蜂巢烟（可被激素枪染成治疗场） ── */
@@ -11641,6 +11670,36 @@ function drawArrows() {
   }
 }
 
+/* ── 侦察视野：扫描线转圈的开雾区域（迷雾本身已经淡了，这里画边界和扫描线） ── */
+function drawScanPings() {
+  for (const sp of G.scanPings) {
+    const k = clamp(sp.t / sp.max, 0, 1);
+    const a = Math.min(1, k * 3);
+    /* 边界虚线圈 */
+    ctx.strokeStyle = 'rgba(150,255,200,' + (0.5 * a) + ')';
+    ctx.lineWidth = 1.6;
+    ctx.setLineDash([10, 8]);
+    ctx.lineDashOffset = -G.time * 30;
+    ctx.beginPath(); ctx.arc(sp.x, sp.y, sp.r, 0, TAU); ctx.stroke();
+    ctx.setLineDash([]);
+    /* 雷达扫描线 */
+    const ang = G.time * 1.6 + sp.seed;
+    const g = ctx.createLinearGradient(sp.x, sp.y, sp.x + Math.cos(ang) * sp.r, sp.y + Math.sin(ang) * sp.r);
+    g.addColorStop(0, 'rgba(150,255,200,' + (0.55 * a) + ')');
+    g.addColorStop(1, 'rgba(150,255,200,0)');
+    ctx.strokeStyle = g;
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(sp.x, sp.y);
+    ctx.lineTo(sp.x + Math.cos(ang) * sp.r, sp.y + Math.sin(ang) * sp.r); ctx.stroke();
+    /* 即将到期：整体往回缩 */
+    if (k < 0.25) {
+      ctx.strokeStyle = 'rgba(150,255,200,' + (0.3 * a) + ')';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(sp.x, sp.y, sp.r * (k / 0.25), 0, TAU); ctx.stroke();
+    }
+  }
+}
+
 /* ── 电圈：会电人的绿环 ── */
 function drawEZones() {
   for (const z of G.ezones) {
@@ -13739,6 +13798,7 @@ function update(dt) {
   updateFrags(dt);
   updateArrows(dt);
   updateEZones(dt);
+  updateScanPings(dt);
   updateHealFields(dt);
   updateDrones(dt);
   updateCovers(dt);
@@ -13883,13 +13943,16 @@ function updateFog(dt) {
   const moved = mdx * mdx + mdy * mdy > 900;   // 位移超过 30px 立刻刷新，避免冲刺时视野掉队
   const turned = Math.abs(angleDiff(P.aim, FOG.lastAim || 0)) > 0.03;  // 转身立刻刷新
   const adsChanged = Math.abs((P.ads || 0) - (FOG.lastAds || 0)) > 0.02;   // 开镜/收镜也要重算
+  const pingN = G.scanPings ? G.scanPings.length : 0;
+  const pingChanged = pingN !== (FOG.pingN | 0);   // 侦察视野开了/到期：强制重算一次
   FOG.timer -= dt;
-  if (FOG.timer > 0 && !moved && !turned && !adsChanged) return;
+  if (FOG.timer > 0 && !moved && !turned && !adsChanged && !pingChanged) return;
   FOG.timer = 0.04;
   FOG.lastX = P.x;
   FOG.lastY = P.y;
   FOG.lastAim = P.aim;
   FOG.lastAds = P.ads || 0;
+  FOG.pingN = pingN;
 
   const cols = FOG.cols, rows = FOG.rows, cell = FOG.cell;
   const vis = FOG.vis, seen = FOG.seen, block = FOG.block;
@@ -13944,6 +14007,25 @@ function updateFog(dt) {
     }
   }
 
+  // 侦察箭的侦察视野：无遮挡判定（无视地形），落点周围整片点亮
+  if (!FOG.ping) FOG.ping = new Uint8Array(vis.length);
+  FOG.ping.fill(0);
+  for (const sp of G.scanPings) {
+    const sc = (sp.x / cell) | 0, sr = (sp.y / cell) | 0;
+    const nc = Math.ceil(sp.r / cell);
+    for (let r = sr - nc; r <= sr + nc; r++) {
+      if (r < 0 || r >= rows) continue;
+      for (let k = sc - nc; k <= sc + nc; k++) {
+        if (k < 0 || k >= cols) continue;
+        const dx = (k + 0.5) * cell - sp.x, dy = (r + 0.5) * cell - sp.y;
+        if (dx * dx + dy * dy > sp.r * sp.r) continue;
+        const idx = r * cols + k;
+        FOG.ping[idx] = 1;
+        seen[idx] = 1;
+      }
+    }
+  }
+
   paintFog();
 }
 
@@ -13965,7 +14047,9 @@ function paintFog() {
     for (let c = 0; c < cols; c++) {
       const i = rowBase + c;
       let a;
-      if (vis[i]) {
+      if (FOG.ping && FOG.ping[i]) {
+        a = 0.17;                          // 侦察视野：隔着雾能看清，但不完全透亮
+      } else if (vis[i]) {
         const wx = (c + 0.5) * cell - px;
         const dist = Math.sqrt(wx * wx + wy2);
         let k = (dist - inner) / (outer - inner);
@@ -14018,10 +14102,20 @@ function drawMarkedOverlays() {
 }
 
 /* 某个世界坐标当前是否处在玩家视野内（必须同时在正面视锥里） */
+/* 某个坐标是否在侦察箭开出的侦察视野里（无遮挡判定 = 无视地形） */
+function scanPingAt(x, y) {
+  for (const sp of G.scanPings) {
+    const dx = x - sp.x, dy = y - sp.y;
+    if (dx * dx + dy * dy <= sp.r * sp.r) return true;
+  }
+  return false;
+}
+
 function fogVisibleAt(x, y) {
   if (!FOG.ready) return true;
   const ci = (x / FOG.cell) | 0, ri = (y / FOG.cell) | 0;
   if (ci < 0 || ri < 0 || ci >= FOG.cols || ri >= FOG.rows) return false;
+  if (scanPingAt(x, y)) return true;               // 侦察视野里：隔墙隔雾都算看见
   if (FOG.vis[ri * FOG.cols + ci] !== 1) return false;
   const dx = x - P.x, dy = y - P.y;
   const d2 = dx * dx + dy * dy;
@@ -14106,6 +14200,7 @@ function render() {
   drawFrosts();
   drawFires();
   drawEZones();
+  drawScanPings();
   drawHealFields();
   drawVisionCones();
   drawObstacles();
@@ -16374,6 +16469,7 @@ function startRaid() {
   G.frags = [];
   G.arrows = [];
   G.ezones = [];
+  G.scanPings = [];
   G.healFields = [];
   G.drones = [];
   G.covers = [];
