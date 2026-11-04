@@ -1,14 +1,1 @@
-# 项目工具数据（本地记忆/日志）
-.workbuddy/
-
-# 临时调试产物
-.tmpm/
-.tmpc/
-.tmps/
-.tmpv/
-*.log
-
-# 系统文件
-.DS_Store
-Thumbs.db
-desktop.ini
+node_modules/
