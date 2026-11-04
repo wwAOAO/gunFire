@@ -443,8 +443,12 @@
     border-left:2px dashed rgba(255,110,110,.45);
     background:linear-gradient(90deg, rgba(120,20,30,0) 0%, rgba(120,20,30,.16) 100%);
     color:#ff8f9c; font-size:13px; font-weight:800; letter-spacing:.2em;
-    writing-mode:vertical-rl; text-orientation:upright; pointer-events:none;
+    writing-mode:vertical-rl; text-orientation:upright;
+    /* 必须能被指针命中：elementFromPoint 命中不到它，拖到这儿就等于扔在空处回原位。
+       非拖拽时靠 .hidden 整块 display:none，不会挡面板点击。 */
+    pointer-events:auto;
   }
+  #pkDropZone.hidden { display:none; }
   #pkDropZone.on {
     border-left-color:#ff5f6d;
     background:linear-gradient(90deg, rgba(120,20,30,0) 0%, rgba(150,30,40,.32) 100%);
@@ -2441,6 +2445,15 @@ function ammoCellCap(cal, owned) {
   }
   return Math.max(20, mag * 2);
 }
+/* 局内算弹格上限用「仓库里拥有的枪 ∪ 这一局带进来的枪」。
+   只认 P.owned（仅本局携带）的话，没带这个口径的枪上限就被压到 20，
+   跟背包里已有的 60 发格子对不上，堆叠永远合不拢。 */
+function ownedMapLive() {
+  const out = {};
+  if (typeof SAVE !== 'undefined' && SAVE.owned) Object.assign(out, SAVE.owned);
+  if (typeof P !== 'undefined' && P.owned) Object.assign(out, P.owned);
+  return out;
+}
 function emptyCells(n) { const a = []; for (let i = 0; i < n; i++) a.push(null); return a; }
 function emptyCarry() { return { rig: emptyCells(rigCap()), pocket: emptyCells(pocketCap()), pack: emptyCells(packCap()) }; }
 
@@ -4259,7 +4272,7 @@ function addReserve(cal, n, lv) {
   if (lv == null || !calHasTier(cal, lv)) lv = ammoPickOf(cal);
   let left = Math.max(0, Math.round(n));
   if (left <= 0) return 0;
-  const cap = ammoCellCap(cal, P.owned);
+  const cap = ammoCellCap(cal, ownedMapLive());
   for (const arr of allCarryZones()) {
     for (const c of arr) {
       if (c && c.t === 'ammo' && c.cal === cal && c.lv === lv && c.n < cap) {
@@ -17786,7 +17799,7 @@ function pkPlaceInto(arr, i, zone) {
     return;
   }
   if (!c) { arr[i] = held; PK_UI.held = null; }
-  else if (stackInto(held, c, P.owned)) {           // 同弹药合并（补满为止，剩余留在手上）
+  else if (stackInto(held, c, ownedMapLive())) {    // 同弹药合并（补满为止，剩余留在手上）
     if ((held.n | 0) <= 0) PK_UI.held = null;
   } else {                                          // 交换：原来的那件换到手上
     arr[i] = held;
@@ -17836,27 +17849,28 @@ function renderPackPanel() {
         '<span class="nm">' + WEAPONS[id].short + '</span>' +
         '<span class="sub">' + caliberOf(id).short + ' · ' + WEAPONS[id].mag + ' 发</span>'
       : '<span class="sub">' + (sd ? sd.cn : sl) + '</span>';
-    pkPressable(el,
-      () => {                                     // 拿起：从槽里取下
-        if (!P.slots || !P.slots[sl]) return null;
-        const gid = P.slots[sl];
-        P.slots[sl] = null;
-        PK_UI.held = { t: 'gun', id: gid };
-        Sfx.tone(500, 0.05, 0.04, 'square');
-        return () => {                            // 取消：还回槽里
-          if (!P.slots[sl]) { P.slots[sl] = PK_UI.held.id; PK_UI.held = null; }
-        };
-      },
-      () => {                                     // 放置：装上（原来的枪换到手上）
-        if (!PK_UI.held || PK_UI.held.t !== 'gun') {
-          uiToast('只有枪能装进武器槽', 'small warn');
-          return;
-        }
-        const prev = P.slots[sl];
-        P.slots[sl] = PK_UI.held.id;
-        PK_UI.held = prev ? { t: 'gun', id: prev } : null;
-        Sfx.tone(620, 0.05, 0.04, 'square');
-      });
+    const pickSlot = () => {                      // 拿起：从槽里取下
+      if (!P.slots || !P.slots[sl]) return null;
+      const gid = P.slots[sl];
+      P.slots[sl] = null;
+      PK_UI.held = { t: 'gun', id: gid };
+      Sfx.tone(500, 0.05, 0.04, 'square');
+      return () => {                              // 取消：还回槽里
+        if (!P.slots[sl]) { P.slots[sl] = PK_UI.held.id; PK_UI.held = null; }
+      };
+    };
+    const placeSlot = () => {                     // 放置：装上（原来的枪换到手上）
+      if (!PK_UI.held || PK_UI.held.t !== 'gun') {
+        uiToast('只有枪能装进武器槽', 'small warn');
+        return;
+      }
+      const prev = P.slots[sl];
+      P.slots[sl] = PK_UI.held.id;
+      PK_UI.held = prev ? { t: 'gun', id: prev } : null;
+      Sfx.tone(620, 0.05, 0.04, 'square');
+    };
+    el.__pkPlace = placeSlot;                     // 拖拽落点用「目标格」自己的放置回调
+    pkPressable(el, pickSlot, placeSlot);
     gunGrid.appendChild(el);
   }
 
@@ -17875,18 +17889,19 @@ function renderPackPanel() {
           '<span class="sub">' + cellSub(c) + '</span>';
       } else el.innerHTML = '<span class="sub">空</span>';
 
-      pkPressable(el,
-        () => {                                   // 拿起
-          if (!c) return null;
-          const picked = c;
-          arr[i] = null;
-          PK_UI.held = picked;
-          Sfx.tone(500, 0.05, 0.04, 'square');
-          return () => {                         // 取消：原格还空着就放回去
-            if (!arr[i]) { arr[i] = PK_UI.held; PK_UI.held = null; }
-          };
-        },
-        () => pkPlaceInto(arr, i, zone));        // 放置 / 交换 / 合并
+      const pickCell = () => {                    // 拿起
+        if (!c) return null;
+        const picked = c;
+        arr[i] = null;
+        PK_UI.held = picked;
+        Sfx.tone(500, 0.05, 0.04, 'square');
+        return () => {                            // 取消：原格还空着就放回去
+          if (!arr[i]) { arr[i] = PK_UI.held; PK_UI.held = null; }
+        };
+      };
+      const placeCell = () => pkPlaceInto(arr, i, zone);   // 放置 / 交换 / 合并
+      el.__pkPlace = placeCell;                   // 拖拽落在哪格就用哪格的回调
+      pkPressable(el, pickCell, placeCell);
       grid.appendChild(el);
     });
   }
@@ -17923,6 +17938,7 @@ function pkDragBegin(p) {
   PK_DRAG.place = p.place || null;
   document.body.classList.add('lo-grabbing');
   $('pkDropZone').classList.remove('hidden');
+  pkMoveChip(PK_DRAG.sx, PK_DRAG.sy);             // 拿起来就贴个浮标，别等第一下移动
 }
 
 function pkMoveChip(x, y) {
@@ -17973,14 +17989,18 @@ function pkFinishDrag(target) {
     if (PK_UI.held) {
       if (target && target.kind === 'drop') {
         dropHeldToGround();
-      } else if (target && target.kind === 'cell' && PK_DRAG.place) {
-        PK_DRAG.place();
+      } else if (target && target.kind === 'cell') {
+        /* 关键：用落点格子自己的放置回调，不是拿起时那格的 ——
+           否则拖到哪儿都算「放回原处」，手感就是「根本拖不动」。 */
+        const put = (target.el && target.el.__pkPlace) || PK_DRAG.place;
+        if (put) put();
       }
     }
   } finally {
     if (PK_UI.held) {                              // 没放出去：回原位
       if (PK_DRAG.revert) PK_DRAG.revert();
-      else if (!stowCell(PK_UI.held)) dropHeldToGround();
+      else if (stowCell(PK_UI.held)) PK_UI.held = null;   // 塞进去了就要松手，否则会复制一件
+      else dropHeldToGround();
     }
     PK_DRAG.pending = null;
     PK_DRAG.revert = null;
@@ -18014,7 +18034,10 @@ if (typeof document !== 'undefined' && !window.__pkDragWired) {
       if (PK_UI.held) {                             // 手上有东西：点到哪儿放到哪儿
         const t = pkDropTargetAt(e.clientX, e.clientY);
         if (t.kind === 'drop') { dropHeldToGround(); renderPackPanel(); }
-        else if (t.kind === 'cell' && p.place) { PK_DRAG.place = p.place; PK_DRAG.revert = null; PK_DRAG.active = true; pkFinishDrag(t); }
+        else if (t.kind === 'cell' && t.el && t.el.__pkPlace) {
+          PK_DRAG.place = t.el.__pkPlace;
+          PK_DRAG.revert = null; PK_DRAG.active = true; pkFinishDrag(t);
+        }
         else renderPackPanel();                     // 空处：保持手持（原有点击手感）
       } else {
         p.pick();                                   // 点一下 = 拿起
