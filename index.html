@@ -751,6 +751,7 @@
       <button class="tab on" data-tab="weapon">武 器</button>
       <button class="tab" data-tab="melee">近 战</button>
       <button class="tab" data-tab="armor">护 甲</button>
+      <button class="tab" data-tab="gear">携 行</button>
       <button class="tab" data-tab="ammo">弹 药</button>
       <button class="tab" data-tab="supply">补 给</button>
     </div>
@@ -2357,16 +2358,47 @@ function exoOn() { return !!(P.op && P.op.x && P.op.x.on); }
 
 /* 携行装备：弹挂 / 背包是仓库里的实体物品 —— 买一次永久拥有（SAVE.gearOwned 记账），
    但要在大厅整备界面「穿上」才生效（SAVE.worn 记当前穿的是哪件）。穿上之前：
-   没有弹挂 = 弹挂 0 格（备弹没地方放），没有背包 = 背包 0 格。口袋是衣服自带的，永远 4 格。 */
+   没有弹挂 = 弹挂 0 格（备弹没地方放），没有背包 = 背包 0 格。口袋是衣服自带的，永远 4 格。
+   品质：白(基础) → 绿 → 蓝 → 紫 → 金 → 红，颜色沿用弹药档位色板。 */
 const GEAR = {
-  rig_basic:   { name: '基础弹挂', kind: 'rig',  cap: 8,  price: 400,
+  /* ── 弹挂（白 = 基础款）── */
+  rig_basic:   { name: '基础弹挂', kind: 'rig',  cap: 8,  price: 400,  q: '白', color: '#dfe9f2',
                  desc: '八格胸挂，快捷可用：按 5 打药、R 换弹都从这儿读。不穿弹挂就装不了备弹。' },
-  rig_ext:     { name: '扩展弹挂', kind: 'rig',  cap: 12, price: 900,
+  rig_ext:     { name: '扩展弹挂', kind: 'rig',  cap: 12, price: 900,  q: '白', color: '#dfe9f2',
                  desc: '十二格加厚胸挂。多四格就是多四条命，或者四份备弹。' },
-  pack_assault:{ name: '突击背包', kind: 'pack', cap: 4,  price: 600,
+  rig_light:   { name: '轻型弹挂', kind: 'rig',  cap: 13, price: 1400, q: '绿', color: '#63d68a',
+                 desc: '十三格轻量化胸挂。比基础款多五格，几乎感觉不到重量。' },
+  rig_tactic:  { name: '战术弹挂', kind: 'rig',  cap: 16, price: 2800, q: '蓝', color: '#4fa8ff',
+                 desc: '十六格战术背心，快拆扣具。老练干员的标准配置。' },
+  rig_elite:   { name: '精英弹挂', kind: 'rig',  cap: 17, price: 4400, q: '紫', color: '#b782ff',
+                 desc: '十七格精英载具。阿萨拉军官同款，缝线里还带着历史。' },
+  rig_storm:   { name: '突击弹挂', kind: 'rig',  cap: 20, price: 6000, q: '紫', color: '#b782ff',
+                 desc: '二十格突击载具。为长时间渗透设计，一格都不能空着回来。' },
+  rig_havk:    { name: '哈夫克制式弹挂', kind: 'rig', cap: 24, price: 9800, q: '金', color: '#ffcc4d',
+                 desc: '二十四格哈夫克军用制式。航天基地军工的巅峰货，黑市抢破头。' },
+  /* ── 背包（白 = 基础款）── */
+  pack_assault:{ name: '突击背包', kind: 'pack', cap: 4,  price: 600,  q: '白', color: '#dfe9f2',
                  desc: '四格突击包。搜刮的药和器械先塞背包，Tab 随时倒进弹挂。' },
-  pack_large:  { name: '大型背包', kind: 'pack', cap: 8,  price: 1500,
+  pack_large:  { name: '大型背包', kind: 'pack', cap: 8,  price: 1500, q: '白', color: '#dfe9f2',
                  desc: '八格大包。搬家式的搜刮选手用它，一趟顶两趟。' },
+  pack_hike:   { name: '徒步背包', kind: 'pack', cap: 12, price: 1800, q: '绿', color: '#63d68a',
+                 desc: '十二格徒步包。户外牌子，没想到会用在战场上。' },
+  pack_exp:    { name: '扩容背包', kind: 'pack', cap: 16, price: 2600, q: '绿', color: '#63d68a',
+                 desc: '十六格扩容包。主仓外挂了三个附仓，能塞的都塞。' },
+  pack_alpine: { name: '登山背包', kind: 'pack', cap: 18, price: 3800, q: '蓝', color: '#4fa8ff',
+                 desc: '十八格登山包。骨架承重，装满了也不勒肩膀。' },
+  pack_mil:    { name: '军用背包', kind: 'pack', cap: 20, price: 5000, q: '蓝', color: '#4fa8ff',
+                 desc: '二十格军用背囊。正规军标，防水耐磨。' },
+  pack_air:    { name: '空降背包', kind: 'pack', cap: 24, price: 7000, q: '紫', color: '#b782ff',
+                 desc: '二十四格空降包。从天上掉下来的那种货。' },
+  pack_delta:  { name: '特勤背包', kind: 'pack', cap: 25, price: 8400, q: '紫', color: '#b782ff',
+                 desc: '二十五格特勤包。特勤干员的搬家神器。' },
+  pack_logi:   { name: '哈夫克后勤背包', kind: 'pack', cap: 30, price: 12000, q: '金', color: '#ffcc4d',
+                 desc: '三十格哈夫克后勤背包。军需官看着它比看着自己孩子还亲。' },
+  pack_chixiao:{ name: '赤霄运输背包', kind: 'pack', cap: 40, price: 19000, q: '红', color: '#ff7a9c',
+                 desc: '四十格重载运输包。从阿萨拉重装单位上拆下来的，几乎没人背得空。' },
+  pack_director:{ name: '总监特供背包', kind: 'pack', cap: 50, price: 28000, q: '红', color: '#ff7a9c',
+                 desc: '五十格特供背包。传说安全总监的私人物品，装下一整个基地的物资。' },
 };
 
 /* ── 随身容器 ──
@@ -16513,6 +16545,34 @@ function refreshShop() {
     return;
   }
 
+  /* 携行装备：弹挂 / 背包单独一页 —— 品质从白到红，格数越高越贵 */
+  if (shopTab === 'gear') {
+    const kindName = k => k === 'rig' ? '弹挂' : '背包';
+    for (const key in GEAR) {
+      const s = GEAR[key];
+      const owned = !!(SAVE.gearOwned && SAVE.gearOwned[key]);
+      const canAfford = SAVE.credits >= s.price;
+
+      const el = document.createElement('div');
+      el.className = 'item' + (owned ? ' owned' : '');
+      el.innerHTML =
+        '<div class="top"><span class="nm" style="color:' + s.color + '">' + s.name + '</span>' +
+        (owned ? '<span class="tag own">已拥有</span>' : '<span class="tag" style="color:' + s.color + '">' + s.q + ' · ' + kindName(s.kind) + '</span>') + '</div>' +
+        '<div class="ds">' + s.desc + '</div>' +
+        '<div class="ds" style="color:#6fb0cf">' + kindName(s.kind) + ' · 穿上后 ' + s.cap + ' 格 · 整备界面穿 / 脱</div>' +
+        '<div class="bars">' + bar('容量', s.cap / 50) + '</div>' +
+        '<div class="buyrow">' +
+          '<span class="price"><i>¥</i>' + fmtMoney(s.price) + '</span>' +
+          '<button class="buybtn' + (owned ? ' owned' : '') + '"' + (owned || !canAfford ? ' disabled' : '') + '>' +
+          (owned ? '已拥有' : (canAfford ? '购买' : '资金不足')) + '</button>' +
+        '</div>';
+
+      if (!owned) el.querySelector('.buybtn').addEventListener('click', () => buyGear(key));
+      grid.appendChild(el);
+    }
+    return;
+  }
+
   if (shopTab === 'armor') {
     for (const a of ARMORS) {
       if (a.id === 0) continue;
@@ -16613,29 +16673,6 @@ function refreshShop() {
         '</div>';
 
       if (!full) el.querySelector('.buybtn').addEventListener('click', () => buySurg(id));
-      grid.appendChild(el);
-    }
-
-    /* 携行装备：弹挂 / 背包是实体物品 —— 买一次永久拥有，整备界面穿上才生效 */
-    for (const key in GEAR) {
-      const s = GEAR[key];
-      const owned = !!(SAVE.gearOwned && SAVE.gearOwned[key]);
-      const canAfford = SAVE.credits >= s.price;
-
-      const el = document.createElement('div');
-      el.className = 'item' + (owned ? ' owned' : '');
-      el.innerHTML =
-        '<div class="top"><span class="nm">' + s.name + '</span>' +
-        (owned ? '<span class="tag own">已拥有</span>' : '<span class="tag">' + (s.kind === 'rig' ? '弹挂' : '背包') + '</span>') + '</div>' +
-        '<div class="ds">' + s.desc + '</div>' +
-        '<div class="ds" style="color:#6fb0cf">' + (s.kind === 'rig' ? '弹挂' : '背包') + ' · 穿上后 ' + s.cap + ' 格 · 整备界面穿 / 脱</div>' +
-        '<div class="buyrow">' +
-          '<span class="price"><i>¥</i>' + fmtMoney(s.price) + '</span>' +
-          '<button class="buybtn' + (owned ? ' owned' : '') + '"' + (owned || !canAfford ? ' disabled' : '') + '>' +
-          (owned ? '已拥有' : (canAfford ? '购买' : '资金不足')) + '</button>' +
-        '</div>';
-
-      if (!owned) el.querySelector('.buybtn').addEventListener('click', () => buyGear(key));
       grid.appendChild(el);
     }
   }
@@ -17311,12 +17348,14 @@ function renderLoStock() {
   }
 
   /* 护甲：仓库里的实体件，穿上 = 从仓库拿出一件。
-     身上穿的那件也在列表里：先脱下来再拿，不然会出现幻影副本 */
+     身上穿的那件也在列表里：先脱下来再拿，不然会出现幻影副本。
+     数量为 0 且没穿的直接不显示 —— 只看自己有的东西 */
   sect('护 甲');
   for (let t = 1; t <= 3; t++) {
     const A = ARMORS[t];
     const have = (SAVE.armorStash && SAVE.armorStash[t]) | 0;
     const worn = SAVE.wornArmor === t;
+    if (have <= 0 && !worn) continue;
     row({
       nm: A.name, color: '#8fd8f2',
       sub: '减伤 ' + Math.round(A.dr * 100) + '% · 负重 ' + A.load + ' · 阵亡丢身上这件',
@@ -17339,8 +17378,8 @@ function renderLoStock() {
     const g = GEAR[key];
     const worn = SAVE.worn && SAVE.worn[g.kind] === key;
     row({
-      nm: g.name, color: '#ffb08a',
-      sub: (g.kind === 'rig' ? '弹挂 · 快捷可用 · ' : '背包 · Tab 倒腾 · ') + g.cap + ' 格',
+      nm: g.name, color: g.color || '#ffb08a',
+      sub: (g.q ? g.q + ' · ' : '') + (g.kind === 'rig' ? '弹挂 · 快捷可用 · ' : '背包 · Tab 倒腾 · ') + g.cap + ' 格',
       ct: worn ? '已穿' : g.cap + ' 格',
       pick: () => {
         if (SAVE.worn && SAVE.worn[g.kind] === key) {   // 穿着的这件：先脱下再拿
@@ -17354,13 +17393,14 @@ function renderLoStock() {
   if (!gearAny) {
     const el = document.createElement('div');
     el.className = 'lo-row off';
-    el.innerHTML = '<span class="nm">没买过携行装备</span><span class="sub">军火库「补给」页有弹挂和背包</span><span class="ct">—</span>';
+    el.innerHTML = '<span class="nm">没买过携行装备</span><span class="sub">军火库「携行」页有弹挂和背包</span><span class="ct">—</span>';
     stockEl.appendChild(el);
   }
 
   /* 弹药：每个口径每个弹级单独一行（1 级弹和 4 级弹分开放，想拿哪级拿哪级），
      拿取只从对应弹级扣（按选用弹级拿的那行会标「选用」）；
-     格上限 = 已有枪里最大弹匣×2，只能放弹挂 / 口袋 */
+     格上限 = 已有枪里最大弹匣×2，只能放弹挂 / 口袋。
+     数量为 0 的弹级不显示 —— 只看自己有的东西 */
   sect('弹 药');
   for (const cal of CAL_ORDER) {
     const C = CALIBERS[cal];
@@ -17368,21 +17408,23 @@ function renderLoStock() {
     for (const T of AMMO_TIERS) {
       if (!calHasTier(cal, T.lv)) continue;
       const have = ammoStock(cal, T.lv);
+      if (have <= 0) continue;
       const isPick = ammoPickOf(cal) === T.lv;
-      row({
-        nm: C.short, color: T.color,
-        sub: T.grade + ' · 格上限 ' + ammoCellCap(cal, SAVE.owned) + (isPick ? ' · 选用' : ''),
-        ct: have + ' 发', off: have <= 0 || !hasGun,
-        pick: () => { const c = stockTakeAmmo(cal, T.lv); if (c) loSetHeld(c); },
-      });
+    row({
+      nm: C.short, color: T.color,
+      sub: T.grade + ' · 格上限 ' + ammoCellCap(cal, SAVE.owned) + (isPick ? ' · 选用' : ''),
+      ct: have + ' 发', off: !hasGun,
+      pick: () => { const c = stockTakeAmmo(cal, T.lv); if (c) loSetHeld(c); },
+    });
     }
   }
 
-  /* 医疗 */
+  /* 医疗：数量为 0 的不显示 —— 只看自己有的东西 */
   sect('医 疗');
   for (const id of MEDKIT_ORDER) {
     const M = MEDKITS[id];
     const have = saveMedCount(id);
+    if (have <= 0) continue;
     row({
       nm: M.short, color: M.color, sub: M.dur + ' 耐久 · ' + M.hps + '/s',
       ct: '×' + have, off: have <= 0,
@@ -17392,6 +17434,7 @@ function renderLoStock() {
   for (const id of STOP_ORDER) {
     const S = STOPS[id];
     const have = (SAVE.stops[id] | 0);
+    if (have <= 0) continue;
     row({
       nm: S.short, color: S.color,
       sub: S.pain ? ('止痛 ' + S.pain + 's') : (S.layers > 1 ? '全止血' : '止 1 层'),
@@ -17402,6 +17445,7 @@ function renderLoStock() {
   for (const id of SURG_ORDER) {
     const S = SURGERIES[id];
     const have = ((SAVE.surgs[id] && SAVE.surgs[id].uses) | 0);
+    if (have <= 0) continue;
     row({
       nm: S.short, color: S.color, sub: S.uses + ' 次 · ' + S.sec + 's',
       ct: have + ' 次', off: have <= 0,
