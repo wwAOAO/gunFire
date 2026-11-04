@@ -428,7 +428,7 @@
   .lo-hint { font-size:11px; color:#3f5d72; margin-left:auto; letter-spacing:.04em; }
   .lo-holding { position:fixed; pointer-events:none; z-index:99; font-size:12px; font-weight:800;
     color:#ffd08a; background:rgba(8,16,24,.9); border:1px solid rgba(255,208,138,.5);
-    padding:4px 10px; border-radius:4px; transform:translate(12px,12px); }
+    padding:4px 10px; border-radius:4px; transform:translate(12px,12px); white-space:nowrap; }
   .stashempty {
     grid-column:1 / -1; padding:46px 20px; text-align:center;
     border:1px dashed rgba(80,140,185,.22); border-radius:4px;
@@ -784,9 +784,11 @@
         <div class="lo-stock" id="loStock"></div>
       </aside>
     </div>
-    <span id="loHeldChip" class="lo-holding hidden"></span>
   </div>
 </div>
+<!-- 手持提示必须在所有 overlay / .frame 之外：.frame 的 rise 动画会让它成为
+     position:fixed 的包含块，坐标被算成相对 frame，芯片飞到屏幕外 + 文字竖排 -->
+<span id="loHeldChip" class="lo-holding hidden"></span>
 
 <!-- ══════════ 局内背包（Tab） ══════════ -->
 <div id="pack" class="overlay hidden">
@@ -16023,7 +16025,12 @@ function loHighlight(el) {
 
 function loMoveChip(x, y) {
   const chip = $('loHeldChip');
-  if (chip) { chip.style.left = x + 'px'; chip.style.top = y + 'px'; }
+  if (chip) {
+    // 夹到视口内：芯片本体 + translate(12px) 偏移不许探出屏幕
+    const w = chip.offsetWidth || 160, h = chip.offsetHeight || 28;
+    chip.style.left = Math.min(Math.max(0, x), innerWidth - w - 14) + 'px';
+    chip.style.top = Math.min(Math.max(0, y), innerHeight - h - 14) + 'px';
+  }
 }
 
 /* 松手结算：t = 落点元素（loStock / .lo-cell / .lo-slot），null = 空处回原位。
@@ -16903,11 +16910,7 @@ $('loAutoBtn').addEventListener('click', autoRestock);
 $('loClearBtn').addEventListener('click', clearCarryAll);
 $('closePack').addEventListener('click', closePackPanel);
 $('loadout').addEventListener('mousemove', e => {
-  const chip = $('loHeldChip');
-  if (chip && LO_UI.held) {
-    chip.style.left = e.clientX + 'px';
-    chip.style.top = e.clientY + 'px';
-  }
+  if (LO_UI.held) loMoveChip(e.clientX, e.clientY);
 });
 $('closeOps').addEventListener('click', closeOperators);
 $('stashBtn').addEventListener('click', openStash);
