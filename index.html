@@ -16003,6 +16003,10 @@ function loDragBegin(x, y, pickArg) {
   });
   loMoveChip(x, y);
   document.body.classList.add('lo-grabbing');
+  /* 拿起即重绘：从槽位 / 格子拿走后，原位置必须当场变空。
+     不重绘的话槽位还挂着旧图标，看起来就是「已穿 + 手持同时在」的假象，
+     用户会以为松手没生效、手持卡住了（实机复现 T4b）。 */
+  try { renderLoadout(); } catch (e) {}
 }
 
 function loDropTargetAt(x, y) {
