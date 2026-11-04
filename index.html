@@ -1011,13 +1011,13 @@ const CONTAINERS = {
     id: 'crate', name: '补给箱', en: 'SUPPLY CRATE', tag: '补给',
     color: '#ffd08a', dim: 'rgba(255,208,138,', body: '#2a2118',
     r: 20, w: 32, h: 26, speed: 1.00, n: [2, 3], weight: 30, loud: 0,
-    hint: '杂项：收集品 / 药 / 弹 / 偶尔一把枪',
+    hint: '杂项：收集品 / 药 / 子弹 / 偶尔一把枪或一件护甲',
   },
   ammo: {
     id: 'ammo', name: '弹药箱', en: 'AMMO CRATE', tag: '弹药',
     color: '#ff9a3c', dim: 'rgba(255,154,60,', body: '#2b2317',
     r: 18, w: 28, h: 22, speed: 0.55, n: [2, 3], weight: 18, loud: 0,
-    hint: '翻得最快：备弹与手雷，不占背包',
+    hint: '翻得最快：1-6 级子弹，口径与弹级都随机',
   },
   med: {
     id: 'med', name: '医疗箱', en: 'MEDICAL BOX', tag: '医疗',
@@ -1035,7 +1035,7 @@ const CONTAINERS = {
     id: 'weapon', name: '武器箱', en: 'WEAPON CASE', tag: '军械',
     color: '#c9a3ff', dim: 'rgba(201,163,255,', body: '#231a2e',
     r: 24, w: 48, h: 18, speed: 1.35, n: [1, 2], weight: 12, loud: 470,
-    hint: '必出一把枪，翻得慢、动静大，会引来敌人',
+    hint: '必出一把枪，也常压着一件护甲；翻得慢、动静大',
   },
   safe: {
     id: 'safe', name: '保险柜', en: 'SAFE', tag: '金库',
@@ -2765,6 +2765,13 @@ function cellValid(c) {
   if (c.t === 'relic' && RELICS[c.id]) return { t: 'relic', id: c.id };
   if (c.t === 'mod' && MODS[c.id]) return { t: 'mod', id: c.id };
   if (c.t === 'gun' && WEAPONS[c.id]) return { t: 'gun', id: c.id };
+  /* 护甲成了能捡、能塞背包、能带出去的实体件：id 记甲级，hp / max 记这件自己的耐久 */
+  if (c.t === 'armor') {
+    const A = ARMORS[Math.floor(Number(c.id))];
+    if (!A || A.lv <= 0) return null;
+    const m = Math.max(1, Math.round(Number(c.max)) || A.hp);
+    return { t: 'armor', id: A.lv, hp: clamp(Math.round(Number(c.hp)) || 0, 0, m), max: m };
+  }
   return null;
 }
 
@@ -2789,6 +2796,12 @@ function mergeCarryOverflow(S, overflow) {
       SAVE.stash[c.id] = (SAVE.stash[c.id] | 0) + 1;
     } else if (c.t === 'mod') {
       SAVE.modBag[c.id] = Math.min(99, (SAVE.modBag[c.id] | 0) + 1);
+    } else if (c.t === 'armor') {
+      if (!Array.isArray(SAVE.armorPieces)) SAVE.armorPieces = [];
+      const A = ARMORS[c.id];
+      if (A && A.lv > 0 && SAVE.armorPieces.length < 36) {
+        SAVE.armorPieces.push({ lv: A.lv, hp: clamp(Math.round(c.hp), 0, c.max || A.hp), max: c.max || A.hp });
+      }
     }
     /* gun：所有权本来就记在 SAVE.owned 里，格子装不下就丢弃，枪还在军火库 */
   }
@@ -4698,7 +4711,7 @@ function freeCellFor(t) {
   const zones = allCarryZones();
   for (const pass of [2, 0, 1]) {              // pack → rig → pocket
     const arr = zones[pass];
-    if (t === 'gun' && pass !== 2) continue;   // 枪只进背包
+    if ((t === 'gun' || t === 'armor') && pass !== 2) continue;   // 枪和护甲只进背包
     for (let i = 0; i < arr.length; i++) {
       if (arr[i]) continue;
       return { zone: pass, i };
@@ -9853,15 +9866,32 @@ function killEnemy(e) {
   } else if (Math.random() < 0.16) {
     const r = Math.random();
     if (r < 0.22) dropPickup(e.x, e.y, 'relic', 0, rollRelicOf('common'));
-    else dropPickup(e.x, e.y, r < 0.66 ? 'medkit' : 'ammo');
+    else if (r < 0.62) dropPickup(e.x, e.y, 'medkit');
+    else {
+      /* 掉的是实体子弹（口径 / 弹级 / 发数都随机），不是抽象的「备弹」 */
+      const b = rollBulletDrop(0.6);
+      dropPickup(e.x, e.y, 'cell', 0, null, { t: 'ammo', cal: b.cal, lv: b.lv, n: b.n });
+    }
+  }
+  /* 带甲的敌人被打倒，甲板还能捡回来 —— 耐久就是它替你（或者说替它）挨过的那些弹 */
+  if (e.armorLv > 0) {
+    const dropP = (e.type === 'boss' || e.type === 'director') ? 0.55 : 0.18;
+    if (Math.random() < dropP) {
+      const lv = clamp(e.armorLv | 0, 1, 6);
+      const A = ARMORS[lv];
+      const m = A.hp;
+      const wear = clamp(e.armorMax > 0 ? (e.armorHp | 0) / e.armorMax : 0.55, 0.25, 1);
+      dropPickup(e.x + 20, e.y + 12, 'cell', 0, null,
+        { t: 'armor', id: lv, hp: Math.max(1, Math.round(m * wear)), max: m });
+    }
   }
 }
 
-function dropPickup(x, y, kind, value, relicId) {
+function dropPickup(x, y, kind, value, relicId, cell) {
   G.pickups.push({
     x: x + rand(-10, 10), y: y + rand(-10, 10),
-    kind, life: 30, bob: rand(0, TAU), value: value || 0,
-    relicId: relicId || null,
+    kind, life: cell ? 60 : 30, bob: rand(0, TAU), value: value || 0,
+    relicId: relicId || null, cell: cell || null,
   });
 }
 
@@ -10452,10 +10482,75 @@ function makeSurgItem(id) {
     note: S.sec + 's 读条 · 治一项',
   };
 }
-function makeAmmoItem(mags) {
-  const m = mags || 1;
-  return { kind: 'ammo', icon: '弹', name: '备弹', val: '×' + m + ' 匣', color: '#ff9a3c', tier: 'supply', mags: m };
+/* ── 局内掉落改成「实体子弹 + 实体护甲」──
+   子弹不再是「备弹 ×N 匣」这种抽象物：每一批都带口径、弹级（1-6）和发数，
+   捡到手就是弹挂 / 口袋 / 背包里的一个真弹药格。
+   弹级只在该口径实际存在的级别里抽（9×19 最高 4 级紫弹、7.62×51 从 3 级起步），
+   机密 / 绝密整体往高级偏。 */
+const AMMO_TIER_Q = ['supply', 'supply', 'common', 'rare', 'epic', 'legend', 'myth', 'myth'];
+const ARMOR_TIER_Q = ['supply', 'common', 'common', 'rare', 'epic', 'legend', 'myth'];
+
+function rollBulletLv(cal) {
+  const hi = isSecret();
+  const base = hi ? [9, 13, 18, 21, 21, 18] : [30, 24, 18, 13, 8, 4];
+  const table = [];
+  for (let lv = 1; lv <= 6; lv++) if (calHasTier(cal, lv)) table.push([lv, base[lv - 1]]);
+  if (!table.length) return Math.max(1, defaultTierOf(cal));
+  return pickWeighted(table);
 }
+function makeBulletItem(cal, lv, n) {
+  const C = CALIBERS[cal] || CALIBERS['919'];
+  const T = ammoTier(lv);
+  const cnt = Math.max(1, Math.round(n));
+  return {
+    kind: 'bullet', cal, lv, n: cnt,
+    icon: '弹', name: C.short + ' ' + T.name, val: '×' + cnt + ' 发',
+    color: T.color, tier: AMMO_TIER_Q[lv] || 'common',
+    note: T.grade + ' · ' + penTableText(lv),
+  };
+}
+/* 一批子弹：口径随机、弹级随机、发数半盒到一盒出头，且不超一格上限 */
+function rollBulletDrop(mul) {
+  const cal = pick(CAL_ORDER);
+  const lv = rollBulletLv(cal);
+  const cap = ammoCellCap(cal, ownedMapLive());
+  const box = (CALIBERS[cal] && CALIBERS[cal].box) || 20;
+  const n = clamp(Math.round(box * (0.45 + Math.random() * 0.75) * (mul || 1)), 6, cap);
+  return makeBulletItem(cal, lv, n);
+}
+
+/* 护甲件：1-6 级，越往后越稀罕（绝密 / 高波次往上偏），耐久是「被人用过」的样子 */
+function rollArmorLv(bob) {
+  const wave = G.reinforceWave || 0;
+  const hi = isSecret() ? 1 : 0;
+  const b = bob || 0;
+  return pickWeighted([
+    [1, Math.max(4, 30 - wave * 4 - hi * 8 - b * 10)],
+    [2, Math.max(4, 26 - wave * 2 - hi * 4)],
+    [3, (20 + wave * 1.5 + hi * 4) * (1 + b * 0.3)],
+    [4, (12 + wave * 2.0 + hi * 6) * (1 + b * 0.5)],
+    [5, (5 + wave * 1.4 + hi * 6) * (1 + b * 0.7)],
+    [6, (1.4 + wave * 0.7 + hi * 4) * (1 + b * 1.0)],
+  ]);
+}
+function makeArmorItem(lv, hp, max) {
+  const A = ARMORS[lv] || ARMORS[1];
+  const m = Math.max(1, Math.round(max || A.hp));
+  const h = clamp(Math.round(hp == null ? m : hp), 0, m);
+  return {
+    kind: 'armor', lv: A.lv, hp: h, max: m,
+    icon: '⛨', name: A.name, val: h + '/' + m,
+    color: armorLvColor(A.lv), tier: ARMOR_TIER_Q[A.lv] || 'epic',
+    note: A.lv + ' 级 · 维修效率 ' + A.effName,
+  };
+}
+function rollArmorDrop(bob) {
+  const lv = rollArmorLv(bob);
+  const A = ARMORS[lv];
+  const max = A.hp;
+  return makeArmorItem(lv, Math.max(1, Math.round(max * (0.45 + Math.random() * 0.55))), max);
+}
+
 function makeWeaponItem(wk) {
   const owned = !!P.owned[wk];
   return {
@@ -10494,15 +10589,18 @@ function rollContainer(kind) {
       if (Math.random() < 0.40) items.push(makeMedItem(rollMedDropId(false)));
       if (Math.random() < 0.14) items.push(makeStopItem('bandage'));
       if (Math.random() < (lootTable() ? lootTable().gunChance : 0.20)) items.push(makeWeaponItem(pickGun(false)));
+      if (Math.random() < 0.16) items.push(rollBulletDrop());
       if (Math.random() < 0.30) addMod(0);
       if (Math.random() < 0.08 + wave * 0.04) addMod(0.4);
+      if (Math.random() < (isSecret() ? 0.11 : 0.06)) items.push(rollArmorDrop(0));
       break;
     }
-    /* 弹药箱：只有弹，但翻得飞快、量大 */
+    /* 弹药箱：整箱子弹 —— 口径与弹级都随机，偶尔压着一件护甲 */
     case 'ammo': {
       const rows = randInt(C.n[0], C.n[1]);
-      for (let i = 0; i < rows; i++) items.push(makeAmmoItem(randInt(1, 2)));
-      if (Math.random() < 0.18) items.push(makeMedItem(rollMedDropId(false)));
+      for (let i = 0; i < rows; i++) items.push(rollBulletDrop(i === 0 ? 1.25 : 0.9));
+      if (Math.random() < (isSecret() ? 0.16 : 0.08)) items.push(rollArmorDrop(0));
+      if (Math.random() < 0.10) items.push(makeMedItem(rollMedDropId(false)));
       break;
     }
     /* 医疗箱：一箱药，偶尔压着一件货 */
@@ -10516,7 +10614,7 @@ function rollContainer(kind) {
         items.push(makeSurgItem(r < 0.74 ? 'surg_simple' : (r < 0.96 ? 'surg_tactical' : 'surg_dek')));
       }
       if (Math.random() < 0.26) addRelic(-0.35);
-      if (Math.random() < 0.10) items.push(makeAmmoItem(1));
+      if (Math.random() < 0.10) items.push(rollBulletDrop(0.7));
       break;
     }
     /* 工具箱：改枪配件的家 */
@@ -10527,12 +10625,13 @@ function rollContainer(kind) {
       if (Math.random() < 0.28) addRelic(-0.5);
       break;
     }
-    /* 武器箱：必出一把枪，配件的可能性也高 */
+    /* 武器箱：必出一把枪，配件的可能性也高，护甲也比别处多 */
     case 'weapon': {
       items.push(makeWeaponItem(pickGun(true)));
       if (Math.random() < (lootTable() ? lootTable().weaponModChance : 0.45)) addMod(0.7);
-      if (Math.random() < 0.30) items.push(makeAmmoItem(2));
+      if (Math.random() < 0.30) items.push(rollBulletDrop(1.1));
       if (Math.random() < 0.15) items.push(makeMedItem(rollMedDropId(false)));
+      if (Math.random() < (isSecret() ? 0.32 : 0.20)) items.push(rollArmorDrop(0.6));
       break;
     }
     /* 保险柜：慢得离谱，但品质卷得最高 */
@@ -10540,7 +10639,7 @@ function rollContainer(kind) {
       for (let i = 0; i < randInt(C.n[0], C.n[1]); i++) addRelic(1.4);
       if (Math.random() < (lootTable() ? lootTable().safeExtraChance : 0.50)) addRelic(1.4);
       if (Math.random() < (lootTable() ? lootTable().safeModChance : 0.30)) addMod(1.2);
-      if (Math.random() < 0.10) items.push(makeAmmoItem(2));
+      if (Math.random() < 0.14) items.push(rollBulletDrop(1.1));
       break;
     }
     default: {
@@ -10686,10 +10785,16 @@ function applyLootItem(it, c) {
     const got = addSurg(it.surg || SURG_ORDER[0], it.n || 1);
     if (got <= 0) { ok = false; it.blocked = '身上没有空位'; }
   }
-  else if (it.kind === 'ammo') {
-    const got = addAmmo(it.mags || 1);
-    it.got = got;                       // 只用于飘字，面板上仍显示「×2 匣」
+  else if (it.kind === 'bullet') {
+    /* 实体子弹：按弹级找同款格子堆叠，装不下就开新格（弹挂 / 口袋 / 背包都收） */
+    const got = addReserve(it.cal, it.n, it.lv);
+    it.got = got;                       // 只用于飘字
     if (got <= 0) { ok = false; it.blocked = '身上没有空位'; }
+  }
+  else if (it.kind === 'armor') {
+    /* 护甲是重物：只进背包格，撤离后能直接穿或拖回仓库 */
+    if (stowCell({ t: 'armor', id: it.lv, hp: it.hp, max: it.max })) recountLoot();
+    else { ok = false; it.blocked = '背包没有空位'; }
   }
   else if (it.kind === 'weapon') {
     const w = it.weapon;
@@ -10724,7 +10829,7 @@ function applyLootItem(it, c) {
     const txt = !ok
       ? (it.name + ' · ' + it.blocked + '，留在箱里')
       : (it.got !== undefined
-        ? (it.got > 0 ? it.name + ' +' + it.got : it.name + ' 无枪可用')
+        ? (it.got > 0 ? it.name + ' +' + it.got + (it.kind === 'bullet' ? ' 发' : '') : it.name + ' 无枪可用')
         : it.name + ' ' + it.val);
     popup(c.x, c.y - 26, txt, ok ? it.color : '#ff6b8a', 14);
     burst(c.x + rand(-12, 12), c.y + rand(-8, 8), 4, {
@@ -17539,7 +17644,12 @@ function cellSub(c) {
     return (sl ? sl.cn + ' · ' : '') + (QUALITY[m.q] ? QUALITY[m.q].name : m.q);
   }
   if (c.t === 'melee') return MELEES[c.id] ? ('伤害 ' + MELEES[c.id].dmg + ' · 静音') : '';
-  if (c.t === 'armor') return ARMORS[c.id] ? ('减伤 ' + Math.round(ARMORS[c.id].dr * 100) + '%') : '';
+  if (c.t === 'armor') {
+    const A = ARMORS[c.id];
+    if (!A) return '';
+    const m = Math.max(1, Math.round(c.max || A.hp));
+    return A.lv + ' 级 · ' + Math.round(c.hp) + '/' + m + ' · 减伤 ' + Math.round(A.dr * 100) + '%';
+  }
   if (c.t === 'gear') return GEAR[c.key] ? (GEAR[c.key].kind === 'rig' ? '弹挂 · ' : '背包 · ') + GEAR[c.key].cap + ' 格' : '';
   return '';
 }
@@ -17554,7 +17664,7 @@ function cellColor(c) {
   if (c.t === 'relic') return RELICS[c.id] && QUALITY[RELICS[c.id].q] ? QUALITY[RELICS[c.id].q].color : '#ffd08a';
   if (c.t === 'mod') return MODS[c.id] && QUALITY[MODS[c.id].q] ? QUALITY[MODS[c.id].q].color : '#c9a3ff';
   if (c.t === 'melee') return '#c9f2ff';
-  if (c.t === 'armor') return '#8fd8f2';
+  if (c.t === 'armor') return armorLvColor(c.id);
   if (c.t === 'gear') return '#ffb08a';
   return '#8fd8f2';
 }
@@ -17565,8 +17675,12 @@ function heldToStock(h) {
   if (!h) return;
   if (h.t === 'med' || h.t === 'stop' || h.t === 'surg' || h.t === 'ammo' || h.t === 'repair') { cellToStock(h); return; }
   if (h.t === 'armor') {
+    /* 两种形态：仓库件指针 { id, piece } 和背包里的护甲格 { id, hp, max } */
     if (!Array.isArray(SAVE.armorPieces)) SAVE.armorPieces = [];
-    if (h.piece) SAVE.armorPieces.push(h.piece);          // 连耐久一起放回仓库
+    const pc = h.piece || (ARMORS[h.id] && ARMORS[h.id].lv > 0
+      ? { lv: ARMORS[h.id].lv, hp: clamp(Math.round(h.hp), 0, h.max || ARMORS[h.id].hp), max: h.max || ARMORS[h.id].hp }
+      : null);
+    if (pc && SAVE.armorPieces.length < 36) SAVE.armorPieces.push(pc);   // 连耐久一起放回仓库
   }
 }
 
@@ -17604,6 +17718,12 @@ function cellToStock(c) {
     SAVE.stash[c.id] = (SAVE.stash[c.id] | 0) + 1;
   } else if (c.t === 'mod') {
     SAVE.modBag[c.id] = Math.min(99, (SAVE.modBag[c.id] | 0) + 1);
+  } else if (c.t === 'armor') {
+    if (!Array.isArray(SAVE.armorPieces)) SAVE.armorPieces = [];
+    const A = ARMORS[c.id];
+    if (A && A.lv > 0 && SAVE.armorPieces.length < 36) {
+      SAVE.armorPieces.push({ lv: A.lv, hp: clamp(Math.round(c.hp), 0, c.max || A.hp), max: c.max || A.hp });
+    }
   }
   /* gun：所有权本来就记在 SAVE.owned 里，把指针放下即可 */
 }
@@ -17871,10 +17991,16 @@ function loPlaceToSlot(slot) {
     if (h.t !== 'melee') { uiToast('这里放近战武器', 'small warn'); return true; }
     slot.set(h.id);
   } else if (slot.kind === 'armor') {
-    if (h.t !== 'armor' || !h.piece) { uiToast('这里放护甲', 'small warn'); return true; }
-    /* 换甲：身上那件先回仓库，再穿手上这件（拿的时候已经从仓库真扣） */
+    /* 手上可能是仓库件指针，也可能是背包里的护甲格 —— 两种都能穿 */
+    const pc = (h.t === 'armor')
+      ? (h.piece || (ARMORS[h.id] && ARMORS[h.id].lv > 0
+        ? { lv: ARMORS[h.id].lv, hp: clamp(Math.round(h.hp), 0, h.max || ARMORS[h.id].hp), max: h.max || ARMORS[h.id].hp }
+        : null))
+      : null;
+    if (!pc) { uiToast('这里放护甲', 'small warn'); return true; }
+    /* 换甲：身上那件先回仓库，再穿手上这件（拿的时候已经从仓库 / 格子真扣） */
     if (SAVE.wornPiece) SAVE.armorPieces.push(SAVE.wornPiece);
-    slot.set(h.piece);
+    slot.set(pc);
   } else {                                   // 弹挂 / 背包：换着穿，格子容量立刻变
     if (h.t !== 'gear') { uiToast('这里放' + (slot.kind === 'rig' ? '弹挂' : '背包'), 'small warn'); return true; }
     const g = GEAR[h.key];
@@ -18151,13 +18277,26 @@ function cellAccepts(h, zone) {
   if (!h) return false;
   if (h.t === 'med' || h.t === 'stop' || h.t === 'surg' || h.t === 'ammo' ||
       h.t === 'relic' || h.t === 'mod') return true;
-  if (h.t === 'gun') return zone === 2;
+  if (h.t === 'gun' || h.t === 'armor') return zone === 2;   // 枪和护甲只进背包
   return false;
+}
+/* 手上的装备指针 → 格子（护甲塞进背包时把件本身记在格子里） */
+function heldToCell(h) {
+  if (h && h.t === 'armor' && !h.piece && ARMORS[h.id] && ARMORS[h.id].lv > 0) {
+    const A = ARMORS[h.id];
+    const m = Math.max(1, Math.round(h.max || A.hp));
+    return { t: 'armor', id: A.lv, hp: clamp(Math.round(h.hp), 0, m), max: m };
+  }
+  if (h && h.t === 'armor' && h.piece) {
+    const pc = h.piece;
+    return { t: 'armor', id: pc.lv, hp: pc.hp, max: pc.max };
+  }
+  return h;
 }
 const CELL_REJECT_HINT = {
   gun: '枪只能放进背包（或拖到上方武器槽装上）',
   melee: '近战武器要装进上方近战槽',
-  armor: '护甲要拖到左侧「护甲」槽穿上',
+  armor: '护甲只能放进背包，或拖到左侧「护甲」槽穿上',
   gear: '弹挂 / 背包要拖到左侧对应槽穿上',
 };
 
@@ -18207,14 +18346,14 @@ function renderLoadout() {
           uiToast(CELL_REJECT_HINT[LO_UI.held.t] || '这件放不进格子', 'small warn');
           return;
         }
-        if (!c) { arr[i] = LO_UI.held; loSetHeld(null); }          // 放下
+        if (!c) { arr[i] = heldToCell(LO_UI.held); loSetHeld(null); }          // 放下
         else {                                                     // 交换 / 合并
           if (stackInto(LO_UI.held, c, SAVE.owned)) {              // 同弹药合并
             if (LO_UI.held.n <= 0) { LO_UI.held = null; loSetHeld(null); }
             else loSetHeld(LO_UI.held);
           } else {
             const tmp = c;
-            arr[i] = LO_UI.held;
+            arr[i] = heldToCell(LO_UI.held);
             loSetHeld(tmp);
           }
         }
@@ -18373,11 +18512,11 @@ function pkPlaceInto(arr, i, zone) {
     uiToast(CELL_REJECT_HINT[held.t] || '这件放不进格子', 'small warn');
     return;
   }
-  if (!c) { arr[i] = held; PK_UI.held = null; }
+  if (!c) { arr[i] = heldToCell(held); PK_UI.held = null; }
   else if (stackInto(held, c, ownedMapLive())) {    // 同弹药合并（补满为止，剩余留在手上）
     if ((held.n | 0) <= 0) PK_UI.held = null;
   } else {                                          // 交换：原来的那件换到手上
-    arr[i] = held;
+    arr[i] = heldToCell(held);
     PK_UI.held = c;
   }
   Sfx.tone(620, 0.05, 0.04, 'square');
@@ -18816,6 +18955,10 @@ function endRaid(success) {
     rows.push(['撤离奖励', '+ ¥' + fmtMoney(bonus), 'pos']);
     rows.push(['击杀 ' + G.kills + ' 名敌人', '+ ¥' + fmtMoney(G.score), 'neu']);
     rows.push(['配件带回', modN ? modN + ' 件 · 可上改装台' : '无', modN ? 'pos' : 'neu']);
+    /* 局内捡到的护甲：以背包格子的形式原样带回，仓库 / 整备界面能直接穿 */
+    let armorN = 0;
+    for (const arr of allCarryZones()) for (const c of arr) if (c && c.t === 'armor') armorN++;
+    rows.push(['护甲带回', armorN ? armorN + ' 件 · 在背包格子里' : '无', armorN ? 'pos' : 'neu']);
     rows.push(['装备状态', '全部保留', 'pos']);
 
     Sfx.extract();
