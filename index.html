@@ -2133,8 +2133,8 @@ const SKILL = {
   /* ── 蜂医（支援）── */
   /* 蜂巢烟：15 秒，被激素枪打中转化成 60 秒绿色治疗场 */
   bee: { life: 15, r: 118, healLife: 60, healR: 122, healRate: 3.4, tick: 0.5 },
-  /* 烟幕无人机：可手控飞行，一路拉直线长烟；不能染成治疗烟 */
-  drone: { life: 16, speed: 330, step: 0.17, r: 92, smokeLife: 15, trailR: 96 },
+  /* 烟幕无人机：可手控飞行；点按 V 派出自动机全速沿射向拉直线长烟 */
+  drone: { life: 16, speed: 330, step: 0.17, r: 92, smokeLife: 15, trailR: 96, autoSpeed: 560, autoRange: 30 * 18 },
   /* 激素枪：充能 30s/发、上限 3 发；打烟染色、打敌人穿甲 0 级、长按 X 自用 */
   heal: { charges: 3, recharge: 30, dmg: 8, pen: 0, heal: 34, regen: 4.2, regenT: 8,
           speed: 940, homing: 3.0, range: 34 * 18 },
@@ -2242,12 +2242,12 @@ const OPERATORS = {
     },
     v: {
       name: '烟幕无人机', short: '烟幕机', tag: '小技能', kind: 'drone',
-      desc: '点按 V：朝准星方向拉出一条 30 米的直线长烟。按住 V 超过 0.3 秒再松开：放出一台烟幕无人机，WASD 直接操控飞行、一路不停留下烟迹（最多 16 秒），再按一次 V 收回。这烟是机器喷的，染不成治疗场。储备 1 台，按 60 秒回充。',
+      desc: '点按 V：派一台烟幕无人机全速沿准星方向飞出（约 560 速），一路留下烟迹拉成 30 米直线长烟，撞墙或到头就地撤离。按住 V 超过 0.3 秒再松开：放出一台烟幕无人机，WASD 直接操控飞行、一路不停留下烟迹（最多 16 秒），再按一次 V 收回。这烟是机器喷的，染不成治疗场。储备 1 台，按 60 秒回充。',
       cd: 60, charges: 1,
     },
     x: {
       name: '激素枪', short: '激素枪', tag: '大招', kind: 'healgun',
-      desc: '按 X 切出激素枪：左键射出追踪激素针 —— 命中烟雾把它染成治疗场，命中敌人按 0 级弹算伤害。右键抬枪收束。长按 X 直接给自己来一针：立刻 +34 血，之后 8 秒内再回 4.2/秒。充能 30 秒发一发、最多存 3 发（不是冷却，是弹匣）；开局没有存量，先等第一发充能。',
+      desc: '按 X 切出激素枪：左键射出追踪激素针 —— 命中烟雾把它染成治疗场，命中敌人按 0 级弹算伤害。右键抬枪收束。**按住 X 满 0.3 秒立即给自己来一针**（不用等松手，按住瞬间就打）：立刻 +34 血，之后 8 秒内再回 4.2/秒。充能 30 秒发一发、最多存 3 发（不是冷却，是弹匣）；开局没有存量，先等第一发充能。',
       cd: SKILL.heal.recharge, charges: 3, dur: 0,
     },
     passive: {
@@ -2743,7 +2743,7 @@ const MAG_HOLD_T = 0.28;
 
 /* 无人机 / 激素枪的「点按 / 长按」判定 */
 const HOLDV = { down: false, hold: 0 };
-const HOLDX = { down: false, hold: 0 };
+const HOLDX = { down: false, hold: 0, fired: false };
 const HOLD_T = 0.30;
 
 /* 手持模式的文案：HUD 底部那行提示 */
@@ -2912,7 +2912,7 @@ function skillXDown() {
     return;
   }
   if (op.x.kind === 'healgun') {
-    HOLDX.down = true; HOLDX.hold = 0;
+    HOLDX.down = true; HOLDX.hold = 0; HOLDX.fired = false;
     return;
   }
   if (MODE_SKILL[op.x.kind]) {
@@ -2924,7 +2924,7 @@ function skillXDown() {
 }
 
 function skillXUp() {
-  if (!HOLDX.down) return;
+  if (!HOLDX.down) return;          // 长按到点已在按住时自用过：松手无事发生
   const held = HOLDX.hold;
   HOLDX.down = false; HOLDX.hold = 0;
   if (G.scene !== 'playing') return;
@@ -2933,6 +2933,20 @@ function skillXUp() {
 
   if (held >= HOLD_T) healSelfShot();
   else if (modeAvailable('x')) enterMode('healgun', 'x');
+}
+
+/* 按住计时：长按 X 满 0.3s 立即自用（不用等松手），V 继续由松手判定 */
+function updateSkillHold(dt) {
+  if (HOLDV.down) HOLDV.hold += dt;
+  if (HOLDX.down) {
+    HOLDX.hold += dt;
+    if (HOLDX.hold >= HOLD_T) {
+      HOLDX.down = false; HOLDX.hold = 0; HOLDX.fired = true;
+      const op2 = opDef();
+      if (G.scene === 'playing' && op2 && op2.x.kind === 'healgun' && modeAvailable('x')) healSelfShot();
+      else HOLDX.fired = false;
+    }
+  }
 }
 
 window.addEventListener('keydown', e => {
@@ -6887,19 +6901,17 @@ function updateHealFields(dt) {
   }
 }
 
-/* ── 蜂医 V：烟幕无人机（点按 = 直线长烟） ── */
+/* ── 蜂医 V：点按 = 派自动烟幕机全速沿射向飞，一路拉直线长烟 ── */
 function layLineSmoke() {
   const D = SKILL.drone;
   if (!modeAvailable('v')) return;
-  const a = P.aim;
-  let n = 0;
-  for (let d = 60; d <= 30 * 18; d += 72) {
-    const x = P.x + Math.cos(a) * d, y = P.y + Math.sin(a) * d;
-    if (pointInObstacle(x, y)) break;
-    G.smokes.push({ x, y, t: 0, r: D.r, seed: rand(0, 100), life: SKILL.bee.life, bee: true, fixed: true });
-    n++;
-  }
   consumeOp('v');
+  const a = P.aim;
+  G.drones.push({
+    x: P.x + Math.cos(a) * 46, y: P.y + Math.sin(a) * 46,
+    ang: a, life: D.life, stepT: 0,
+    auto: true, dist: 0, max: D.autoRange,
+  });
   popup(P.x, P.y - 46, '直 线 长 烟', '#8dffc0', 12);
   Sfx.tone(520, 0.12, 0.04, 'triangle', 900);
   burst(P.x + Math.cos(a) * 40, P.y + Math.sin(a) * 40, 10, {
@@ -6927,14 +6939,16 @@ function updateDrones(dt) {
   for (let i = G.drones.length - 1; i >= 0; i--) {
     const d = G.drones[i];
     d.life -= dt;
-    if (d.life <= 0 || !ctl) {
-      /* 收回 / 到期：机身飞回（这里直接销毁） */
+    /* 手控机：收回 / 到期：机身飞回（这里直接销毁） */
+    if (!d.auto && (d.life <= 0 || !ctl)) {
       if (d.life <= 0) popup(d.x, d.y - 16, '无人机撤离', '#8dffc0', 11);
       G.drones.splice(i, 1);
       if (ctl) exitMode(true);
       continue;
     }
-    if (ctl) {
+    if (d.life <= 0) { G.drones.splice(i, 1); continue; }
+
+    if (ctl && !d.auto) {
       let ix = 0, iy = 0;
       if (keys['a'] || keys['arrowleft']) ix -= 1;
       if (keys['d'] || keys['arrowright']) ix += 1;
@@ -6944,11 +6958,24 @@ function updateDrones(dt) {
       const mv = (ix || iy) ? D.speed : D.speed * 0.25;
       d.x = clamp(d.x + Math.cos(d.ang) * mv * dt, 20, WORLD.w - 20);
       d.y = clamp(d.y + Math.sin(d.ang) * mv * dt, 20, WORLD.h - 20);
+    } else if (d.auto) {
+      /* 自动机：全速沿射向直飞，撞墙 / 到头就地撤离（烟迹留在原地） */
+      const mv = D.autoSpeed;
+      const nx = d.x + Math.cos(d.ang) * mv * dt;
+      const ny = d.y + Math.sin(d.ang) * mv * dt;
+      d.dist += mv * dt;
+      if (pointInObstacle(nx, ny) || d.dist >= d.max) {
+        popup(d.x, d.y - 16, '无人机撤离', '#8dffc0', 11);
+        G.drones.splice(i, 1);
+        continue;
+      }
+      d.x = nx; d.y = ny;
     }
 
+    /* 恒定烟距：飞多快都按「每 56px 一团」铺烟 */
     d.stepT -= dt;
     if (d.stepT <= 0) {
-      d.stepT = D.step;
+      d.stepT = d.auto ? (D.speed * D.step) / D.autoSpeed : D.step;
       G.smokes.push({
         x: d.x, y: d.y, t: 0, r: D.trailR, seed: rand(0, 100),
         life: SKILL.bee.life, bee: true, fixed: true, drone: true,
@@ -7331,9 +7358,8 @@ function updateOperatorSkills(dt) {
     }
   }
 
-  /* 点按 / 长按计时 */
-  if (HOLDV.down) HOLDV.hold += dt;
-  if (HOLDX.down) HOLDX.hold += dt;
+  /* 点按 / 长按计时（updateSkillHold） */
+  updateSkillHold(dt);
 
   /* 长按 G 的预瞄计时：超过阈值才开始画轨迹 */
   if (MAG_AIM.down) {
