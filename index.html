@@ -162,6 +162,18 @@
   }
   .mcard.secret.on b { color:#ffd0da; }
   .mcard.secret.on small { color:#d08a9b; }
+  /* 绝密：紫金，比机密再压一档 */
+  .mcard.top { border-color:rgba(196,140,255,.5); background:rgba(20,10,30,.78); }
+  .mcard.top b { color:#dcb8ff; }
+  .mcard.top small { color:#9472b8; }
+  .mcard.top:hover { border-color:rgba(196,140,255,.85); background:rgba(30,16,44,.92); }
+  .mcard.top.on {
+    border-color:rgba(214,164,255,.95);
+    background:linear-gradient(180deg, rgba(74,34,110,.6), rgba(20,10,30,.92));
+    box-shadow:0 0 16px rgba(196,140,255,.22), inset 0 0 18px rgba(196,140,255,.09);
+  }
+  .mcard.top.on b { color:#f0dcff; }
+  .mcard.top.on small { color:#c2a0e0; }
   .mapsel-note { font-size:10.5px; color:#3f5d72; margin-top:7px; line-height:1.55; letter-spacing:.04em; }
   .mapsel-note b { color:#7fc9e2; font-weight:600; }
 
@@ -2595,14 +2607,42 @@ const SECRET = {
     safeModChance: 0.55,
   },
 };
-function isSecret() { return G.tier === 'secret'; }
-/* 增援节奏：普通慢、机密紧 */
-function firstReinforceDelay() { return isSecret() ? SECRET.firstWave : 90; }
+function isSecret() { return G.tier === 'secret' || G.tier === 'top'; }
+function isTop() { return G.tier === 'top'; }
+
+/* ══════════════════════════════════════════════════════════
+   绝密模式数值（「航天基地·绝密」专用）
+   ──────────────────────────────────────────────────────────
+   在机密表的基础上再抬一档：血更厚、伤害更高、甲再 +1，
+   增援更快、BOSS 更早，战利品权重整体再往高品质倾斜。
+   ══════════════════════════════════════════════════════════ */
+const TOP = {
+  hpMul: 1.22,          // 在机密血量上再 ×1.22
+  dmgMul: 1.12,         // 在机密伤害倍率上再 ×1.12
+  armorAdd: 2,          // 穿甲的兵甲级 +2（封顶仍是 5 级）
+  shieldMul: 1.15,
+  playerInvuln: 0.26,
+  firstWave: 42, gapBase: 38, gapK: 2, gapMin: 24,
+  bossWave: 3,
+  loot: {
+    relicCommon: 0.30, relicRare: 1.15, relicHigh: 2.20, relicTop: 3.80,
+    modHigh: 2.40, gunChance: 0.44, weaponModChance: 0.80,
+    safeExtraChance: 0.90, safeModChance: 0.68,
+  },
+};
+function lootTable() { return isTop() ? TOP.loot : (isSecret() ? SECRET.loot : null); }
+/* 增援节奏：普通慢、机密紧、绝密更紧 */
+function firstReinforceDelay() {
+  return isTop() ? TOP.firstWave : (isSecret() ? SECRET.firstWave : 90);
+}
 function reinforceGap(wave) {
+  if (isTop()) return Math.max(TOP.gapMin, TOP.gapBase - wave * TOP.gapK);
   return isSecret() ? Math.max(SECRET.gapMin, SECRET.gapBase - wave * SECRET.gapK)
                     : Math.max(30, 55 - wave * 2.5);
 }
-function bossWaveNo() { return isSecret() ? SECRET.bossWave : 5; }
+function bossWaveNo() {
+  return isTop() ? TOP.bossWave : (isSecret() ? SECRET.bossWave : 5);
+}
 
 /* 近战攻击参数（贴身不再是"合体掉血"，而是在玩家体积之外抬手 → 突进 → 挥一刀）
    reach: 出手距离（加在 玩家半径 + 敌人半径 之上）  wind: 抬手预警时长（可躲窗口）
@@ -2641,6 +2681,36 @@ const ENEMY_SHORT = {
   boss: '赤霄',
 };
 const BOSS_NAME = '赤霄';
+
+/* ══════════════════════════════════════════════════════════
+   阵营：阿萨拉 / 哈夫克
+   ──────────────────────────────────────────────────────────
+   两套守军共用同一套兵种数值与 AI —— 「一模一样的小兵，只换阵营和前缀名」。
+   零号大坝只有阿萨拉，航天基地只有哈夫克；自定义地图可以混编。
+   敌对关系：「玩家 ↔ 阿萨拉」「玩家 ↔ 哈夫克」「阿萨拉 ↔ 哈夫克」全部敌对，
+   同阵营互为友军（子弹不会误伤，也不会互相开火）。
+   ══════════════════════════════════════════════════════════ */
+const FACTIONS = {
+  asara: { id: 'asara', name: '阿萨拉', color: '#ff5c7a', glow: '#ff2d55' },
+  havk:  { id: 'havk',  name: '哈夫克', color: '#43d9f5', glow: '#18a8bd' },
+};
+const FACTION_ORDER = ['asara', 'havk'];
+function factionOf(id) { return FACTIONS[id] || FACTIONS.asara; }
+/* 兵种显示名：「阿萨拉小兵」→「哈夫克小兵」；赤霄没有前缀，两个阵营同名 */
+function enemyLabel(type, fac) {
+  const base = ENEMY_LABEL[type] || type;
+  return factionOf(fac).id === 'asara' ? base : base.replace(/^阿萨拉/, factionOf(fac).name);
+}
+function enemyShort(type, fac) {
+  const base = ENEMY_SHORT[type] || type;
+  if (base === '赤霄' || factionOf(fac).id === 'asara') return base;
+  return factionOf(fac).name + base;
+}
+/* 阵营敌对矩阵：玩家是独立阵营 'player' */
+function factionsHostile(a, b) {
+  if (!a || !b || a === b) return false;
+  return true;                     // 三个阵营两两敌对，同阵营才是友军
+}
 
 const BOSS_FIRE = { r: 112, life: 4.6, dmg: 7, warm: 1.6, breed: 0.4 };
 
@@ -3377,6 +3447,31 @@ const BUILTIN_MAPS = {'zero-dam': ({"format":"neonpurge-map","version":1,"name":
   BUILTIN_MAPS['zero-dam-secret'] = base;
 })();
 
+/* ══════════════════════════════════════════════════════════
+   内置地图：航天基地（哈夫克守军）
+   ──────────────────────────────────────────────────────────
+   发射工位 A/B、垂直总装厂房、燃料罐区、控制中心、机库群、东侧军械库。
+   机密档走 SECRET 数值；绝密档同一座基地、守军加派精锐、容器换成军械与
+   保险柜为主，数值在机密基础上再抬一档（TOP）。零号大坝永远不会刷哈夫克。
+   ══════════════════════════════════════════════════════════ */
+(function buildSpaceBase() {
+  const base = {"format":"neonpurge-map","version":1,"name":"航天基地·机密","w":4400,"h":3200,"faction":"havk","tier":"secret","spawns":[{"x":320,"y":2980},{"x":2180,"y":200},{"x":4180,"y":1400},{"x":760,"y":1560}],"obstacles":[{"x":0,"y":0,"w":4400,"h":60},{"x":0,"y":3140,"w":1950,"h":60},{"x":2250,"y":3140,"w":2150,"h":60},{"x":0,"y":60,"w":60,"h":1390},{"x":0,"y":1750,"w":60,"h":1390},{"x":4340,"y":60,"w":60,"h":3080},{"x":40,"y":1360,"w":150,"h":60},{"x":40,"y":1780,"w":150,"h":60},{"x":1900,"y":3060,"w":120,"h":60},{"x":2280,"y":3060,"w":120,"h":60},{"x":260,"y":240,"w":560,"h":40},{"x":340,"y":780,"w":480,"h":40},{"x":260,"y":280,"w":40,"h":500},{"x":780,"y":280,"w":40,"h":500},{"x":520,"y":480,"w":40,"h":300},{"x":300,"y":480,"w":220,"h":40},{"x":640,"y":300,"w":40,"h":120},{"x":640,"y":620,"w":40,"h":120},{"x":300,"y":920,"w":46,"h":46},{"x":370,"y":920,"w":46,"h":46},{"x":440,"y":920,"w":46,"h":46},{"x":510,"y":920,"w":46,"h":46},{"x":950,"y":260,"w":1200,"h":50},{"x":950,"y":1030,"w":480,"h":50},{"x":1690,"y":1030,"w":460,"h":50},{"x":950,"y":310,"w":50,"h":720},{"x":2100,"y":310,"w":50,"h":720},{"x":1100,"y":430,"w":60,"h":500},{"x":1560,"y":430,"w":60,"h":500},{"x":1100,"y":430,"w":520,"h":40},{"x":1100,"y":930,"w":520,"h":40},{"x":1900,"y":400,"w":40,"h":260},{"x":1900,"y":760,"w":40,"h":220},{"x":2450,"y":300,"w":1100,"h":40},{"x":2450,"y":340,"w":40,"h":810},{"x":3510,"y":340,"w":40,"h":810},{"x":2450,"y":1110,"w":380,"h":40},{"x":2980,"y":1110,"w":570,"h":40},{"x":2776,"y":515,"w":34,"h":34},{"x":2769,"y":539,"w":34,"h":34},{"x":2757,"y":560,"w":34,"h":34},{"x":2740,"y":577,"w":34,"h":34},{"x":2626,"y":577,"w":34,"h":34},{"x":2609,"y":560,"w":34,"h":34},{"x":2597,"y":539,"w":34,"h":34},{"x":2590,"y":515,"w":34,"h":34},{"x":2590,"y":491,"w":34,"h":34},{"x":2597,"y":467,"w":34,"h":34},{"x":2609,"y":446,"w":34,"h":34},{"x":2626,"y":429,"w":34,"h":34},{"x":2647,"y":417,"w":34,"h":34},{"x":2671,"y":410,"w":34,"h":34},{"x":2695,"y":410,"w":34,"h":34},{"x":2719,"y":417,"w":34,"h":34},{"x":2740,"y":429,"w":34,"h":34},{"x":2757,"y":446,"w":34,"h":34},{"x":2769,"y":467,"w":34,"h":34},{"x":2776,"y":491,"w":34,"h":34},{"x":3076,"y":515,"w":34,"h":34},{"x":3069,"y":539,"w":34,"h":34},{"x":3057,"y":560,"w":34,"h":34},{"x":3040,"y":577,"w":34,"h":34},{"x":2926,"y":577,"w":34,"h":34},{"x":2909,"y":560,"w":34,"h":34},{"x":2897,"y":539,"w":34,"h":34},{"x":2890,"y":515,"w":34,"h":34},{"x":2890,"y":491,"w":34,"h":34},{"x":2897,"y":467,"w":34,"h":34},{"x":2909,"y":446,"w":34,"h":34},{"x":2926,"y":429,"w":34,"h":34},{"x":2947,"y":417,"w":34,"h":34},{"x":2971,"y":410,"w":34,"h":34},{"x":2995,"y":410,"w":34,"h":34},{"x":3019,"y":417,"w":34,"h":34},{"x":3040,"y":429,"w":34,"h":34},{"x":3057,"y":446,"w":34,"h":34},{"x":3069,"y":467,"w":34,"h":34},{"x":3076,"y":491,"w":34,"h":34},{"x":3376,"y":515,"w":34,"h":34},{"x":3369,"y":539,"w":34,"h":34},{"x":3357,"y":560,"w":34,"h":34},{"x":3340,"y":577,"w":34,"h":34},{"x":3226,"y":577,"w":34,"h":34},{"x":3209,"y":560,"w":34,"h":34},{"x":3197,"y":539,"w":34,"h":34},{"x":3190,"y":515,"w":34,"h":34},{"x":3190,"y":491,"w":34,"h":34},{"x":3197,"y":467,"w":34,"h":34},{"x":3209,"y":446,"w":34,"h":34},{"x":3226,"y":429,"w":34,"h":34},{"x":3247,"y":417,"w":34,"h":34},{"x":3271,"y":410,"w":34,"h":34},{"x":3295,"y":410,"w":34,"h":34},{"x":3319,"y":417,"w":34,"h":34},{"x":3340,"y":429,"w":34,"h":34},{"x":3357,"y":446,"w":34,"h":34},{"x":3369,"y":467,"w":34,"h":34},{"x":3376,"y":491,"w":34,"h":34},{"x":2776,"y":875,"w":34,"h":34},{"x":2769,"y":899,"w":34,"h":34},{"x":2757,"y":920,"w":34,"h":34},{"x":2740,"y":937,"w":34,"h":34},{"x":2626,"y":937,"w":34,"h":34},{"x":2609,"y":920,"w":34,"h":34},{"x":2597,"y":899,"w":34,"h":34},{"x":2590,"y":875,"w":34,"h":34},{"x":2590,"y":851,"w":34,"h":34},{"x":2597,"y":827,"w":34,"h":34},{"x":2609,"y":806,"w":34,"h":34},{"x":2626,"y":789,"w":34,"h":34},{"x":2647,"y":777,"w":34,"h":34},{"x":2671,"y":770,"w":34,"h":34},{"x":2695,"y":770,"w":34,"h":34},{"x":2719,"y":777,"w":34,"h":34},{"x":2740,"y":789,"w":34,"h":34},{"x":2757,"y":806,"w":34,"h":34},{"x":2769,"y":827,"w":34,"h":34},{"x":2776,"y":851,"w":34,"h":34},{"x":3076,"y":875,"w":34,"h":34},{"x":3069,"y":899,"w":34,"h":34},{"x":3057,"y":920,"w":34,"h":34},{"x":3040,"y":937,"w":34,"h":34},{"x":2926,"y":937,"w":34,"h":34},{"x":2909,"y":920,"w":34,"h":34},{"x":2897,"y":899,"w":34,"h":34},{"x":2890,"y":875,"w":34,"h":34},{"x":2890,"y":851,"w":34,"h":34},{"x":2897,"y":827,"w":34,"h":34},{"x":2909,"y":806,"w":34,"h":34},{"x":2926,"y":789,"w":34,"h":34},{"x":2947,"y":777,"w":34,"h":34},{"x":2971,"y":770,"w":34,"h":34},{"x":2995,"y":770,"w":34,"h":34},{"x":3019,"y":777,"w":34,"h":34},{"x":3040,"y":789,"w":34,"h":34},{"x":3057,"y":806,"w":34,"h":34},{"x":3069,"y":827,"w":34,"h":34},{"x":3076,"y":851,"w":34,"h":34},{"x":3376,"y":875,"w":34,"h":34},{"x":3369,"y":899,"w":34,"h":34},{"x":3357,"y":920,"w":34,"h":34},{"x":3340,"y":937,"w":34,"h":34},{"x":3226,"y":937,"w":34,"h":34},{"x":3209,"y":920,"w":34,"h":34},{"x":3197,"y":899,"w":34,"h":34},{"x":3190,"y":875,"w":34,"h":34},{"x":3190,"y":851,"w":34,"h":34},{"x":3197,"y":827,"w":34,"h":34},{"x":3209,"y":806,"w":34,"h":34},{"x":3226,"y":789,"w":34,"h":34},{"x":3247,"y":777,"w":34,"h":34},{"x":3271,"y":770,"w":34,"h":34},{"x":3295,"y":770,"w":34,"h":34},{"x":3319,"y":777,"w":34,"h":34},{"x":3340,"y":789,"w":34,"h":34},{"x":3357,"y":806,"w":34,"h":34},{"x":3369,"y":827,"w":34,"h":34},{"x":3376,"y":851,"w":34,"h":34},{"x":2620,"y":700,"w":26,"h":120},{"x":2920,"y":700,"w":26,"h":120},{"x":3220,"y":700,"w":26,"h":120},{"x":3260,"y":620,"w":120,"h":26},{"x":3700,"y":420,"w":540,"h":40},{"x":3700,"y":900,"w":540,"h":40},{"x":3700,"y":460,"w":40,"h":60},{"x":3700,"y":640,"w":40,"h":260},{"x":4200,"y":460,"w":40,"h":440},{"x":3820,"y":620,"w":40,"h":200},{"x":1539,"y":2250,"w":34,"h":34},{"x":1523,"y":2281,"w":34,"h":34},{"x":1508,"y":2312,"w":34,"h":34},{"x":1488,"y":2339,"w":34,"h":34},{"x":1463,"y":2363,"w":34,"h":34},{"x":1439,"y":2388,"w":34,"h":34},{"x":1412,"y":2408,"w":34,"h":34},{"x":1381,"y":2423,"w":34,"h":34},{"x":1350,"y":2439,"w":34,"h":34},{"x":1318,"y":2450,"w":34,"h":34},{"x":1284,"y":2455,"w":34,"h":34},{"x":1250,"y":2460,"w":34,"h":34},{"x":1216,"y":2460,"w":34,"h":34},{"x":1182,"y":2455,"w":34,"h":34},{"x":1148,"y":2450,"w":34,"h":34},{"x":1116,"y":2439,"w":34,"h":34},{"x":1085,"y":2423,"w":34,"h":34},{"x":1054,"y":2408,"w":34,"h":34},{"x":1027,"y":2388,"w":34,"h":34},{"x":1003,"y":2363,"w":34,"h":34},{"x":978,"y":2339,"w":34,"h":34},{"x":958,"y":2312,"w":34,"h":34},{"x":943,"y":2281,"w":34,"h":34},{"x":927,"y":2250,"w":34,"h":34},{"x":916,"y":2218,"w":34,"h":34},{"x":911,"y":2184,"w":34,"h":34},{"x":906,"y":2150,"w":34,"h":34},{"x":906,"y":2116,"w":34,"h":34},{"x":911,"y":2082,"w":34,"h":34},{"x":916,"y":2048,"w":34,"h":34},{"x":927,"y":2016,"w":34,"h":34},{"x":943,"y":1985,"w":34,"h":34},{"x":958,"y":1954,"w":34,"h":34},{"x":978,"y":1927,"w":34,"h":34},{"x":1003,"y":1903,"w":34,"h":34},{"x":1027,"y":1878,"w":34,"h":34},{"x":1054,"y":1858,"w":34,"h":34},{"x":1085,"y":1843,"w":34,"h":34},{"x":1116,"y":1827,"w":34,"h":34},{"x":1350,"y":1827,"w":34,"h":34},{"x":1381,"y":1843,"w":34,"h":34},{"x":1412,"y":1858,"w":34,"h":34},{"x":1439,"y":1878,"w":34,"h":34},{"x":1463,"y":1903,"w":34,"h":34},{"x":1488,"y":1927,"w":34,"h":34},{"x":1508,"y":1954,"w":34,"h":34},{"x":1523,"y":1985,"w":34,"h":34},{"x":1539,"y":2016,"w":34,"h":34},{"x":1215,"y":1660,"w":70,"h":170},{"x":1120,"y":1790,"w":260,"h":30},{"x":1240,"y":1830,"w":26,"h":120},{"x":1100,"y":2280,"w":60,"h":240},{"x":1420,"y":2280,"w":60,"h":240},{"x":1560,"y":2080,"w":200,"h":30},{"x":1560,"y":2200,"w":200,"h":30},{"x":1560,"y":2110,"w":30,"h":30},{"x":1560,"y":2190,"w":30,"h":10},{"x":1730,"y":2110,"w":30,"h":90},{"x":3410,"y":2399,"w":34,"h":34},{"x":3405,"y":2431,"w":34,"h":34},{"x":3399,"y":2463,"w":34,"h":34},{"x":3388,"y":2493,"w":34,"h":34},{"x":3372,"y":2521,"w":34,"h":34},{"x":3356,"y":2549,"w":34,"h":34},{"x":3335,"y":2573,"w":34,"h":34},{"x":3310,"y":2594,"w":34,"h":34},{"x":3285,"y":2615,"w":34,"h":34},{"x":3258,"y":2631,"w":34,"h":34},{"x":3227,"y":2642,"w":34,"h":34},{"x":3197,"y":2653,"w":34,"h":34},{"x":3165,"y":2659,"w":34,"h":34},{"x":3133,"y":2659,"w":34,"h":34},{"x":3101,"y":2659,"w":34,"h":34},{"x":3069,"y":2653,"w":34,"h":34},{"x":3039,"y":2642,"w":34,"h":34},{"x":3008,"y":2631,"w":34,"h":34},{"x":2981,"y":2615,"w":34,"h":34},{"x":2956,"y":2594,"w":34,"h":34},{"x":2931,"y":2573,"w":34,"h":34},{"x":2910,"y":2549,"w":34,"h":34},{"x":2894,"y":2521,"w":34,"h":34},{"x":2878,"y":2493,"w":34,"h":34},{"x":2878,"y":2273,"w":34,"h":34},{"x":2894,"y":2245,"w":34,"h":34},{"x":2910,"y":2217,"w":34,"h":34},{"x":2931,"y":2193,"w":34,"h":34},{"x":2956,"y":2172,"w":34,"h":34},{"x":2981,"y":2151,"w":34,"h":34},{"x":3008,"y":2135,"w":34,"h":34},{"x":3039,"y":2124,"w":34,"h":34},{"x":3069,"y":2113,"w":34,"h":34},{"x":3197,"y":2113,"w":34,"h":34},{"x":3227,"y":2124,"w":34,"h":34},{"x":3258,"y":2135,"w":34,"h":34},{"x":3285,"y":2151,"w":34,"h":34},{"x":3310,"y":2172,"w":34,"h":34},{"x":3335,"y":2193,"w":34,"h":34},{"x":3356,"y":2217,"w":34,"h":34},{"x":3372,"y":2245,"w":34,"h":34},{"x":3388,"y":2273,"w":34,"h":34},{"x":3399,"y":2303,"w":34,"h":34},{"x":3405,"y":2335,"w":34,"h":34},{"x":3410,"y":2367,"w":34,"h":34},{"x":3115,"y":1960,"w":70,"h":150},{"x":3020,"y":2075,"w":260,"h":30},{"x":3050,"y":2520,"w":60,"h":260},{"x":3200,"y":2520,"w":60,"h":260},{"x":300,"y":2450,"w":460,"h":40},{"x":300,"y":2810,"w":80,"h":40},{"x":500,"y":2810,"w":260,"h":40},{"x":300,"y":2490,"w":40,"h":320},{"x":720,"y":2490,"w":40,"h":320},{"x":820,"y":2450,"w":460,"h":40},{"x":820,"y":2810,"w":80,"h":40},{"x":1020,"y":2810,"w":260,"h":40},{"x":820,"y":2490,"w":40,"h":320},{"x":1240,"y":2490,"w":40,"h":320},{"x":660,"y":2540,"w":40,"h":220},{"x":1680,"y":1400,"w":90,"h":90},{"x":1820,"y":1400,"w":90,"h":90},{"x":1960,"y":1400,"w":90,"h":90},{"x":1680,"y":1520,"w":90,"h":90},{"x":1820,"y":1520,"w":90,"h":90},{"x":2280,"y":1500,"w":120,"h":70},{"x":2280,"y":1640,"w":120,"h":70},{"x":600,"y":1250,"w":200,"h":60},{"x":900,"y":1250,"w":200,"h":60},{"x":2150,"y":2700,"w":180,"h":60},{"x":2500,"y":2700,"w":180,"h":60},{"x":3550,"y":1550,"w":60,"h":240},{"x":3700,"y":1550,"w":60,"h":240},{"x":3620,"y":1900,"w":110,"h":110},{"x":3800,"y":2050,"w":110,"h":110},{"x":1200,"y":1300,"w":90,"h":90},{"x":1380,"y":1300,"w":90,"h":90},{"x":2350,"y":1900,"w":90,"h":90},{"x":2350,"y":2050,"w":90,"h":90},{"x":700,"y":2000,"w":120,"h":70},{"x":900,"y":2100,"w":120,"h":70}],"crates":[{"x":420,"y":380,"t":"weapon"},{"x":700,"y":700,"t":"safe"},{"x":380,"y":700,"t":"crate"},{"x":1180,"y":700,"t":"weapon"},{"x":1700,"y":980,"t":"tool"},{"x":1950,"y":520,"t":"safe"},{"x":2550,"y":420,"t":"weapon"},{"x":3100,"y":1000,"t":"med"},{"x":3420,"y":640,"t":"crate"},{"x":3751,"y":878,"t":"safe"},{"x":4080,"y":500,"t":"weapon"},{"x":1120,"y":1900,"t":"tool"},{"x":1500,"y":1750,"t":"ammo"},{"x":1750,"y":2280,"t":"safe"},{"x":1560,"y":2560,"t":"weapon"},{"x":900,"y":2350,"t":"med"},{"x":2350,"y":2300,"t":"weapon"},{"x":2900,"y":2150,"t":"safe"},{"x":3480,"y":2200,"t":"crate"},{"x":3300,"y":2700,"t":"weapon"},{"x":2500,"y":2900,"t":"tool"},{"x":420,"y":2360,"t":"safe"},{"x":740,"y":2320,"t":"weapon"},{"x":1060,"y":2900,"t":"med"},{"x":1400,"y":3000,"t":"crate"},{"x":1900,"y":2600,"t":"safe"},{"x":2150,"y":2350,"t":"weapon"},{"x":3800,"y":1800,"t":"tool"},{"x":4100,"y":2600,"t":"ammo"},{"x":3600,"y":2900,"t":"safe"},{"x":600,"y":1560,"t":"weapon"},{"x":2200,"y":900,"t":"med"}],"extracts":[{"x":140,"y":1550,"name":"A"},{"x":2100,"y":3050,"name":"B"},{"x":4220,"y":2980,"name":"C"}],"nests":[{"x":588,"y":620},{"x":1300,"y":400},{"x":1800,"y":700},{"x":2709,"y":822},{"x":3180,"y":513},{"x":3960,"y":760},{"x":1230,"y":1863},{"x":1400,"y":2500},{"x":3150,"y":2150},{"x":3500,"y":2600},{"x":772,"y":2700},{"x":2100,"y":1600},{"x":2050,"y":2900},{"x":3800,"y":1950}],"units":[{"x":605,"y":575,"type":"shooter"},{"x":480,"y":667,"type":"runner"},{"x":422,"y":533,"type":"runner"},{"x":517,"y":427,"type":"sniper"},{"x":708,"y":431,"type":"nader"},{"x":1653,"y":707,"type":"runner"},{"x":1543,"y":870,"type":"runner"},{"x":1390,"y":741,"type":"shooter"},{"x":1403,"y":582,"type":"brute"},{"x":1441,"y":376,"type":"flamer"},{"x":1650,"y":427,"type":"rocket"},{"x":1715,"y":587,"type":"runner"},{"x":3083,"y":770,"type":"runner"},{"x":2965,"y":897,"type":"shooter"},{"x":2849,"y":755,"type":"shooter"},{"x":2907,"y":622,"type":"sniper"},{"x":3037,"y":490,"type":"flamer"},{"x":3164,"y":641,"type":"cryo"},{"x":4019,"y":739,"type":"runner"},{"x":3907,"y":822,"type":"shooter"},{"x":3894,"y":682,"type":"brute"},{"x":3939,"y":607,"type":"rocket"},{"x":4088,"y":610,"type":"nader"},{"x":1322,"y":2161,"type":"runner"},{"x":1245,"y":2275,"type":"runner"},{"x":1138,"y":2185,"type":"shooter"},{"x":1147,"y":2074,"type":"shooter"},{"x":1173,"y":1929,"type":"brute"},{"x":1320,"y":1965,"type":"rocket"},{"x":1365,"y":2077,"type":"cryoT"},{"x":3215,"y":2405,"type":"runner"},{"x":3146,"y":2509,"type":"runner"},{"x":3048,"y":2427,"type":"shooter"},{"x":3057,"y":2326,"type":"brute"},{"x":3081,"y":2196,"type":"sniper"},{"x":3213,"y":2228,"type":"flamer"},{"x":3254,"y":2329,"type":"cryoS"},{"x":776,"y":2723,"type":"runner"},{"x":653,"y":2796,"type":"runner"},{"x":600,"y":2673,"type":"shooter"},{"x":648,"y":2640,"type":"brute"},{"x":808,"y":2633,"type":"cryoT"},{"x":2189,"y":1575,"type":"runner"},{"x":1960,"y":1666,"type":"runner"},{"x":1967,"y":1388,"type":"shooter"},{"x":2185,"y":1400,"type":"sniper"},{"x":1545,"y":784,"type":"boss"}],"squad":["runner","runner","shooter","runner","brute","sniper","runner","shooter","rocket","flamer","cryo","cryoT","cryoS","nader"]};
+  BUILTIN_MAPS['space-base'] = base;
+
+  /* ── 绝密变体：同一张图，守军 +10 精锐，容器换成军械 / 保险柜 ── */
+  const top = JSON.parse(JSON.stringify(base));
+  top.name = '航天基地·绝密';
+  top.tier = 'top';
+  const elite = ['brute', 'sniper', 'rocket', 'flamer', 'shooter', 'runner', 'cryoS', 'cryo', 'nader', 'shooter'];
+  const eliteAt = [[2050, 2960], [180, 1650], [4180, 2900], [2400, 1400], [1600, 2500],
+                   [3200, 2700], [600, 1200], [2600, 1000], [3900, 1500], [1150, 1050]];
+  elite.forEach((t, i) => top.units.push({ x: eliteAt[i][0], y: eliteAt[i][1], type: t, f: 'havk' }));
+  const topKinds = ['weapon', 'safe', 'weapon', 'safe', 'weapon', 'tool', 'safe', 'med',
+                    'weapon', 'safe', 'crate', 'weapon', 'safe', 'ammo', 'weapon', 'safe'];
+  top.crates = top.crates.map((c, i) => ({ x: c.x, y: c.y, t: topKinds[i % topKinds.length] }));
+  BUILTIN_MAPS['space-base-top'] = top;
+})();
+
 const WORLD_DEFAULT = { w: 3000, h: 2200 };
 /* 默认守军：小兵多、盾兵少、机枪兵更少（机枪兵太耐打，排多了会拖节奏） */
 /* 单出生点 / 随机地图的默认守军：14 人，四种新兵各放一两个，别一上来就满编 */
@@ -3437,7 +3532,8 @@ function normalizeMap(raw) {
   const map = {
     format: MAP_FORMAT, version: MAP_VERSION,
     name: (typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim() : '导入地图').slice(0, 24),
-    tier: raw.tier === 'secret' ? 'secret' : 'standard',
+    tier: raw.tier === 'top' ? 'top' : (raw.tier === 'secret' ? 'secret' : 'standard'),
+    faction: FACTIONS[raw.faction] ? raw.faction : 'asara',
     w, h,
     spawns: [],
     obstacles: [], crates: [], extracts: [], nests: [],
@@ -3507,7 +3603,7 @@ function normalizeMap(raw) {
     const R = ENEMY_TYPES[u.type].r + 10;
     const p = nudgeFree(clamp(x, 60, w - 60), clamp(y, 60, h - 60), R, map.obstacles, w, h);
     if (p.moved) movedUnit = true;
-    map.units.push({ x: p.x, y: p.y, type: u.type });
+    map.units.push({ x: p.x, y: p.y, type: u.type, f: FACTIONS[u.f] ? u.f : map.faction });
     if (map.units.length >= 60) break;
   }
   if (movedUnit) warnings.push('有敌人布点压在墙上，已挪到附近空地');
@@ -3520,7 +3616,7 @@ function normalizeMap(raw) {
         clamp(n.x + rand(-130, 130), 60, w - 60),
         clamp(n.y + rand(-130, 130), 60, h - 60),
         R, map.obstacles, w, h);
-      map.units.push({ x: p.x, y: p.y, type: t });
+      map.units.push({ x: p.x, y: p.y, type: t, f: map.faction });
     });
   }
 
@@ -3578,10 +3674,16 @@ function applyMapData(m) {
     x: e.x, y: e.y, r: 108, phase: rand(0, TAU), name: e.name || (i === 0 ? 'A' : 'B'),
   }));
   G.nests = m.nests.map(n => ({ x: n.x, y: n.y }));
-  G.units = (m.units || []).map(u => ({ x: u.x, y: u.y, type: u.type }));
+  G.mapFaction = FACTIONS[m.faction] ? m.faction : 'asara';
+  G.units = (m.units || []).map(u => ({ x: u.x, y: u.y, type: u.type, f: FACTIONS[u.f] ? u.f : G.mapFaction }));
   G.squad = (m.squad && m.squad.length ? m.squad : DEFAULT_SQUAD).slice();
   G.mapName = m.name || '自定义地图';
-  G.tier = m.tier === 'secret' ? 'secret' : 'standard';
+  G.tier = m.tier === 'top' ? 'top' : (m.tier === 'secret' ? 'secret' : 'standard');
+  /* 混编地图才需要跑阵营混战；单阵营地图直接跳过，零开销 */
+  const facs = new Set(G.units.map(u => u.f));
+  if (!facs.size) facs.add(G.mapFaction);
+  G.factionsMixed = facs.size > 1;
+  G.spawnFaction = G.units.length ? G.units[0].f : G.mapFaction;
 }
 
 /* 每局开场准备世界：有自定义地图就载入，否则现场随机生成 */
@@ -3602,6 +3704,9 @@ function prepareWorldForRaid() {
   G.squad = DEFAULT_SQUAD.slice();
   G.mapName = '随机生成（每局不同）';
   G.tier = 'standard';
+  G.mapFaction = 'asara';
+  G.spawnFaction = 'asara';
+  G.factionsMixed = false;
 }
 
 /* 把当前世界导出成一份地图数据 */
@@ -3609,13 +3714,15 @@ function buildMapData(name) {
   return {
     format: MAP_FORMAT, version: MAP_VERSION,
     name: (name || (G.customMap ? G.customMap.name : '自定义地图')).slice(0, 24),
+    tier: G.tier || 'standard',
+    faction: G.mapFaction || 'asara',
     w: WORLD.w, h: WORLD.h,
     spawns: (G.spawns && G.spawns.length ? G.spawns : [G.spawn]).map(s => ({ x: Math.round(s.x), y: Math.round(s.y) })),
     obstacles: G.obstacles.map(o => ({ x: Math.round(o.x), y: Math.round(o.y), w: Math.round(o.w), h: Math.round(o.h) })),
     crates: G.crates.map(c => ({ x: Math.round(c.x), y: Math.round(c.y), t: c.kind || 'crate' })),
     extracts: G.extracts.map(e => ({ x: Math.round(e.x), y: Math.round(e.y), name: e.name })),
     nests: G.nests.map(n => ({ x: Math.round(n.x), y: Math.round(n.y) })),
-    units: (G.units || []).map(u => ({ x: Math.round(u.x), y: Math.round(u.y), type: u.type })),
+    units: (G.units || []).map(u => ({ x: Math.round(u.x), y: Math.round(u.y), type: u.type, f: u.f || G.mapFaction })),
     squad: (G.squad.length ? G.squad : DEFAULT_SQUAD).slice(),
   };
 }
@@ -5348,7 +5455,7 @@ function damagePlayer(amount, srcX, srcY, inv) {
   if (P.painT > 0) dmg *= 1 - PAIN_DR;      // 止痛剂压着，挨打没那么疼
   rollTrauma(dmg, 'bullet');                // 掷创伤：流血 / 贯穿伤 / 骨折
   P.hp -= dmg;
-  P.invuln = inv || (isSecret() ? SECRET.playerInvuln : 0.55);
+  P.invuln = inv || (isTop() ? TOP.playerInvuln : (isSecret() ? SECRET.playerInvuln : 0.55));
   P.hurtFlash = 1;
   // 背后看不见，至少让人知道子弹从哪来
   if (typeof srcX === 'number' && typeof srcY === 'number') {
@@ -5488,18 +5595,20 @@ function callBackup(sx, sy) {
   Sfx.tone(260, 0.35, 0.1, 'square', 120);
 }
 
-function spawnEnemy(type, atX, atY) {
+function spawnEnemy(type, atX, atY, fac) {
   const T = ENEMY_TYPES[type];
   const scale = 1 + G.reinforceWave * 0.16;
+  const faction = FACTIONS[fac] ? fac : (G.spawnFaction || 'asara');
   /* 机密模式：血量换表、伤害走倍率（远程在读取处乘，近战直接用 e.dmg） */
   const sec = isSecret();
-  const hpBase = (sec && SECRET.hp[type]) ? SECRET.hp[type] : T.hp;
-  const dmgMul = sec ? (SECRET.dmgMul[type] || 1) : 1;
-  const shieldBase = (sec && type === 'shooter') ? SECRET.shield : (T.shield || 0);
+  const hpBase = ((sec && SECRET.hp[type]) ? SECRET.hp[type] : T.hp) * (isTop() ? TOP.hpMul : 1);
+  const dmgMul = (sec ? (SECRET.dmgMul[type] || 1) : 1) * (isTop() ? TOP.dmgMul : 1);
+  const shieldBase = ((sec && type === 'shooter') ? SECRET.shield : (T.shield || 0)) * (isTop() ? TOP.shieldMul : 1);
   /* 护甲等级：决定「几级弹才打得进」。护甲本身有耐久，磨光了就裸奔。
-     机密图里穿甲的兵整体上浮一级（封顶 5 级），多出来的那级换算成耐久。 */
+     机密图里穿甲的兵整体上浮一级、绝密上浮两级（封顶 5 级），多出来的那级换算成耐久。 */
   const baseLv = T.armor || 0;
-  const rawLv = (sec && baseLv > 0) ? baseLv + (SECRET.armorAdd || 0) : baseLv;
+  const addLv = sec ? (isTop() ? TOP.armorAdd : (SECRET.armorAdd || 0)) : 0;
+  const rawLv = baseLv > 0 ? baseLv + addLv : baseLv;
   const armorLv = Math.min(rawLv, SECRET.armorLvCap || 6);
   const armorHp = Math.round(armorLv * 48 * ((sec && rawLv > armorLv) ? (SECRET.armorOverCapHp || 1) : 1));
   let x = atX, y = atY, nest = null;
@@ -5525,7 +5634,8 @@ function spawnEnemy(type, atX, atY) {
   const home = nest || { x, y };
 
   const e = {
-    type, x, y, r: T.r,
+    type, faction, label: enemyLabel(type, faction),
+    x, y, r: T.r,
     hp: hpBase * scale, maxHp: hpBase * scale,
     speed: T.speed * rand(0.92, 1.08),
     dmg: T.dmg * dmgMul, dmgMul, score: T.score,
@@ -5648,6 +5758,7 @@ function enemyShootAt(e, a, speed, dmg, r, color) {
     vy: Math.sin(a) * speed,
     r: r || 4.0, dmg: dmg, color: color || '#ff5c7a',
     life: 2.2, hostile: true, pierce: 0, knock: 0,
+    side: e.faction || 'asara', src: e,      // 阵营归属：混战里同阵营不会误伤
   });
   burst(mx, my, 3, {
     angle: a, spread: 0.34, spdMin: 110, spdMax: 320,
@@ -8596,6 +8707,54 @@ function updateEnemies(dt) {
   G.alarm = Math.max(0, G.alarm - dt * 0.08);
 }
 
+/* ══════════════════════════════════════════════════════════
+   阵营混战：两个阵营同场时互相开火
+   ──────────────────────────────────────────────────────────
+   只接管「没在打玩家」的敌人：看见敌对阵营就转头对射。
+   正在和玩家交火的敌人仍优先玩家 —— 玩家永远是最扎眼的那个。
+   单阵营地图（零号大坝 / 航天基地）G.factionsMixed=false，整段零开销跳过。
+   ══════════════════════════════════════════════════════════ */
+function updateFactionWars(dt) {
+  if (!G.factionsMixed) return;
+  for (const e of G.enemies) {
+    if (!e.alive) continue;
+    if (e.state === 'combat' || e.stun > 0) { e.foeTgt = null; continue; }
+
+    /* 索敌：每 0.35~0.7 秒扫一次最近的敌对阵营（要能看见，墙后不算） */
+    e.foeScan = (e.foeScan || 0) - dt;
+    if (e.foeScan <= 0) {
+      e.foeScan = rand(0.35, 0.7);
+      let best = null, bd = Infinity;
+      for (const o of G.enemies) {
+        if (!o.alive || o.faction === e.faction) continue;
+        const dd = dist(e.x, e.y, o.x, o.y);
+        if (dd > e.sight * 0.9 || dd >= bd) continue;
+        if (!losClear(e.x, e.y, o.x, o.y)) continue;
+        if (dd > 64 && smokeBlocks(e.x, e.y, o.x, o.y)) continue;
+        best = o; bd = dd;
+      }
+      e.foeTgt = best;
+    }
+
+    const t = e.foeTgt;
+    if (!t || !t.alive) { e.foeTgt = null; continue; }
+    const dd = dist(e.x, e.y, t.x, t.y);
+    if (dd > e.sight || !losClear(e.x, e.y, t.x, t.y)) { e.foeTgt = null; continue; }
+
+    /* 转头对准（不瞬移甩枪） */
+    const aim = Math.atan2(t.y - e.y, t.x - e.x);
+    e.facing += clamp(angleDiff(aim, e.facing), -3.2 * dt, 3.2 * dt);
+
+    e.foeCd = (e.foeCd === undefined ? rand(0.5, 1.4) : e.foeCd) - dt;
+    if (e.foeCd <= 0) {
+      e.foeCd = rand(1.1, 2.0);
+      const a = aim + rand(-1, 1) * 0.08;
+      enemyShootAt(e, a, 620, 5.5 * (e.dmgMul || 1), 3.4, '#ffd0da');
+      Sfx.shoot('tap');
+    }
+  }
+}
+
 /* 子弹打在身上：先过护甲那道关。
    返回 {dmg 实际肉伤, ratio 穿透比例, blocked 是否被完全挡住}。
    挡住的弹不掉血，但会磨护甲耐久 —— 所以低级弹磨也能把甲磨穿，
@@ -8620,15 +8779,19 @@ function bulletDamage(e, b) {
   return { dmg, ratio, blocked: ratio <= 0 };
 }
 
-function damageEnemy(e, dmg, dirX, dirY, knock) {
+function damageEnemy(e, dmg, dirX, dirY, knock, byFac) {
   if (e.invuln > 0) return;        // 翻滚中的 BOSS 不吃伤害
+  const byPlayer = !byFac || byFac === 'player';
   e.hp -= dmg;
   e.burn = 1;
   e.stagger = Math.min(0.22, dmg / 380);
-  /* 露娜被动：打中就标上 —— 隔着迷雾也能看见他往哪跑 */
-  if (spotOn()) markEnemy(e, 4);
+  /* 露娜被动：打中就标上 —— 隔着迷雾也能看见他往哪跑（只有玩家打的才算） */
+  if (byPlayer && spotOn()) markEnemy(e, 4);
   if (knock) { e.x += dirX * knock * 0.02; e.y += dirY * knock * 0.02; }
-  if (e.hp <= 0 && e.alive) killEnemy(e);
+  if (e.hp <= 0 && e.alive) {
+    e.envKill = !byPlayer;         // 死于阵营混战：不给玩家记击杀 / 连击 / 分数
+    killEnemy(e);
+  }
 }
 
 function killEnemy(e) {
@@ -8636,25 +8799,31 @@ function killEnemy(e) {
   const idx = G.enemies.indexOf(e);
   if (idx >= 0) G.enemies.splice(idx, 1);
 
-  G.kills++;
-  G.combo++;
-  G.comboTimer = 2.6;
-  exoOnKill();                  // 外骨骼期间：每倒一个都续 5 秒 + 回 30 血 + 满体力
-  /* 威龙：动力推进每倒一个直接扣 10 秒冷却（冷却在 recharge 上，cd 只剩出弹间隔） */
-  if (P.op && (P.op.v.cd > 0 || P.op.v.recharge > 0)) {
-    const od = opDef();
-    if (od && od.v.kind === 'dash') {
-      const cut = SKILL.dash.killCd;
-      if (P.op.v.recharge > 0) P.op.v.recharge = Math.max(0, P.op.v.recharge - cut);
-      else P.op.v.cd = Math.max(0, P.op.v.cd - cut);
-      popup(e.x, e.y - e.r - 46, '推进 -' + cut + 's', '#8fe0ff', 11);
+  /* 死于阵营混战（不是玩家打的）：不记击杀 / 连击 / 分数，也不触发击杀类被动 */
+  const byEnv = !!e.envKill;
+  if (!byEnv) {
+    G.kills++;
+    G.combo++;
+    G.comboTimer = 2.6;
+    exoOnKill();                  // 外骨骼期间：每倒一个都续 5 秒 + 回 30 血 + 满体力
+    /* 威龙：动力推进每倒一个直接扣 10 秒冷却（冷却在 recharge 上，cd 只剩出弹间隔） */
+    if (P.op && (P.op.v.cd > 0 || P.op.v.recharge > 0)) {
+      const od = opDef();
+      if (od && od.v.kind === 'dash') {
+        const cut = SKILL.dash.killCd;
+        if (P.op.v.recharge > 0) P.op.v.recharge = Math.max(0, P.op.v.recharge - cut);
+        else P.op.v.cd = Math.max(0, P.op.v.cd - cut);
+        popup(e.x, e.y - e.r - 46, '推进 -' + cut + 's', '#8fe0ff', 11);
+      }
     }
+    const mult = 1 + Math.min(G.combo, 20) * 0.06;
+    const gain = Math.round(e.score * mult);
+    G.score += gain;
+    popup(e.x, e.y - e.r - 6, '+' + gain, G.combo > 3 ? '#ffd66b' : '#a8d8ff', e.type === 'boss' ? 26 : 14);
+    if (G.combo > 2) popup(e.x, e.y - e.r - 30, 'x' + G.combo + ' 连击', '#43d9f5', 12);
+  } else {
+    popup(e.x, e.y - e.r - 6, '阵营交火', 'rgba(200,220,240,0.75)', 11);
   }
-  const mult = 1 + Math.min(G.combo, 20) * 0.06;
-  const gain = Math.round(e.score * mult);
-  G.score += gain;
-  popup(e.x, e.y - e.r - 6, '+' + gain, G.combo > 3 ? '#ffd66b' : '#a8d8ff', e.type === 'boss' ? 26 : 14);
-  if (G.combo > 2) popup(e.x, e.y - e.r - 30, 'x' + G.combo + ' 连击', '#43d9f5', 12);
 
   burst(e.x, e.y, e.type === 'boss' ? 60 : (e.type === 'brute' ? 26 : 16), {
     color: [e.color, '#ffffff', '#ff8fa3'],
@@ -8759,6 +8928,20 @@ function updateBullets(dt) {
           damagePlayer(b.dmg, b.x, b.y, b.heavy ? 0.34 : 0);
           burst(b.x, b.y, 6, { color: ['#ff4060', '#ffffff'], life: 0.3, r: 3, spdMin: 50, spdMax: 200, glow: true });
           G.bullets.splice(i, 1); removed = true; break;
+        }
+        /* 阵营混战：敌对阵营的子弹会打到对方，同阵营穿过去不误伤 */
+        if (b.side && G.factionsMixed) {
+          for (let j = G.enemies.length - 1; j >= 0; j--) {
+            const e = G.enemies[j];
+            if (!e.alive || e === b.src || e.faction === b.side) continue;
+            if (dist2(b.x, b.y, e.x, e.y) >= (e.r + b.r) * (e.r + b.r)) continue;
+            const sp = Math.hypot(b.vx, b.vy) || 1;
+            damageEnemy(e, b.dmg * 0.85, b.vx / sp, b.vy / sp, 0, b.side);
+            burst(b.x, b.y, 5, { color: ['#ffd0da', '#ffffff'], life: 0.26, r: 2.8, spdMin: 40, spdMax: 180, glow: true });
+            G.bullets.splice(i, 1); removed = true;
+            break;
+          }
+          if (removed) break;
         }
       } else {
         /* 半空中的火箭可以被点爆——这是对火箭筒兵最省事的解法 */
@@ -9187,7 +9370,7 @@ function updateSearch(dt) {
 function relicWeights(bob) {
   const wave = G.reinforceWave || 0;
   const b = bob || 0;
-  const L = isSecret() ? SECRET.loot : null;
+  const L = lootTable();
   return [
     ['common', Math.max(10, 64 - wave * 12 - b * 26) * (L ? L.relicCommon : 1)],
     ['rare',   (26 + wave * 4) * (L ? L.relicRare : 1)],
@@ -9199,7 +9382,7 @@ function relicWeights(bob) {
 function modWeights(bob) {
   const wave = G.reinforceWave || 0;
   const b = bob || 0;
-  const L = isSecret() ? SECRET.loot : null;
+  const L = lootTable();
   return [
     ['common', Math.max(18, 58 - wave * 8 - b * 18) * (L ? 0.50 : 1)],
     ['rare',   (28 + wave * 3) * (L ? 1.40 : 1)],
@@ -9294,7 +9477,7 @@ function rollContainer(kind) {
       if (Math.random() < 0.35) addRelic(0);
       if (Math.random() < 0.40) items.push(makeMedItem(rollMedDropId(false)));
       if (Math.random() < 0.14) items.push(makeStopItem('bandage'));
-      if (Math.random() < (isSecret() ? SECRET.loot.gunChance : 0.20)) items.push(makeWeaponItem(pickGun(false)));
+      if (Math.random() < (lootTable() ? lootTable().gunChance : 0.20)) items.push(makeWeaponItem(pickGun(false)));
       if (Math.random() < 0.30) addMod(0);
       if (Math.random() < 0.08 + wave * 0.04) addMod(0.4);
       break;
@@ -9331,7 +9514,7 @@ function rollContainer(kind) {
     /* 武器箱：必出一把枪，配件的可能性也高 */
     case 'weapon': {
       items.push(makeWeaponItem(pickGun(true)));
-      if (Math.random() < (isSecret() ? SECRET.loot.weaponModChance : 0.45)) addMod(0.7);
+      if (Math.random() < (lootTable() ? lootTable().weaponModChance : 0.45)) addMod(0.7);
       if (Math.random() < 0.30) items.push(makeAmmoItem(2));
       if (Math.random() < 0.15) items.push(makeMedItem(rollMedDropId(false)));
       break;
@@ -9339,8 +9522,8 @@ function rollContainer(kind) {
     /* 保险柜：慢得离谱，但品质卷得最高 */
     case 'safe': {
       for (let i = 0; i < randInt(C.n[0], C.n[1]); i++) addRelic(1.4);
-      if (Math.random() < (isSecret() ? SECRET.loot.safeExtraChance : 0.50)) addRelic(1.4);
-      if (Math.random() < (isSecret() ? SECRET.loot.safeModChance : 0.30)) addMod(1.2);
+      if (Math.random() < (lootTable() ? lootTable().safeExtraChance : 0.50)) addRelic(1.4);
+      if (Math.random() < (lootTable() ? lootTable().safeModChance : 0.30)) addMod(1.2);
       if (Math.random() < 0.10) items.push(makeAmmoItem(2));
       break;
     }
@@ -13898,6 +14081,7 @@ function update(dt) {
 
   updatePlayer(dt);
   updateEnemies(dt);
+  updateFactionWars(dt);
   updateBullets(dt);
   updateNades(dt);
   updateSmokes(dt);
@@ -14706,12 +14890,15 @@ function refreshLobby() {
   const risk = $('riskLine');
   if (risk) {
     const secretRaid = G.tier === 'secret';
+    const topRaid = G.tier === 'top';
     const ownedWeapons = WEAPON_ORDER.filter(k => SAVE.owned[k]);
     /* 带进去的枪里，有哪个口径一颗子弹都没有 */
     const dryGuns = GUN_SLOTS
       .map(k => SAVE.loadout[k])
       .filter(id => id && WEAPONS[id] && ammoTotalOf(calOfWeapon(id)) <= 0);
-    if (secretRaid) {
+    if (topRaid) {
+      risk.textContent = '绝密行动：哈夫克精锐 · 敌人血量与护甲在机密之上再抬一档，增援更早更密，但军械与保险柜几乎铺满（打不过就绕，别硬换）';
+    } else if (secretRaid) {
       risk.textContent = '机密行动：敌人血量、伤害与护甲全面上调（穿甲的兵甲级 +1），但军械与保险柜更多、品质更高';
     } else if (!ownedWeapons.length) {
       risk.textContent = '一把枪都没有 · 现在只能空手带刀出击，先去军火库买把枪（G17 ¥700 起）';
@@ -15233,8 +15420,10 @@ function mapMessage(text, cls) {
 
 /* ══════════ 大厅：出击前的快速选图 ══════════ */
 const BUILTIN_MAP_META = {
-  'zero-dam': { name: '零号大坝·普通', sub: '水坝工业区 · 3400×2400 · 守军 33' },
-  'zero-dam-secret': { name: '零号大坝·机密', sub: '高难 · 敌人更硬 · 战利品加码', secret: true },
+  'zero-dam': { name: '零号大坝·普通', sub: '水坝工业区 · 阿萨拉守军 · 普通' },
+  'zero-dam-secret': { name: '零号大坝·机密', sub: '阿萨拉精锐 · 敌人更硬 · 战利品加码', secret: true },
+  'space-base': { name: '航天基地·机密', sub: '发射场 · 哈夫克守军 · 机密', secret: true },
+  'space-base-top': { name: '航天基地·绝密', sub: '哈夫克精锐 · 敌人最硬 · 物资顶级', top: true },
 };
 
 function currentMapId() {
@@ -15261,7 +15450,8 @@ function refreshMapSelect() {
       id,
       name: meta ? meta.name : m.name,
       sub: meta ? meta.sub : (m.w + '×' + m.h),
-      secret: !!(meta && meta.secret) || m.tier === 'secret',
+      secret: !!(meta && meta.secret) || m.tier === 'secret' || (meta && meta.top) || m.tier === 'top',
+      top: !!(meta && meta.top) || m.tier === 'top',
     });
   }
   if (curId === 'custom') {
@@ -15276,7 +15466,7 @@ function refreshMapSelect() {
   for (const it of list) {
     const b = document.createElement('button');
     b.type = 'button';
-    b.className = 'mcard' + (it.id === curId ? ' on' : '') + (it.secret ? ' secret' : '');
+    b.className = 'mcard' + (it.id === curId ? ' on' : '') + (it.secret ? ' secret' : '') + (it.top ? ' top' : '');
     b.dataset.mapId = it.id;
     b.innerHTML = '<b>' + it.name + '</b><small>' + it.sub + '</small>';
     b.addEventListener('click', () => chooseMap(it.id));
@@ -15296,10 +15486,11 @@ function refreshMapSelect() {
       '撤离点 ' + cm.extracts.length,
       '守军 ' + cm.units.length,
     ];
-    const tag = cm.tier === 'secret'
-      ? '<b style="color:#ff8fa3">机密 · 敌人更硬 · 战利品加码</b> · '
-      : '';
-    note.innerHTML = '当前：<b>' + cm.name + '</b> — ' + tag + parts.join(' · ');
+    const tag = cm.tier === 'top'
+      ? '<b style="color:#d8a3ff">绝密 · 哈夫克精锐 · 战利品顶级</b> · '
+      : (cm.tier === 'secret' ? '<b style="color:#ff8fa3">机密 · 敌人更硬 · 战利品加码</b> · ' : '');
+    const facTxt = '<b style="color:' + factionOf(cm.faction).color + '">' + factionOf(cm.faction).name + '守军</b> · ';
+    note.innerHTML = '当前：<b>' + cm.name + '</b> — ' + tag + facTxt + parts.join(' · ');
   }
 }
 
@@ -15321,17 +15512,18 @@ function refreshMapPanel() {
               cryo: 0, cryoT: 0, cryoS: 0, nader: 0 };
   for (const t of list) if (c[t] !== undefined) c[t]++;
   const comp = [];
-  if (c.runner) comp.push(ENEMY_SHORT.runner + ' ' + c.runner);
-  if (c.shooter) comp.push(ENEMY_SHORT.shooter + ' ' + c.shooter);
-  if (c.brute) comp.push(ENEMY_SHORT.brute + ' ' + c.brute);
-  if (c.sniper) comp.push(ENEMY_SHORT.sniper + ' ' + c.sniper);
-  if (c.rocket) comp.push(ENEMY_SHORT.rocket + ' ' + c.rocket);
-  if (c.flamer) comp.push(ENEMY_SHORT.flamer + ' ' + c.flamer);
-  if (c.cryo) comp.push(ENEMY_SHORT.cryo + ' ' + c.cryo);
-  if (c.cryoT) comp.push(ENEMY_SHORT.cryoT + ' ' + c.cryoT);
-  if (c.cryoS) comp.push(ENEMY_SHORT.cryoS + ' ' + c.cryoS);
-  if (c.nader) comp.push(ENEMY_SHORT.nader + ' ' + c.nader);
-  if (bossN) comp.push(ENEMY_SHORT.boss + ' ' + bossN);
+  const facNow = (cm && cm.faction) || 'asara';
+  if (c.runner) comp.push(enemyShort('runner', facNow) + ' ' + c.runner);
+  if (c.shooter) comp.push(enemyShort('shooter', facNow) + ' ' + c.shooter);
+  if (c.brute) comp.push(enemyShort('brute', facNow) + ' ' + c.brute);
+  if (c.sniper) comp.push(enemyShort('sniper', facNow) + ' ' + c.sniper);
+  if (c.rocket) comp.push(enemyShort('rocket', facNow) + ' ' + c.rocket);
+  if (c.flamer) comp.push(enemyShort('flamer', facNow) + ' ' + c.flamer);
+  if (c.cryo) comp.push(enemyShort('cryo', facNow) + ' ' + c.cryo);
+  if (c.cryoT) comp.push(enemyShort('cryoT', facNow) + ' ' + c.cryoT);
+  if (c.cryoS) comp.push(enemyShort('cryoS', facNow) + ' ' + c.cryoS);
+  if (c.nader) comp.push(enemyShort('nader', facNow) + ' ' + c.nader);
+  if (bossN) comp.push(enemyShort('boss', facNow) + ' ' + bossN);
   // 容器构成：一眼看出这张图肥不肥
   const cc = {};
   for (const k of CONTAINER_IDS) cc[k] = 0;
@@ -15340,6 +15532,7 @@ function refreshMapPanel() {
 
   const rows = [
     ['地图名称', cm ? cm.name : '未选择'],
+    ['守军阵营', factionOf(G.mapFaction || (cm && cm.faction) || 'asara').name + (G.factionsMixed ? ' · 混编' : ' · 单一阵营')],
     ['地图尺寸', WORLD.w + ' × ' + WORLD.h],
     ['出生点', ((G.spawns && G.spawns.length) || 1) + ' 个' + (G.spawns && G.spawns.length > 1 ? '（每局随机）' : '')],
     ['掩体 / 容器', G.obstacles.length + ' / ' + (G.crates ? G.crates.length : 0)],
@@ -16742,7 +16935,8 @@ function startRaid() {
   G.reinforceT = firstReinforceDelay();   // 必须在 prepareWorldForRaid 之后：机密图的首波更早
   G.bossSpawned = (G.units || []).some(u => u.type === 'boss');
   G.bossBarBottom = false;
-  if (G.tier === 'secret') uiToast('机 密 行 动 · 敌人更强 · 物资更好', 'warn');
+  if (G.tier === 'top') uiToast('绝 密 行 动 · 敌人最硬 · 物资顶级', 'warn');
+  else if (G.tier === 'secret') uiToast('机 密 行 动 · 敌人更强 · 物资更好', 'warn');
 
   G.cam.x = clamp(P.x - VW / ZOOM / 2, 0, Math.max(0, WORLD.w - VW / ZOOM));
   G.cam.y = clamp(P.y - VH / ZOOM / 2, 0, Math.max(0, WORLD.h - VH / ZOOM));
@@ -16756,14 +16950,15 @@ function startRaid() {
 
   // 初始驻军：地图里布了点就按兵种落位；否则按 squad 随机铺到据点附近
   if (G.units && G.units.length) {
-    for (const u of G.units) spawnEnemy(u.type, u.x, u.y);
+    for (const u of G.units) spawnEnemy(u.type, u.x, u.y, u.f);
     /* 新兵种保底：内置地图的布点是写死的，不含冰冻军团三兄弟与手雷兵。
        地图里没有就各补两个，落在据点附近的可通行处，免得整局见不到新兵种。 */
     const hasType = t => G.units.some(u => u.type === t);
-    if (!hasType('cryo')) { spawnEnemy('cryo'); spawnEnemy('cryo'); }
-    if (!hasType('cryoT')) { spawnEnemy('cryoT'); spawnEnemy('cryoT'); }
-    if (!hasType('cryoS')) { spawnEnemy('cryoS'); spawnEnemy('cryoS'); }
-    if (!hasType('nader')) { spawnEnemy('nader'); spawnEnemy('nader'); }
+    const F = G.spawnFaction || G.mapFaction || 'asara';
+    if (!hasType('cryo')) { spawnEnemy('cryo', undefined, undefined, F); spawnEnemy('cryo', undefined, undefined, F); }
+    if (!hasType('cryoT')) { spawnEnemy('cryoT', undefined, undefined, F); spawnEnemy('cryoT', undefined, undefined, F); }
+    if (!hasType('cryoS')) { spawnEnemy('cryoS', undefined, undefined, F); spawnEnemy('cryoS', undefined, undefined, F); }
+    if (!hasType('nader')) { spawnEnemy('nader', undefined, undefined, F); spawnEnemy('nader', undefined, undefined, F); }
   } else {
     const squad = (G.squad && G.squad.length) ? G.squad : DEFAULT_SQUAD;
     for (const t of squad) spawnEnemy(t);
