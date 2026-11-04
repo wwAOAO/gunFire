@@ -429,6 +429,8 @@
   .lo-holding { position:fixed; pointer-events:none; z-index:99; font-size:12px; font-weight:800;
     color:#ffd08a; background:rgba(8,16,24,.9); border:1px solid rgba(255,208,138,.5);
     padding:4px 10px; border-radius:4px; transform:translate(12px,12px); white-space:nowrap; }
+  /* 没有 .hidden 类的样式，加 class 只是自嗨——芯片必须真隐藏 */
+  .lo-holding.hidden { display:none; }
   .stashempty {
     grid-column:1 / -1; padding:46px 20px; text-align:center;
     border:1px dashed rgba(80,140,185,.22); border-radius:4px;
