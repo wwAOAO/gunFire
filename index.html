@@ -2146,8 +2146,10 @@ const SKILL = {
   rescue: { down: 8.0, hp: 10, cd: 360, weakCut: 1 },
 
   /* ── 乌鲁鲁（工程）── */
+  /* 复合燃烧弹：落地爆燃（中心 30 伤，边缘衰减到 40%）+ 5 米火场 12 秒。
+     火场每 0.55s 对敌 6.5 伤；自己吃半伤（3.25）且不会被点燃（不挂灼烧）。 */
   firebomb: { r: 5 * 18, life: 12, dmg: 6.5, tick: 0.55, near: 9 * 18, lob: 19 * 18,
-              speed: 640, selfMul: 0.6 },
+              speed: 640, selfMul: 0.6, blast: 30, blastFall: 0.4, selfFire: 0.5 },
   /* 速凝掩体：20 米内指定位置立一块板，横/竖可切，存在 60 秒 */
   cover: { life: 60, range: 20 * 18, long: 132, thin: 26, selfMul: 0.5 },
   /* 巡飞弹：手控制导，最远 180 米、最多控 9 秒（超时原地引爆）；
@@ -2266,7 +2268,7 @@ const OPERATORS = {
     desc: '工兵。别人找掩体，他自己浇一个；别人躲爆炸，他把爆炸送到一百八十米外。',
     g: {
       name: '复合型燃烧弹', short: '燃烧弹', tag: '战术道具', kind: 'firebomb',
-      desc: '按 G 取出燃烧弹：左键投掷、右键抛出（更远）。落地立刻烧起来，火场半径 5 米、持续 12 秒，每秒 6.5 伤并附加灼烧。储备 2 颗，按 45 秒回充。',
+      desc: '按 G 取出燃烧弹：左键投掷、右键抛出（更远）。落地爆燃（中心 30 伤，边缘衰减到 40%），同时烧起一片火场：半径 5 米、持续 12 秒，每 0.55 秒 6.5 伤。自己踩进火里只吃半伤，也不会被点燃。储备 2 颗，按 45 秒回充。',
       cd: 45, charges: 2,
     },
     v: {
@@ -7068,9 +7070,31 @@ function igniteGround(x, y) {
   shake(8);
   emitNoise(x, y, 1100, 0.9);
   burst(x, y, 22, { color: ['#ffffff', '#ffd66b', '#ff8a3a', '#ff4422'], life: 0.55, r: 4.6, spdMin: 60, spdMax: 300, glow: true });
+
+  /* 爆燃初伤：中心满伤，边缘衰减到 blastFall。敌人吃全额，自己吃半伤
+     （以前落地只有特效，敌人在火里毫发无伤） */
+  for (let i = G.enemies.length - 1; i >= 0; i--) {
+    const e = G.enemies[i];
+    if (!e.alive) continue;
+    const d = dist(x, y, e.x, e.y);
+    if (d > F.r + e.r) continue;
+    const fall = 1 - clamp((d - e.r) / F.r, 0, 1);
+    damageEnemy(e, F.blast * (F.blastFall + fall * (1 - F.blastFall)),
+      (e.x - x) / (d || 1), (e.y - y) / (d || 1), 200);
+    e.stagger = Math.max(e.stagger || 0, 0.25);
+    popup(e.x, e.y - e.r - 16, '爆 燃', '#ff9b57', 11);
+  }
+  if (P.alive) {
+    const dp = dist(x, y, P.x, P.y);
+    if (dp < F.r + P.r) {
+      const fall = 1 - clamp((dp - P.r) / F.r, 0, 1);
+      damagePlayer(F.blast * (F.blastFall + fall * (1 - F.blastFall)) * F.selfFire, x, y, 0.4);
+    }
+  }
+
   G.fires.push({
-    x, y, r: F.r, life: F.life, max: F.life, tick: 0.1,
-    dmg: F.dmg, breed: F.tick, warm: 3.0, geo: true,
+    x, y, r: F.r, life: F.life, max: F.life, tick: 0.1, etick: 0.1,
+    dmg: F.dmg, breed: F.tick, warm: 3.0, geo: true, own: 'p',
   });
   popup(x, y - 24, '火 场', '#ff9b57', 12);
 }
@@ -9054,13 +9078,32 @@ function updateFires(dt) {
       });
     }
 
+    const mine = f.own === 'p';            // 玩家自己投的火场
     const d = dist(P.x, P.y, f.x, f.y);
     if (d < f.r + P.r * 0.6 && P.alive) {
       f.tick -= dt;
       if (f.tick <= 0) {
         f.tick = f.breed || BOSS_FIRE.breed;
-        burnPlayer(f.dmg || BOSS_FIRE.dmg, f.x, f.y);
-        P.burnT = Math.max(P.burnT, f.warm || BOSS_FIRE.warm);
+        /* 自己的燃烧弹只吃半伤，而且不点燃自己（不挂灼烧 BUF） */
+        burnPlayer((f.dmg || BOSS_FIRE.dmg) * (mine ? SKILL.firebomb.selfFire : 1), f.x, f.y);
+        if (!mine) P.burnT = Math.max(P.burnT, f.warm || BOSS_FIRE.warm);
+      }
+    }
+
+    /* 自己的火场烧敌人（敌方喷火兵 / BOSS 的火不误伤自己人） */
+    if (mine) {
+      f.etick = (f.etick == null ? 0.1 : f.etick) - dt;
+      if (f.etick <= 0) {
+        f.etick = f.breed || SKILL.firebomb.tick;
+        for (let j = G.enemies.length - 1; j >= 0; j--) {
+          const e = G.enemies[j];
+          if (!e.alive) continue;
+          const de = dist(f.x, f.y, e.x, e.y);
+          if (de < f.r + e.r * 0.5) {
+            damageEnemy(e, f.dmg || BOSS_FIRE.dmg,
+              (e.x - f.x) / (de || 1), (e.y - f.y) / (de || 1), 0);
+          }
+        }
       }
     }
   }
