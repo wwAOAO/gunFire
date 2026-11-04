@@ -3906,7 +3906,7 @@ function resetPlayer() {
     const cal = calOfWeapon(id);
     const src = ammoCellFor(cal);          // 弹挂/口袋里这个口径的弹药格
     const lv = src ? src.cell.lv : ammoPickOf(cal);
-    const inMag = src ? drainReserve(cal, Math.min(WS.mag, src.cell.n)) : 0;
+    const inMag = src ? drainReserve(cal, Math.min(WS.mag, src.cell.n), src.cell.lv) : 0;
     P.ammo[id] = { mag: inMag, tier: lv, cal };
   }
 
@@ -3950,14 +3950,16 @@ function reserveOf(cal) {
   for (const arr of carryZones()) for (const c of arr) if (c && c.t === 'ammo' && c.cal === cal) n += c.n | 0;
   return n;
 }
-/* 加备弹：先填已有格，再开新格（弹挂优先）。返回实际装进格子的发数。 */
-function addReserve(cal, n) {
+/* 加备弹：只往同口径同弹级的格子里填（1 级弹绝不混进 4 级弹的格子），
+   装不下开新格（弹挂优先）。返回实际装进格子的发数。 */
+function addReserve(cal, n, lv) {
+  if (lv == null || !calHasTier(cal, lv)) lv = ammoPickOf(cal);
   let left = Math.max(0, Math.round(n));
   if (left <= 0) return 0;
   const cap = ammoCellCap(cal, P.owned);
   for (const arr of carryZones()) {
     for (const c of arr) {
-      if (c && c.t === 'ammo' && c.cal === cal && c.n < cap) {
+      if (c && c.t === 'ammo' && c.cal === cal && c.lv === lv && c.n < cap) {
         const add = Math.min(cap - c.n, left);
         c.n += add; left -= add;
         if (left <= 0) return n;
@@ -3969,26 +3971,32 @@ function addReserve(cal, n) {
     if (!slot) break;                        // 身上没格子了：装不下的就地丢弃
     const arr = allCarryZones()[slot.zone];
     const add = Math.min(cap, left);
-    arr[slot.i] = { t: 'ammo', cal, lv: (P.ammo[P.weapon] && P.ammo[P.weapon].cal === cal) ? P.ammo[P.weapon].tier : ammoPickOf(cal), n: add };
+    arr[slot.i] = { t: 'ammo', cal, lv, n: add };
     left -= add;
   }
   return n - left;
 }
-/* 扣备弹：先弹挂后口袋、先空格子。返回实际扣到的发数。 */
-function drainReserve(cal, n) {
+/* 扣备弹：先扣 preferLv 同弹级的格子（换弹优先用枪里那种弹），
+   不够再动其他弹级的格子兜底。返回实际扣到的发数。 */
+function drainReserve(cal, n, preferLv) {
   let need = Math.max(0, Math.round(n));
   let got = 0;
-  for (const arr of carryZones()) {
-    for (let i = 0; i < arr.length; i++) {
-      const c = arr[i];
-      if (c && c.t === 'ammo' && c.cal === cal && c.n > 0) {
-        const take = Math.min(c.n, need);
-        c.n -= take; got += take; need -= take;
-        if (c.n <= 0) arr[i] = null;         // 打空的格子腾出来
-        if (need <= 0) return got;
+  const grab = matchLv => {
+    for (const arr of carryZones()) {
+      for (let i = 0; i < arr.length; i++) {
+        const c = arr[i];
+        if (c && c.t === 'ammo' && c.cal === cal && c.n > 0 &&
+            (matchLv == null || c.lv === matchLv)) {
+          const take = Math.min(c.n, need);
+          c.n -= take; got += take; need -= take;
+          if (c.n <= 0) arr[i] = null;       // 打空的格子腾出来
+          if (need <= 0) return;
+        }
       }
     }
-  }
+  };
+  if (preferLv != null) grab(preferLv);
+  grab(null);
   return got;
 }
 
@@ -4604,7 +4612,7 @@ function finishReload() {
   const W = weaponStats(P.weapon);
   const a = currentAmmo();
   const need = W.mag - a.mag;
-  const take = drainReserve(a.cal || calOfWeapon(P.weapon), need);
+  const take = drainReserve(a.cal || calOfWeapon(P.weapon), need, a.tier);
   a.mag += take;
 }
 
@@ -8675,7 +8683,7 @@ function collectPickup(p) {
   } else if (p.kind === 'ammo') {
     const a = currentAmmo();
     if (P.weapon) {
-      const got = addReserve(calOfWeapon(P.weapon), weaponStats(P.weapon).mag * 2);
+      const got = addReserve(calOfWeapon(P.weapon), weaponStats(P.weapon).mag * 2, a.tier);
       popup(P.x, P.y - 30, '弹药补给 +' + got + ' 发' + (got < weaponStats(P.weapon).mag * 2 ? ' · 弹挂满了' : ''), ammoTier(a.tier).color, 14);
     } else {
       P.hp = Math.min(P.maxHp, P.hp + 8);
@@ -9388,7 +9396,7 @@ function addAmmo(mags) {
   }
   if (!w) return 0;
   const n = weaponStats(w).mag * mags;
-  return addReserve(calOfWeapon(w), n);
+  return addReserve(calOfWeapon(w), n, P.ammo[w] ? P.ammo[w].tier : null);
 }
 
 /* 翻到某一件时才真正入账。
@@ -9412,14 +9420,14 @@ function applyLootItem(it, c) {
     const WS = weaponStats(w);
     if (P.owned[w]) {
       // 已经有一把了：拆成两个弹匣的备弹塞进弹挂
-      const got = addReserve(calOfWeapon(w), WS.mag * 2);
+      const got = addReserve(calOfWeapon(w), WS.mag * 2, P.ammo[w] ? P.ammo[w].tier : null);
       if (got <= 0) { /* 枪留着，弹丢地上 */ }
     } else {
       /* 局内缴获的枪自带两个弹匣的子弹（塞进弹挂，装不下就少带点） */
       const cal = calOfWeapon(w);
       P.owned[w] = true;
       P.ammo[w] = { mag: WS.mag, tier: ammoPickOf(cal), cal };
-      addReserve(cal, WS.mag * 2);
+      addReserve(cal, WS.mag * 2, P.ammo[w].tier);
       const sl = stowGun(w);
       if (sl) {
         const sd = SLOT_DEFS.find(d => d.id === sl);
@@ -15930,8 +15938,8 @@ function stockTakeCell(kind, id) {
   }
   return null;
 }
-function stockTakeAmmo(cal) {
-  const lv = ammoPickOf(cal);
+function stockTakeAmmo(cal, lv) {
+  if (lv == null) lv = ammoPickOf(cal);      // 不指定弹级 = 按选用弹级（老调用兜底）
   const cap = ammoCellCap(cal, SAVE.owned);
   const take = takeAmmoStock(cal, lv, Math.min(cap, ammoStock(cal, lv)));
   return take > 0 ? { t: 'ammo', cal, lv, n: take } : null;
@@ -16259,18 +16267,24 @@ function renderLoStock() {
     stockEl.appendChild(el);
   }
 
-  /* 弹药：点一下拿一格（按选用弹级、上限 = 弹匣×2），只能放弹挂 / 口袋 */
+  /* 弹药：每个口径每个弹级单独一行（1 级弹和 4 级弹分开放，想拿哪级拿哪级），
+     拿取只从对应弹级扣（按选用弹级拿的那行会标「选用」）；
+     格上限 = 已有枪里最大弹匣×2，只能放弹挂 / 口袋 */
   sect('弹 药');
   for (const cal of CAL_ORDER) {
     const C = CALIBERS[cal];
-    const have = ammoStock(cal, ammoPickOf(cal));
     const hasGun = WEAPON_ORDER.some(w => SAVE.owned[w] && calOfWeapon(w) === cal);
-    row({
-      nm: C.short, color: ammoTier(ammoPickOf(cal)).color,
-      sub: ammoTier(ammoPickOf(cal)).grade + ' · 格上限 ' + ammoCellCap(cal, SAVE.owned),
-      ct: have + ' 发', off: have <= 0 || !hasGun,
-      pick: () => { const c = stockTakeAmmo(cal); if (c) loSetHeld(c); },
-    });
+    for (const T of AMMO_TIERS) {
+      if (!calHasTier(cal, T.lv)) continue;
+      const have = ammoStock(cal, T.lv);
+      const isPick = ammoPickOf(cal) === T.lv;
+      row({
+        nm: C.short, color: T.color,
+        sub: T.grade + ' · 格上限 ' + ammoCellCap(cal, SAVE.owned) + (isPick ? ' · 选用' : ''),
+        ct: have + ' 发', off: have <= 0 || !hasGun,
+        pick: () => { const c = stockTakeAmmo(cal, T.lv); if (c) loSetHeld(c); },
+      });
+    }
   }
 
   /* 医疗 */

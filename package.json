@@ -1,0 +1,23 @@
+{
+  "name": "war",
+  "version": "1.0.0",
+  "description": "2D 俯视角「搜打撤」（Extraction Shooter）小游戏。你是一名进入阿萨拉坝区「零号大坝」的干员：翻箱倒柜搜物资、和驻守部队交火、然后活着走到撤离点。",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wwAOAO/gunFire.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/wwAOAO/gunFire/issues"
+  },
+  "homepage": "https://github.com/wwAOAO/gunFire#readme",
+  "dependencies": {
+    "jsdom": "^30.1.3"
+  }
+}
