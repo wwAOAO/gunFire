@@ -386,6 +386,8 @@
   }
   .lo-slot:hover { border-color:rgba(67,217,245,.6); }
   .lo-slot.dragover { border-color:#ffd08a; background:rgba(60,40,16,.5); }
+  .lo-press { cursor:grab; }
+  body.lo-grabbing, body.lo-grabbing * { cursor:grabbing !important; user-select:none !important; }
   .lo-slot .ic { font-size:22px; flex:none; width:26px; text-align:center; }
   .lo-slot .tx { flex:1; min-width:0; }
   .lo-slot .nm { font-size:12.5px; font-weight:800; color:#e6f6ff; letter-spacing:.04em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -774,7 +776,7 @@
         <div class="lo-foot">
           <button id="loAutoBtn" class="btn ghost small">一 键 整 备</button>
           <button id="loClearBtn" class="btn ghost small">全 部 卸 下</button>
-          <span class="lo-hint" id="loHint">点 / 拖仓库里的东西装进来 · 点槽位收回手上，右键放回仓库</span>
+          <span class="lo-hint" id="loHint">长按拿起 · 拖到格子 / 槽位松手放置 · 空处松手放回原位 · 拖进右侧仓库放回 · 右键物品直接回仓</span>
         </div>
       </section>
       <aside class="lo-panel">
@@ -15753,32 +15755,106 @@ function loSetHeld(c) {
   const el = $('loHeldChip');
   if (!el) return;
   if (c) {
-    el.textContent = '手持 · ' + cellName(c) + (c.t === 'ammo' ? ' ' + (c.n | 0) + ' 发' : '');
+    el.textContent = '手持 · ' + cellName(c) + (c.t === 'ammo' ? ' ' + (c.n | 0) + ' 发' : '') + '（松手放置 / 回原位）';
     el.style.borderColor = cellColor(c);
     el.classList.remove('hidden');
   } else el.classList.add('hidden');
 }
 
-/* ── 拖拽：dragstart 时把东西拿在手上，drop 时走和点击一样的放置逻辑 ── */
-function loDraggable(el, pickFn) {
-  el.draggable = true;
-  el.addEventListener('dragstart', e => {
-    if (LO_UI.held) { e.preventDefault(); return; }      // 手上有东西不许再拿第二件
-    pickFn();
-    if (e.dataTransfer) {
-      e.dataTransfer.setData('text/plain', 'lo');
-      e.dataTransfer.effectAllowed = 'move';
-    }
+/* ── 长按拖拽：按住 ~0.16s 拿起，拖到目标松手放置；
+      空处松手 = 放回原位置；拖进右侧仓库 = 放回仓库 ──
+   LO_DRAG.pending = 按住等待期；active = 已经拿起跟随指针。
+   pick() 执行「从来源拿走」（真扣仓库 / 清格子 / 卸槽位），可返回 revert()，
+   没给 revert 时默认放回仓库（heldToStock）。 */
+const LO_DRAG = { pending: null, active: false, sx: 0, sy: 0, timer: 0, revert: null };
+const LO_HOLD_MS = 160;
+
+function loPressable(el, pick) {
+  el.classList.add('lo-press');
+  el.addEventListener('pointerdown', e => {
+    if (e.button !== 0 || LO_UI.held || LO_DRAG.pending || LO_DRAG.active) return;
+    LO_DRAG.pending = { pick };
+    LO_DRAG.sx = e.clientX; LO_DRAG.sy = e.clientY;
+    LO_DRAG.timer = setTimeout(() => {
+      const p = LO_DRAG.pending;
+      LO_DRAG.pending = null;
+      if (p) loDragBegin(LO_DRAG.sx, LO_DRAG.sy, p.pick);   // pick 随按下时捕获，别回头读 pending
+    }, LO_HOLD_MS);
   });
 }
-function loDroppable(el, dropFn) {
-  el.addEventListener('dragover', e => {
-    e.preventDefault();
-    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
-    el.classList.add('dragover');
+
+function loDragBegin(x, y, pickArg) {
+  const pick = pickArg || (LO_DRAG.pending && LO_DRAG.pending.pick);
+  LO_DRAG.pending = null;
+  if (!pick || LO_UI.held) return;
+  const rv = pick();
+  if (!LO_UI.held) return;                       // 没拿到（库存空 / off 行）
+  LO_DRAG.active = true;
+  LO_DRAG.revert = rv || (() => {                // 默认回原处 = 放回仓库
+    if (LO_UI.held) { heldToStock(LO_UI.held); loSetHeld(null); }
   });
-  el.addEventListener('dragleave', () => el.classList.remove('dragover'));
-  el.addEventListener('drop', e => { e.preventDefault(); el.classList.remove('dragover'); dropFn(); });
+  loMoveChip(x, y);
+  document.body.classList.add('lo-grabbing');
+}
+
+function loDropTargetAt(x, y) {
+  const el = document.elementFromPoint(x, y);
+  return el ? el.closest('#loStock, .lo-cell, .lo-slot') : null;
+}
+
+function loHighlight(el) {
+  const prev = document.querySelector('#loadout .dragover');
+  if (prev) prev.classList.remove('dragover');
+  if (el) el.classList.add('dragover');
+}
+
+function loMoveChip(x, y) {
+  const chip = $('loHeldChip');
+  if (chip) { chip.style.left = x + 'px'; chip.style.top = y + 'px'; }
+}
+
+/* 松手结算：t = 落点元素（loStock / .lo-cell / .lo-slot），null = 空处回原位 */
+function loFinishDrag(t) {
+  LO_DRAG.active = false;
+  document.body.classList.remove('lo-grabbing');
+  loHighlight(null);
+  const h = LO_UI.held;
+  if (!h) return;
+  if (t && t.id === 'loStock') {                 // 拖进仓库 = 放回仓库
+    heldToStock(h);
+    loSetHeld(null);
+    Sfx.tone(440, 0.05, 0.04, 'square');
+  } else if (t && typeof t._loDrop === 'function') {
+    t._loDrop();
+  } else if (LO_DRAG.revert) {                   // 空处松手：放回原位置
+    LO_DRAG.revert();
+  }
+  LO_DRAG.revert = null;
+  saveGame();
+  renderLoadout();
+}
+
+/* 测试 / 调试用：绕过 elementFromPoint 直接指定落点 */
+function loDropOnEl(el) { if (LO_DRAG.active) loFinishDrag(el); }
+
+if (typeof document !== 'undefined' && !window.__loDragWired) {
+  window.__loDragWired = true;
+  document.addEventListener('pointermove', e => {
+    if (LO_DRAG.pending &&
+        Math.hypot(e.clientX - LO_DRAG.sx, e.clientY - LO_DRAG.sy) > 10) {
+      clearTimeout(LO_DRAG.timer);               // 按住前就滑走 = 误触，取消
+      LO_DRAG.pending = null;
+      return;
+    }
+    if (!LO_DRAG.active) return;
+    loMoveChip(e.clientX, e.clientY);
+    loHighlight(loDropTargetAt(e.clientX, e.clientY));
+  });
+  document.addEventListener('pointerup', e => {
+    if (LO_DRAG.pending) { clearTimeout(LO_DRAG.timer); LO_DRAG.pending = null; return; }
+    if (!LO_DRAG.active) return;
+    loFinishDrag(loDropTargetAt(e.clientX, e.clientY));
+  });
 }
 
 function openLoadout() {
@@ -15852,15 +15928,17 @@ function loPlaceToSlot(slot) {
   return true;
 }
 
-/* 从槽位收回手上 */
+/* 从槽位卸到手上（长按拖拽用）。返回 revert：空处松手时原样装回。 */
 function loTakeFromSlot(slot) {
   const v = slot.get();
-  if (!v) { uiToast('空槽 · 从右侧仓库点选或拖入', 'small'); return; }
-  if (slot.kind === 'long' || slot.kind === 'pistol') { slot.set(null); loSetHeld({ t: 'gun', id: v }); }
-  else if (slot.kind === 'melee') { slot.set(null); loSetHeld({ t: 'melee', id: v }); }
-  else if (slot.kind === 'armor') { slot.set(0); loSetHeld({ t: 'armor', id: v }); }
-  else { slot.set(null); trimCarryToCap(); loSetHeld({ t: 'gear', key: v }); }
+  if (!v) { uiToast('空槽 · 长按右侧仓库的装备拖进来', 'small'); return null; }
+  let revert;
+  if (slot.kind === 'long' || slot.kind === 'pistol') { slot.set(null); loSetHeld({ t: 'gun', id: v }); revert = () => { if (LO_UI.held && LO_UI.held.t === 'gun') { slot.set(LO_UI.held.id); loSetHeld(null); } }; }
+  else if (slot.kind === 'melee') { slot.set(null); loSetHeld({ t: 'melee', id: v }); revert = () => { if (LO_UI.held && LO_UI.held.t === 'melee') { slot.set(LO_UI.held.id); loSetHeld(null); } }; }
+  else if (slot.kind === 'armor') { slot.set(0); loSetHeld({ t: 'armor', id: v }); revert = () => { if (LO_UI.held && LO_UI.held.t === 'armor') { slot.set(LO_UI.held.id); loSetHeld(null); } }; }
+  else { slot.set(null); trimCarryToCap(); loSetHeld({ t: 'gear', key: v }); revert = () => { if (LO_UI.held && LO_UI.held.t === 'gear') { slot.set(LO_UI.held.key); loSetHeld(null); trimCarryToCap(); } }; }
   Sfx.tone(500, 0.05, 0.04, 'square');
+  return revert;
 }
 
 function renderLoSlot(slot) {
@@ -15904,19 +15982,16 @@ function renderLoSlot(slot) {
   el.innerHTML = '<span class="ic" style="color:' + color + '">' + ic + '</span>' +
     '<span class="tx"><span class="nm">' + nm + '</span><span class="sub">' + sub + '</span></span>' +
     '<span class="val">' + slot.cn + '</span>';
-  el.onclick = () => {
-    if (LO_UI.held) loPlaceToSlot(slot);
-    else loTakeFromSlot(slot);
+  el._loDrop = () => { if (LO_UI.held) loPlaceToSlot(slot); };
+  el.oncontextmenu = e => {                      // 右键：脱下并放回仓库
+    e.preventDefault();
+    if (LO_UI.held || !slot.get()) return;
+    loTakeFromSlot(slot);
+    if (LO_UI.held) { heldToStock(LO_UI.held); loSetHeld(null); }
     saveGame();
     renderLoadout();
   };
-  el.oncontextmenu = e => {
-    e.preventDefault();
-    if (!LO_UI.held) { loTakeFromSlot(slot); saveGame(); renderLoadout(); }
-  };
-  loDroppable(el, () => {
-    if (LO_UI.held) { loPlaceToSlot(slot); saveGame(); renderLoadout(); }
-  });
+  loPressable(el, () => loTakeFromSlot(slot));
 }
 
 /* ── 右侧：仓库（武器 / 护甲 / 携行 / 弹药 / 医疗）── */
@@ -15935,17 +16010,7 @@ function renderLoStock() {
     el.innerHTML = '<span class="nm" style="color:' + o.color + '">' + o.nm + '</span>' +
       '<span class="sub">' + o.sub + '</span>' +
       '<span class="ct">' + o.ct + '</span>';
-    const pick = () => {
-      if (LO_UI.held) { heldToStock(LO_UI.held); loSetHeld(null); }   // 先把手上的放回仓库
-      o.pick();
-      Sfx.tone(560, 0.05, 0.04, 'square');
-      saveGame();
-      renderLoadout();
-    };
-    if (!o.off) {
-      el.addEventListener('click', pick);
-      loDraggable(el, pick);
-    }
+    if (!o.off) loPressable(el, o.pick);         // 长按拿起（点击不再拾取）
     stockEl.appendChild(el);
   };
 
@@ -16052,15 +16117,15 @@ function renderLoStock() {
     });
   }
 
-  $('loStockNote').textContent = '点 / 拖装进左侧装备 · 点一下收回手上的东西';
-  loDroppable(stockEl, () => {
-    if (LO_UI.held) { heldToStock(LO_UI.held); loSetHeld(null); saveGame(); renderLoadout(); }
-  });
+  $('loStockNote').textContent = '长按拿起 · 拖到左侧装备 · 拖回这里放回仓库';
+  stockEl._loDrop = () => {                      // 拖进仓库 = 放回仓库
+    if (LO_UI.held) { heldToStock(LO_UI.held); loSetHeld(null); Sfx.tone(440, 0.05, 0.04, 'square'); }
+  };
 }
 
 function renderLoadout() {
   if (!SAVE.carry) ensureCarry();          // 直接调进来（比如审计 / 调试）也能画
-  $('loGunNote').textContent = '点 / 拖装枪 · 点槽位收回';
+  $('loGunNote').textContent = '长按拿起 · 拖进槽位装备 · 拖出脱下';
   for (const slot of LO_SLOTS) renderLoSlot(slot);
 
   /* 三排容器格：弹挂 / 口袋 / 背包（没穿弹挂或背包时整排隐藏） */
@@ -16096,12 +16161,7 @@ function renderLoadout() {
         }
         Sfx.tone(620, 0.05, 0.04, 'square');
       };
-      el.addEventListener('click', () => {
-        if (LO_UI.held) placeHere();
-        else if (c) { arr[i] = null; loSetHeld(c); Sfx.tone(500, 0.05, 0.04, 'square'); }
-        saveGame();
-        renderLoadout();
-      });
+      el._loDrop = placeHere;
       el.addEventListener('contextmenu', e => {                    // 右键放回仓库
         e.preventDefault();
         if (!c || LO_UI.held) return;
@@ -16111,8 +16171,16 @@ function renderLoadout() {
         saveGame();
         renderLoadout();
       });
-      loDraggable(el, () => { arr[i] = null; loSetHeld(c); Sfx.tone(500, 0.05, 0.04, 'square'); });
-      loDroppable(el, () => { placeHere(); saveGame(); renderLoadout(); });
+      loPressable(el, () => {                      // 长按拿起：清格，空处松手放回原格
+        if (!c) return null;
+        arr[i] = null;
+        loSetHeld(c);
+        Sfx.tone(500, 0.05, 0.04, 'square');
+        return () => {                             // revert：原格还空着就放回去
+          if (!arr[i]) { arr[i] = LO_UI.held; loSetHeld(null); }
+          else { heldToStock(LO_UI.held); loSetHeld(null); }
+        };
+      });
       grid.appendChild(el);
     });
   }
