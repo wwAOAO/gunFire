@@ -2146,9 +2146,11 @@ const SKILL = {
               speed: 640, selfMul: 0.6 },
   /* 速凝掩体：20 米内指定位置立一块板，横/竖可切，存在 60 秒 */
   cover: { life: 60, range: 20 * 18, long: 132, thin: 26, selfMul: 0.5 },
-  /* 巡飞弹：手控制导，最远 180 米；炸开再分裂 4 枚子炸弹 */
+  /* 巡飞弹：手控制导，最远 180 米、最多控 9 秒（超时原地引爆）；
+     弹上带 8 米视野（迷雾里看得见导弹周围）；由慢到快自动加速到满速 */
   loiter: { speed: 400, accel: 320, turn: 2.4, range: 180 * 18, radius: 6 * 18,
-            dmg: 95, subs: 4, subDmg: 36, subR: 4 * 18, subDelay: 0.55, selfMul: 0.5 },
+            dmg: 95, subs: 4, subDmg: 36, subR: 4 * 18, subDelay: 0.55, selfMul: 0.5,
+            ctl: 9, vision: 8 * 18, startMul: 0.25 },
   /* 久经沙场：骨折 / 减速类 debuff 抗性 */
   tough: { traumaMul: 0.45, legMul: 0.55, fissureMul: 0.5, chillMul: 0.6 },
 };
@@ -2270,7 +2272,7 @@ const OPERATORS = {
     },
     x: {
       name: '巡飞弹', short: '巡飞弹', tag: '大招', kind: 'loiter',
-      desc: '按 X 举起巡飞弹发射器：左键直接发射（按准星方向平飞），右键进入瞄准、左键发射后由你手动遥控（WASD 转向、镜头跟着导弹）。飞行满 180 米或手动引爆即起爆：半径 6 米、95 伤，随后分裂 4 枚子炸弹向四周散开再炸一轮。储备 1 发，CD 90 秒。',
+      desc: '按 X 举起巡飞弹发射器：左键直接发射（按准星方向平飞），右键进入瞄准、左键发射后由你手动遥控（WASD 转向、镜头跟着导弹）。导弹由慢到快自动加速到满速，弹上带 8 米视野 —— 迷雾里也看得见导弹周围。**最多遥控 9 秒**，超时在当前位置原地引爆；飞满 180 米或手动引爆同样起爆：半径 6 米、95 伤，随后分裂 4 枚子炸弹向四周散开再炸一轮。储备 1 发，CD 90 秒。',
       cd: 90, charges: 1,
     },
     passive: {
@@ -7153,8 +7155,8 @@ function fireLoiter(ctl) {
   const a = P.aim;
   G.loiters.push({
     x: P.x + Math.cos(a) * (P.r + 16), y: P.y + Math.sin(a) * (P.r + 16),
-    ang: a, spd: L.speed * 0.55, dist: 0, max: L.range,
-    ctl: !!ctl, sub: false, t: 0,
+    ang: a, spd: L.speed * (L.startMul || 0.25), dist: 0, max: L.range,
+    ctl: !!ctl, ctlT: ctl ? L.ctl : 0, sub: false, t: 0,
   });
   consumeOp('x');
   if (ctl && P.op && P.op.mode) P.op.mode.controlling = true;
@@ -7220,11 +7222,25 @@ function updateLoiters(dt) {
     }
 
     /* 手控制导：A/D 转向、W/S 加减速 */
+    let manualSpd = false;
     if (m.ctl) {
       if (keys['a'] || keys['arrowleft']) m.ang -= L.turn * dt;
       if (keys['d'] || keys['arrowright']) m.ang += L.turn * dt;
-      if (keys['w'] || keys['arrowup']) m.spd = Math.min(L.speed * 1.25, m.spd + L.accel * dt);
-      if (keys['s'] || keys['arrowdown']) m.spd = Math.max(L.speed * 0.25, m.spd - L.accel * dt);
+      if (keys['w'] || keys['arrowup']) { m.spd = Math.min(L.speed * 1.25, m.spd + L.accel * dt); manualSpd = true; }
+      if (keys['s'] || keys['arrowdown']) { m.spd = Math.max(L.speed * 0.25, m.spd - L.accel * dt); manualSpd = true; }
+      /* 最大控制时间：到点就地在当前位置引爆，不让导弹无限飞 */
+      m.ctlT -= dt;
+      if (m.ctlT <= 0) {
+        popup(m.x, m.y - 26, '控 制 超 时', '#ff9a6a', 12);
+        loiterBlast(m.x, m.y, true);
+        G.loiters.splice(i, 1);
+        continue;
+      }
+    }
+    /* 由慢到快：没踩 W/S 时自动向满速靠拢（低于满速加速，被 W 提过头的慢慢回落） */
+    if (!manualSpd) {
+      if (m.spd < L.speed) m.spd = Math.min(L.speed, m.spd + L.accel * dt);
+      else m.spd = Math.max(L.speed, m.spd - L.accel * dt);
     }
 
     m.px = m.x; m.py = m.y;
@@ -11822,6 +11838,16 @@ function drawLoiters() {
     ctx.restore();
 
     if (m.ctl) {
+      /* 弹载视野圈：迷雾里靠这 8 米看路 */
+      const VR = SKILL.loiter.vision;
+      ctx.strokeStyle = 'rgba(255,200,130,0.3)';
+      ctx.lineWidth = 1.2;
+      ctx.setLineDash([4, 8]);
+      ctx.beginPath(); ctx.arc(m.x, m.y, VR, 0, TAU); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(255,190,120,0.045)';
+      ctx.beginPath(); ctx.arc(m.x, m.y, VR, 0, TAU); ctx.fill();
+
       ctx.strokeStyle = 'rgba(255,190,120,0.75)';
       ctx.lineWidth = 1.4;
       ctx.setLineDash([6, 6]);
@@ -11830,7 +11856,8 @@ function drawLoiters() {
       ctx.fillStyle = 'rgba(255,220,180,0.9)';
       ctx.font = '700 10px ui-monospace, "Consolas", monospace';
       ctx.textAlign = 'center';
-      ctx.fillText('手控制导 · ' + Math.max(0, Math.round((m.max - m.dist) / 18)) + 'm', m.x, m.y - 34);
+      ctx.fillText('手控制导 · 剩 ' + Math.max(0, m.ctlT).toFixed(1) + 's · ' +
+        Math.max(0, Math.round((m.max - m.dist) / 18)) + 'm', m.x, m.y - 34);
     }
   }
 }
@@ -13437,8 +13464,9 @@ function drawSkillBar(mono) {
         txt = '左键注射 · 右键瞄准 · 剩 ' + P.op.x.use + ' 发 · X 收起';
       } else if (M.id === 'loiter' && M.controlling) {
         const lm = ctlLoiter();
-        txt = 'WASD 操控导弹 · 左键引爆 · 剩 ' + (lm ? Math.max(0, Math.round((lm.max - lm.dist) / 18)) : 0) + 'm';
-        col = '#ffc98a';
+        txt = 'WASD 操控导弹 · 左键引爆 · 剩 ' + (lm ? Math.max(0, Math.round((lm.max - lm.dist) / 18)) : 0) + 'm' +
+          (lm ? ' · 控制剩 ' + Math.max(0, lm.ctlT).toFixed(1) + 's' : '');
+        col = lm && lm.ctlT < 2.5 ? '#ff8f8f' : '#ffc98a';
       }
       ctx.font = '700 11px ' + mono;
       ctx.textAlign = 'center';
@@ -13945,14 +13973,21 @@ function updateFog(dt) {
   const adsChanged = Math.abs((P.ads || 0) - (FOG.lastAds || 0)) > 0.02;   // 开镜/收镜也要重算
   const pingN = G.scanPings ? G.scanPings.length : 0;
   const pingChanged = pingN !== (FOG.pingN | 0);   // 侦察视野开了/到期：强制重算一次
+  /* 巡飞弹在飞：镜头跟着导弹走，迷雾必须跟着导弹重算 */
+  let ml = null, mlN = 0;
+  for (const m of G.loiters) if (!m.sub) { if (!ml) ml = m; mlN++; }
+  const mlChanged = mlN !== (FOG.mlN | 0) ||
+    (ml && ((ml.x - (FOG.mlX || 0)) ** 2 + (ml.y - (FOG.mlY || 0)) ** 2 > 900));
   FOG.timer -= dt;
-  if (FOG.timer > 0 && !moved && !turned && !adsChanged && !pingChanged) return;
+  if (FOG.timer > 0 && !moved && !turned && !adsChanged && !pingChanged && !mlChanged) return;
   FOG.timer = 0.04;
   FOG.lastX = P.x;
   FOG.lastY = P.y;
   FOG.lastAim = P.aim;
   FOG.lastAds = P.ads || 0;
   FOG.pingN = pingN;
+  FOG.mlN = mlN;
+  if (ml) { FOG.mlX = ml.x; FOG.mlY = ml.y; }
 
   const cols = FOG.cols, rows = FOG.rows, cell = FOG.cell;
   const vis = FOG.vis, seen = FOG.seen, block = FOG.block;
@@ -14019,6 +14054,25 @@ function updateFog(dt) {
         if (k < 0 || k >= cols) continue;
         const dx = (k + 0.5) * cell - sp.x, dy = (r + 0.5) * cell - sp.y;
         if (dx * dx + dy * dy > sp.r * sp.r) continue;
+        const idx = r * cols + k;
+        FOG.ping[idx] = 1;
+        seen[idx] = 1;
+      }
+    }
+  }
+
+  // 巡飞弹的弹载视野：同样无遮挡点亮，跟着导弹飞
+  const LVIS = SKILL.loiter.vision;
+  for (const m of G.loiters) {
+    if (m.sub) continue;
+    const mc = (m.x / cell) | 0, mr = (m.y / cell) | 0;
+    const nc = Math.ceil(LVIS / cell);
+    for (let r = mr - nc; r <= mr + nc; r++) {
+      if (r < 0 || r >= rows) continue;
+      for (let k = mc - nc; k <= mc + nc; k++) {
+        if (k < 0 || k >= cols) continue;
+        const dx = (k + 0.5) * cell - m.x, dy = (r + 0.5) * cell - m.y;
+        if (dx * dx + dy * dy > LVIS * LVIS) continue;
         const idx = r * cols + k;
         FOG.ping[idx] = 1;
         seen[idx] = 1;
@@ -14111,11 +14165,23 @@ function scanPingAt(x, y) {
   return false;
 }
 
+/* 巡飞弹的弹载视野：飞行中的主弹周围一圈算「看见」（迷雾里跟着镜头看路） */
+function loiterVisionAt(x, y) {
+  const R = SKILL.loiter.vision;
+  for (const m of G.loiters) {
+    if (m.sub) continue;
+    const dx = x - m.x, dy = y - m.y;
+    if (dx * dx + dy * dy <= R * R) return true;
+  }
+  return false;
+}
+
 function fogVisibleAt(x, y) {
   if (!FOG.ready) return true;
   const ci = (x / FOG.cell) | 0, ri = (y / FOG.cell) | 0;
   if (ci < 0 || ri < 0 || ci >= FOG.cols || ri >= FOG.rows) return false;
   if (scanPingAt(x, y)) return true;               // 侦察视野里：隔墙隔雾都算看见
+  if (loiterVisionAt(x, y)) return true;           // 巡飞弹弹载视野同理
   if (FOG.vis[ri * FOG.cols + ci] !== 1) return false;
   const dx = x - P.x, dy = y - P.y;
   const d2 = dx * dx + dy * dy;
