@@ -10089,6 +10089,9 @@ function collectPickup(p) {
       recountLoot();
       popup(P.x, P.y - 30, cellName(c) + (c.t === 'ammo' ? ' ' + (c.n | 0) + ' 发' : ''), cellColor(c), 14);
       Sfx.pickup();
+    } else if (c.t === 'armor' && swapWearArmor(c)) {
+      ok = true;                                   // 背包满：直接换穿，身上那件掉脚边
+      popup(P.x, P.y - 30, cellName(c) + ' 已穿上', cellColor(c), 14);
     } else {
       popup(P.x, P.y - 30, '身上没有空位', '#ff6b8a', 13);
     }
@@ -10973,9 +10976,10 @@ function applyLootItem(it, c) {
     if (got <= 0) { ok = false; it.blocked = '身上没有空位'; }
   }
   else if (it.kind === 'armor') {
-    /* 护甲是重物：只进背包格，撤离后能直接穿或拖回仓库 */
-    if (stowCell({ t: 'armor', id: it.id, hp: it.hp, max: it.max })) recountLoot();
-    else { ok = false; it.blocked = '背包没有空位'; }
+    /* 护甲是重物：优先进背包格；背包满了直接换穿（身上那件掉在脚边） */
+    const cell = { t: 'armor', id: it.id, hp: it.hp, max: it.max };
+    if (stowCell(cell)) recountLoot();
+    else if (!swapWearArmor(cell)) { ok = false; it.blocked = '背包没有空位'; }
   }
   else if (it.kind === 'weapon') {
     const w = it.weapon;
@@ -18828,6 +18832,50 @@ const PK_ZONES = [
   ['pkPack', () => P.pack, 2, '背 包 · 只能中转'],
 ];
 
+/* ── 局内穿甲：把一件 {id,hp,max} 穿到身上（与开局装备同一套字段）── */
+function wearArmorPiece(pc) {
+  const AR = ARMORS[pc && pc.id] || ARMORS[0];
+  if (!AR || AR.lv <= 0) return false;
+  P.armorId = AR.id;
+  P.armorLv = AR.lv | 0;
+  P.armorName = AR.name;
+  P.armorHp = clamp(Math.round(pc.hp), 0, Math.max(1, Math.round(pc.max)));
+  P.armorMax = Math.max(1, Math.round(pc.max));
+  P.armorDR = AR.dr;
+  P.armorAim = AR.aim || 0;        // 瞄准惩罚：开火散布变大
+  P.armorMove = AR.move || 0;      // 移速惩罚：走得慢
+  P.armorLoad = AR.load || 0;      // 负重：影响跑步耗体力
+  return true;
+}
+/* 脱甲：回到「无护甲」（身上那件由调用方拿着） */
+function stripArmorNaked() {
+  P.armorId = 0; P.armorLv = 0; P.armorName = '';
+  P.armorHp = 0; P.armorMax = 0; P.armorDR = 0;
+  P.armorAim = 0; P.armorMove = 0; P.armorLoad = 0;
+}
+/* 身上这件的格子形态（脱下来就能直接进背包 / 丢地上） */
+function currentArmorPiece() {
+  return P.armorLv > 0
+    ? { id: P.armorId, hp: Math.round(P.armorHp), max: Math.max(1, Math.round(P.armorMax)) }
+    : null;
+}
+/* 背包塞不下时的兜底：直接换穿 —— 身上那件（耐久原样）掉在脚边，不吞任何东西 */
+function swapWearArmor(pc) {
+  const prev = currentArmorPiece();
+  if (!wearArmorPiece(pc)) return false;
+  if (prev) {
+    G.pickups.push({
+      x: P.x + rand(-8, 8), y: P.y + rand(22, 40),
+      kind: 'cell', cell: { t: 'armor', id: prev.id, hp: prev.hp, max: prev.max },
+      life: 600, bob: rand(0, TAU), value: 0, relicId: null, cool: 1.6,
+    });
+  }
+  recountLoot();
+  uiToast('背包满了 · 直接穿上 ' + ARMORS[P.armorId].name + (prev ? '（换下的在脚边）' : ''), 'small');
+  Sfx.pickup();
+  return true;
+}
+
 function togglePackPanel() {
   if (G.packOpen) closePackPanel();
   else openPackPanel();
@@ -18903,10 +18951,50 @@ function dropHeldToGround() {
 }
 
 function renderPackPanel() {
-  /* 武器槽：拖背包里的枪到这儿装上（原来的枪换到手上），拖下来收回背包 */
+  /* 武器槽：拖背包里的枪到这儿装上（原来的枪换到手上），拖下来收回背包；
+     拖配件到枪上直接改装（换下来的配件回到手上）；护甲拖到护甲槽直接穿上 */
   const gunGrid = $('pkGuns');
-  $('pkGunNote').textContent = '武 器 槽 · 拖背包里的枪到这儿装上，拖下来收回背包';
+  $('pkGunNote').textContent = '武 器 / 护 甲 槽 · 拖枪装上 · 拖护甲穿上 · 拖配件到枪上改装';
   gunGrid.innerHTML = '';
+
+  /* 护甲槽：拖背包里的甲到这儿穿上，身上那件（耐久原样）换到手上 */
+  {
+    const el = document.createElement('div');
+    el.className = 'lo-cell pk-slot' + (P.armorLv > 0 ? '' : ' empty');
+    if (P.armorLv > 0) {
+      const A = ARMORS[P.armorId] || ARMORS[0];
+      el.innerHTML = '<span class="ic" style="color:' + armorLvColor(P.armorLv) + '">⛨</span>' +
+        '<span class="nm">' + A.short + '</span>' +
+        '<span class="sub">' + P.armorLv + ' 级 · ' + Math.round(P.armorHp) + '/' + Math.round(P.armorMax) + '</span>';
+    } else el.innerHTML = '<span class="sub" style="color:#7fb8d4">护 甲</span>';
+
+    const pickArmor = () => {                     // 拿起：脱下来（回到无护甲）
+      if (P.armorLv <= 0) return null;
+      const pc = currentArmorPiece();
+      stripArmorNaked();
+      PK_UI.held = { t: 'armor', id: pc.id, hp: pc.hp, max: pc.max };
+      Sfx.tone(500, 0.05, 0.04, 'square');
+      return () => {                              // 取消：身上还光着就穿回去
+        if (P.armorLv <= 0 && PK_UI.held && PK_UI.held.t === 'armor') {
+          wearArmorPiece(PK_UI.held);
+          PK_UI.held = null;
+        }
+      };
+    };
+    const placeArmor = () => {                    // 放置：穿上（身上那件换到手上）
+      if (!PK_UI.held) return;
+      if (PK_UI.held.t !== 'armor') { uiToast('只有护甲能穿进护甲槽', 'small warn'); return; }
+      const prev = currentArmorPiece();
+      if (!wearArmorPiece(PK_UI.held)) { uiToast('这件护甲有问题，穿不上', 'small warn'); return; }
+      PK_UI.held = prev ? { t: 'armor', id: prev.id, hp: prev.hp, max: prev.max } : null;
+      uiToast(ARMORS[P.armorId].name + ' 已穿上', 'small');
+      Sfx.tone(620, 0.05, 0.04, 'square');
+    };
+    el.__pkPlace = placeArmor;
+    pkPressable(el, pickArmor, placeArmor);
+    gunGrid.appendChild(el);
+  }
+
   for (const sl of GUN_SLOTS) {
     const sd = SLOT_DEFS.find(d => d.id === sl);
     const id = P.slots ? P.slots[sl] : null;
@@ -18915,7 +19003,7 @@ function renderPackPanel() {
     el.innerHTML = id
       ? '<span class="ic" style="color:#ffca7a">' + cellIcon({ t: 'gun', id }) + '</span>' +
         '<span class="nm">' + WEAPONS[id].short + '</span>' +
-        '<span class="sub">' + caliberOf(id).short + ' · ' + WEAPONS[id].mag + ' 发</span>'
+        '<span class="sub">' + caliberOf(id).short + ' · ' + weaponStats(id).mag + ' 发 · 配件 ' + gunModCount(id) + '/' + modSlotTotal(id) + '</span>'
       : '<span class="sub">' + (sd ? sd.cn : sl) + '</span>';
     const pickSlot = () => {                      // 拿起：从槽里取下
       if (!P.slots || !P.slots[sl]) return null;
@@ -18927,9 +19015,25 @@ function renderPackPanel() {
         if (!P.slots[sl]) { P.slots[sl] = PK_UI.held.id; PK_UI.held = null; }
       };
     };
-    const placeSlot = () => {                     // 放置：装上（原来的枪换到手上）
-      if (!PK_UI.held || PK_UI.held.t !== 'gun') {
-        uiToast('只有枪能装进武器槽', 'small warn');
+    const placeSlot = () => {                     // 放置：装枪 / 装配件
+      if (!PK_UI.held) return;
+      /* 拖配件到枪上：按配件自身的槽位装进去，换下来的回到手上 */
+      if (PK_UI.held.t === 'mod') {
+        const m = MODS[PK_UI.held.id];
+        if (!m) { uiToast('未知配件', 'small warn'); return; }
+        const wid = P.slots ? P.slots[sl] : null;
+        if (!wid) { uiToast('这个槽上没有枪', 'small warn'); return; }
+        if (!slotAllowed(wid, m.slot)) { uiToast(WEAPONS[wid].short + ' 装不了' + (MOD_SLOTS.find(s => s.id === m.slot) || {}).cn, 'small warn'); return; }
+        SAVE.mods[wid] = SAVE.mods[wid] || {};
+        const old = SAVE.mods[wid][m.slot];
+        SAVE.mods[wid][m.slot] = PK_UI.held.id;   // 配件装上（直接写档案：撤离/死亡结算都认这份数据）
+        PK_UI.held = old ? { t: 'mod', id: old } : null;   // 换下来的配件回到手上
+        uiToast(WEAPONS[wid].short + ' · ' + m.name + ' 已装上', 'small');
+        Sfx.tone(760, 0.06, 0.05, 'square');
+        return;
+      }
+      if (PK_UI.held.t !== 'gun') {
+        uiToast('只有枪能装进武器槽（配件拖到装着的枪上改装）', 'small warn');
         return;
       }
       const prev = P.slots[sl];
@@ -19286,8 +19390,11 @@ function endRaid(success) {
     }
     SAVE.equippedMelee = P.melee;
     if (P.melee) SAVE.ownedMelee[P.melee] = true;
-    /* 身上这件护甲带着局内磨掉/修回的耐久原样回仓库档：撤离才算是你的 */
+    /* 身上这件护甲带着局内磨掉/修回的耐久原样回仓库档：撤离才算是你的。
+       局内脱了甲（身上光着）：旧记录清掉 —— 那件甲在背包格子里一起带回，
+       不清就是「身上一件 + 包里一件」双份。 */
     if (P.armorLv > 0) SAVE.wornPiece = { id: P.armorId, lv: P.armorLv, hp: Math.round(P.armorHp), max: Math.max(1, Math.round(P.armorMax)) };
+    else SAVE.wornPiece = null;
 
     /* 随身容器原样带回：用剩的耐久 / 次数 / 发数都留在格子里，下次出击接着带。
        收集品 / 配件除外 —— 它们上面已经按格子派生的清单入了仓库，
