@@ -1478,6 +1478,14 @@ for (const [id, slot, q, name, icon, price, desc, eff] of MOD_EXT) {
    ══════════════════════════════════════════════════════════ */
 const SAVE_KEY = 'neonpurge_extract_v1';
 
+/* 携行装备全量 key 表 —— 必须定义在 loadSave() 执行（let SAVE = loadSave()）之前，
+   因为 cleanGearOwned 在读档阶段就要用（那时 GEAR 表还没初始化）。
+   新增弹挂 / 背包时同步在这里加 key。 */
+const GEAR_KEYS = ['rig_basic', 'rig_ext', 'rig_light', 'rig_tactic', 'rig_elite', 'rig_storm', 'rig_havk',
+  'pack_assault', 'pack_large', 'pack_hike', 'pack_exp', 'pack_alpine', 'pack_mil', 'pack_air', 'pack_delta',
+  'pack_logi', 'pack_chixiao', 'pack_director'];
+
+
 /* 基准枪：只在「查不到 id」时给数值表兜底，不代表玩家拥有它。
    G17 现在是一把要花钱买的手枪，不再白送、也不再自动塞进手枪槽。 */
 const BASE_WEAPON = 'g17';
@@ -2115,9 +2123,8 @@ const CAL_OF_WEAPON = {
 const STARTER_AMMO = { '919': 51, '918': 64, '762x39': 90, '545': 90, '58': 90,
                        '12g': 21, '556': 90, '762': 54, '338': 15 };
 
-/* 存档必须等 KNOWN_WEAPON_IDS / MODS 都就位之后再读，
-   否则旧档会在 TDZ 里被 catch 吞掉，等于每次刷新都重置。 */
-let SAVE = loadSave();
+/* 存档读取不在这里 —— loadSave 会用到 REPAIRS / GEAR 等后定义的数据表，
+   提前读会踩 TDZ 被 catch 吞掉，等于每次刷新都重置。真正的读取点在 GEAR 表之后。 */
 
 function saveGame() {
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(SAVE)); } catch (e) {}
@@ -2794,6 +2801,11 @@ function gearOwnedOf(key) { return !!(SAVE.gearOwned && SAVE.gearOwned[key]); }
 function rigCap() { const g = wornGear('rig'); return g ? g.cap : 0; }
 function packCap() { const g = wornGear('pack'); return g ? g.cap : 0; }
 function pocketCap() { return POCKET_N; }
+
+/* 存档读取点：必须放在它依赖的最后一张数据表（GEAR / REPAIRS）之后，
+   否则清洗函数会踩 const TDZ 抛错、被 loadSave 的 catch 吞掉 → 每次刷新存档全没。 */
+let SAVE = loadSave();
+
 /* 一格备弹的容量：这个口径下已拥有枪里弹匣最大的那把 × 2 发 */
 function ammoCellCap(cal, owned) {
   let mag = 0;
@@ -2882,13 +2894,18 @@ function mergeCarryOverflow(S, overflow) {
   }
 }
 
-/* 携行装备所有权清洗：新 key 是 rig_basic / rig_ext / pack_assault / pack_large。
-   老档只有三个旧 key：当年弹挂默认就有 8 格 → 人人都补一件基础弹挂；
-   旧扩展弹挂 = 12 格；旧大背包（叠加 6+4+8=18）= 大背包 + 突击包都补上。
-   注意：loadSave 阶段没有任何数据表可引用，这里只许用字面量 key。 */
+/* 携行装备所有权清洗：老档只有三个旧 key（当年弹挂默认就有 8 格 → 人人都补一件基础弹挂；
+   旧扩展弹挂 = 12 格；旧大背包（叠加 6+4+8=18）= 大背包 + 突击包都补上）。
+   新档 key 全量保留（多实例按件计数）。注意：loadSave 在 GEAR 表初始化之前执行，
+   这里只许用字面量 key —— 新增装备时记得把 key 加进 GEAR_KEYS。 */
 function cleanGearOwned(raw) {
   const out = { rig_basic: 1, rig_ext: 0, pack_assault: 0, pack_large: 0 };
   if (raw && typeof raw === 'object') {
+    for (const k of GEAR_KEYS) {
+      if (k in out) continue;                          // 老四件走下面的旧档迁移
+      const n = raw[k] | 0;
+      if (n > 0) out[k] = Math.min(99, n);             // 新装备：按件数原样保留（买几件有几件）
+    }
     if (raw.rig_ext) out.rig_ext = 1;
     if (raw.pack_large) { out.pack_assault = 1; out.pack_large = 1; }
     else if (raw.pack_assault) out.pack_assault = 1;
@@ -2901,8 +2918,8 @@ function cleanGearOwned(raw) {
 function cleanWorn(raw, gear) {
   const out = { rig: null, pack: null };
   if (raw && typeof raw === 'object') {
-    if ((raw.rig === 'rig_basic' && gear.rig_basic) || (raw.rig === 'rig_ext' && gear.rig_ext)) out.rig = raw.rig;
-    if ((raw.pack === 'pack_assault' && gear.pack_assault) || (raw.pack === 'pack_large' && gear.pack_large)) out.pack = raw.pack;
+    if (raw.rig && gear[raw.rig]) out.rig = raw.rig;       // 只要是真拥有的 key 就保留（新老都认）
+    if (raw.pack && gear[raw.pack]) out.pack = raw.pack;
     return out;
   }
   out.rig = gear.rig_ext ? 'rig_ext' : 'rig_basic';
@@ -19024,10 +19041,18 @@ function renderLoadout() {
 
 /* 一键整备：先把拥有的最好弹挂 / 背包穿上 → 弹药格补满 → 空弹挂格补口径格 →
    口袋塞绷带 → 剩余空格按 绷带 / 止痛 / 医疗包 / 手术包 顺序塞满（弹挂优先，背包垫底） */
+function bestOwnedGear(kind) {                        // 拥有的同 kind 里容量最大的一件 key（没拥有 → null）
+  let best = null;
+  for (const k in SAVE.gearOwned) {
+    const g = GEAR[k];
+    if (g && g.kind === kind && (SAVE.gearOwned[k] | 0) > 0 && (!best || g.cap > GEAR[best].cap)) best = k;
+  }
+  return best;
+}
 function autoRestock() {
   if (!SAVE.worn) SAVE.worn = { rig: null, pack: null };
-  if (!SAVE.worn.rig) SAVE.worn.rig = gearOwnedOf('rig_ext') ? 'rig_ext' : (gearOwnedOf('rig_basic') ? 'rig_basic' : null);
-  if (!SAVE.worn.pack) SAVE.worn.pack = gearOwnedOf('pack_large') ? 'pack_large' : (gearOwnedOf('pack_assault') ? 'pack_assault' : null);
+  if (!SAVE.worn.rig) SAVE.worn.rig = bestOwnedGear('rig');
+  if (!SAVE.worn.pack) SAVE.worn.pack = bestOwnedGear('pack');
   trimCarryToCap();
   const C = SAVE.carry;
   let did = 0;
