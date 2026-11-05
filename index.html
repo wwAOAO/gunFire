@@ -10642,6 +10642,24 @@ function layoutLoot(items, speed) {
   return items.length ? items[items.length - 1].ready : LOOT_LEAD * sp0;
 }
 
+/* 翻箱 · 二次翻：已经翻出来看过的（it.seen）直接秒开，没翻过的照常翻 ——
+   「免搜索」只属于你看过的那几件，箱子里的未知部分还是要一件件翻 */
+function layoutLootResumed(items, speed) {
+  const sp0 = (speed === undefined || speed === null) ? 1 : speed;
+  let t = LOOT_LEAD * sp0;
+  for (const it of items) {
+    const sp = revealSpec(it.tier);
+    const k = it.seen ? 0 : 1;
+    it.at = t;
+    it.hold = sp.hold * sp0 * k;
+    it.flip = sp.flip * sp0 * k;
+    it.ready = t + it.hold + it.flip;
+    it.qWeight = Q_TREMBLE[it.tier] || 0.8;
+    t = it.ready + sp.gap * sp0 * k;
+  }
+  return items.length ? items[items.length - 1].ready : LOOT_LEAD * sp0;
+}
+
 function updateSearch(dt) {
   let best = null, bestD = 1e9;
   for (const c of G.crates) {
@@ -11249,7 +11267,7 @@ function startLoot(c) {
   c.opened = true;
   c.hover = 1;
   for (const it of left) it.blocked = '';
-  const total = layoutLoot(left, again ? 0 : C.speed);   // 搜过的箱子：全部直接翻开，不用再等一遍翻牌
+  const total = layoutLootResumed(left, C.speed);   // 翻出来过的秒开，没翻过的照常等
   G.lootPanel = { items: left, t: 0, shown: 0, taken: 0, closeT: 0, crate: c, total, col: C, again, sel: Math.max(0, left.findIndex(it => !it.taken)) };
   Sfx.loot();
 
@@ -11277,7 +11295,9 @@ function updateLootPanel(dt) {
 
   // 逐件翻牌只负责「看清是什么」：翻出来的不会自动进包 —— 滚轮选中、按 F 自己拿
   let shown = 0;
-  for (const it of L.items) if (L.t >= it.ready) shown++;
+  for (const it of L.items) {
+    if (L.t >= it.ready) { shown++; it.seen = true; }   // 翻出来 = 看过了：下次搜这箱它秒开
+  }
   L.shown = shown;
 
   // 全拿光 → 稍停收面板
