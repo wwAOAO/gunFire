@@ -1762,13 +1762,18 @@ function cleanAmmoPick(raw) {
 
 function migrateWeaponIds(owned) {
   /* 老档当年是白送 G17 的，这里保留这份所有权，不凭空没收；
-     新档走 DEFAULT_SAVE（owned 是空的），想用手枪得自己买。 */
-  const out = { [BASE_WEAPON]: true };
+     新档走 DEFAULT_SAVE（owned 是空的），想用手枪得自己买。
+     值是实例计数：1 = 有一把，2 = 有两把（缴获可囤同款枪）。 */
+  const out = {};
   for (const id in owned) {
-    if (!owned[id]) continue;
+    const v = owned[id];
+    const n = typeof v === 'number' ? (v | 0) : (v ? 1 : 0);
+    if (n <= 0) continue;
     const to = WEAPON_ID_MIGRATE[id] || id;
-    if (KNOWN_WEAPON_IDS[to]) out[to] = true;
+    if (KNOWN_WEAPON_IDS[to]) out[to] = Math.min(9, (out[to] | 0) + n);
   }
+  /* 老档白送的 G17 保留 —— 但只算一把，别和 owned 里那条 g17 重复计 */
+  if (!(out[BASE_WEAPON] > 0)) out[BASE_WEAPON] = 1;
   return out;
 }
 
@@ -3753,7 +3758,9 @@ const P = {
   swingT: 0,                    // 挥击动画剩余时间
   swingAim: 0,                  // 挥击时的朝向
   swingHit: 0,                  // 本次挥击命中人数（>0 就画命中特效）
-  owned: {},
+  owned: {},                    // 本局可用的枪（从仓库带进来的）
+  gunLoot: {},                  // 局内缴获的同款枪计数：撤离时 SAVE.owned 各 +n
+  gearLoot: {},                 // 局内捡到的弹挂 / 背包计数：撤离时 SAVE.gearOwned 各 +n
   ammo: {},
   walkPhase: 0,
   recoil: 0,
@@ -4564,6 +4571,8 @@ function initOperatorSkills() {
   P.downHp = 0;
   P.downRev = 0;
   P.sprintLatch = false;   // 跑步姿态锁存一并清掉
+  P.gunLoot = {};          // 缴获台账每局重记
+  P.gearLoot = {};
   P.regenT = 0;
 }
 
@@ -4621,11 +4630,14 @@ function resetPlayer() {
   P.owned = {};
   P.slots = { primary: null, secondary: null, pistol: null };
   const LO = SAVE.loadout || {};
+  const avail = {};                                  // 每把枪的实例数：装一个槽吃掉一把
+  for (const k in SAVE.owned) avail[k] = SAVE.owned[k] | 0;
   for (const k of GUN_SLOTS) {
     const id = LO[k];
-    if (!id || !WEAPONS[id] || !SAVE.owned[id]) continue;
+    if (!id || !WEAPONS[id] || (avail[id] | 0) <= 0) continue;
     P.slots[k] = id;
     P.owned[id] = true;
+    avail[id]--;
   }
   P.curSlot = P.slots.primary ? 'primary' : (P.slots.secondary ? 'secondary'
     : (P.slots.pistol ? 'pistol' : 'melee'));
@@ -10089,6 +10101,9 @@ function collectPickup(p) {
       recountLoot();
       popup(P.x, P.y - 30, cellName(c) + (c.t === 'ammo' ? ' ' + (c.n | 0) + ' 发' : ''), cellColor(c), 14);
       Sfx.pickup();
+    } else if (c.t === 'gear' && wearGearInRaid(c.key, true)) {
+      ok = true;                                   // 弹挂 / 背包：直接换穿（同款 = 备用件）
+      popup(P.x, P.y - 30, cellName(c) + ' 已换上', cellColor(c), 14);
     } else if (c.t === 'gun' && groundGunTake(c, p.x, p.y)) {
       ok = true;                                   // 没背包 / 背包满：空槽装上或和手上这把换
       popup(P.x, P.y - 30, WEAPONS[c.id].short + ' 已拿起', cellColor(c), 14);
@@ -10756,6 +10771,20 @@ function pickGun(preferNew) {
   }
   return pick(all);
 }
+/* 抽一件弹挂 / 背包：越贵越难出（基础款遍地走，红背包看缘分） */
+function pickGear() {
+  const keys = Object.keys(GEAR);
+  return pickWeighted(keys.map(k => [k, Math.max(0.15, 7000 / GEAR[k].price)]));
+}
+function makeGearItem(key) {
+  const g = GEAR[key];
+  return {
+    kind: 'gear', gear: key, icon: g.kind === 'rig' ? '▤' : '▩',
+    name: g.name, val: g.cap + ' 格', color: g.color || '#ffb08a', tier: 'rare',
+    note: (g.kind === 'rig' ? '弹挂 · 快捷可用 · ' : '背包 · Tab 倒腾 · ') + g.cap + ' 格 · 拿起直接换穿',
+  };
+}
+
 function rollContainerKind() {
   return pickWeighted(CONTAINER_IDS.map(k => [k, CONTAINERS[k].weight]));
 }
@@ -10780,6 +10809,7 @@ function rollContainer(kind) {
       if (Math.random() < 0.30) addMod(0);
       if (Math.random() < 0.08 + wave * 0.04) addMod(0.4);
       if (Math.random() < (isSecret() ? 0.11 : 0.06)) items.push(rollArmorDrop(0));
+      if (Math.random() < 0.05) items.push(makeGearItem(pickGear()));
       break;
     }
     /* 弹药箱：整箱子弹 —— 口径与弹级都随机，偶尔压着一件护甲 */
@@ -10819,6 +10849,7 @@ function rollContainer(kind) {
       if (Math.random() < 0.30) items.push(rollBulletDrop(1.1));
       if (Math.random() < 0.15) items.push(makeMedItem(rollMedDropId(false)));
       if (Math.random() < (isSecret() ? 0.32 : 0.20)) items.push(rollArmorDrop(0.6));
+      if (Math.random() < 0.10) items.push(makeGearItem(pickGear()));
       break;
     }
     /* 保险柜：慢得离谱，但品质卷得最高 */
@@ -11001,6 +11032,7 @@ function applyLootItem(it, c) {
         P.owned[w] = true;
         P.ammo[w] = { mag: WS.mag, tier: ammoPickOf(cal), cal };
       }
+      P.gunLoot[w] = (P.gunLoot[w] | 0) + 1;   // 箱里的都是缴获：撤离按实例入库
       if (freeSlot) {
         P.slots[freeSlot] = w;
         const sd = SLOT_DEFS.find(d => d.id === freeSlot);
@@ -11011,6 +11043,8 @@ function applyLootItem(it, c) {
       /* 缴获的枪自带两个弹匣的子弹（能装多少装多少） */
       addReserve(cal, WS.mag * 2, P.ammo[w].tier);
     }
+  } else if (it.kind === 'gear') {
+    if (!wearGearInRaid(it.gear, true)) { ok = false; it.blocked = '这件装备穿不上'; }
   } else if (it.kind === 'mod') {
     if (stowCell({ t: 'mod', id: it.mod })) recountLoot();
     else { ok = false; it.blocked = '身上没有空位'; }
@@ -17337,7 +17371,8 @@ function refreshShop() {
 
       for (const id of guns) {
         const w = WEAPONS[id];
-        const owned = !!SAVE.owned[id];
+        const cnt = SAVE.owned[id] | 0;
+        const owned = cnt > 0;
         const canAfford = SAVE.credits >= w.price;
 
         const el = document.createElement('div');
@@ -17345,7 +17380,7 @@ function refreshShop() {
         const modN = owned ? gunModCount(id) : 0;
         el.innerHTML =
           '<div class="top"><span class="nm">' + w.name + '</span>' +
-          (owned ? '<span class="tag own">改装 ' + modN + '/' + modSlotTotal(id) + '</span>' : '<span class="tag cat">' + cat.cn + '</span>') + '</div>' +
+          (owned ? '<span class="tag own">×' + cnt + ' · 改装 ' + modN + '/' + modSlotTotal(id) + '</span>' : '<span class="tag cat">' + cat.cn + '</span>') + '</div>' +
           '<div class="code">' + w.code + '</div>' +
           '<div class="ds">' + w.desc + '</div>' +
           '<div class="specs">' + weaponSpecs(w) + '</div>' +
@@ -17357,13 +17392,17 @@ function refreshShop() {
           '</div>' +
           '<div class="buyrow">' +
             '<span class="price">' + (w.price === 0 ? '免费' : '<i>¥</i>' + fmtMoney(w.price)) + '</span>' +
-            '<button class="buybtn' + (owned ? ' tune' : '') + '"' + (!owned && !canAfford ? ' disabled' : '') + '>' +
-            (owned ? '改 装' : (canAfford ? '购买' : '资金不足')) + '</button>' +
+            (owned
+              ? '<button class="buybtn tune">改 装</button>' +
+                '<button class="buybtn"' + (!canAfford ? ' disabled' : '') + '>再 购</button>'
+              : '<button class="buybtn"' + (!canAfford ? ' disabled' : '') + '>' +
+                (canAfford ? '购买' : '资金不足') + '</button>') +
           '</div>';
 
-        el.querySelector('.buybtn').addEventListener('click', () => {
-          if (owned) openGunsmith(id); else buyWeapon(id);
-        });
+        const wBtns = el.querySelectorAll('.buybtn');
+        wBtns.forEach(b => b.addEventListener('click', () => {
+          if (b.classList.contains('tune')) openGunsmith(id); else buyWeapon(id);
+        }));
         sub.appendChild(el);
       }
 
@@ -17498,24 +17537,25 @@ function refreshShop() {
     const kindName = k => k === 'rig' ? '弹挂' : '背包';
     for (const key in GEAR) {
       const s = GEAR[key];
-      const owned = !!(SAVE.gearOwned && SAVE.gearOwned[key]);
+      const gcnt = (SAVE.gearOwned && SAVE.gearOwned[key]) | 0;
+      const gowned = gcnt > 0;
       const canAfford = SAVE.credits >= s.price;
 
       const el = document.createElement('div');
-      el.className = 'item' + (owned ? ' owned' : '');
+      el.className = 'item' + (gowned ? ' owned' : '');
       el.innerHTML =
         '<div class="top"><span class="nm" style="color:' + s.color + '">' + s.name + '</span>' +
-        (owned ? '<span class="tag own">已拥有</span>' : '<span class="tag" style="color:' + s.color + '">' + s.q + ' · ' + kindName(s.kind) + '</span>') + '</div>' +
+        (gowned ? '<span class="tag own">×' + gcnt + '</span>' : '<span class="tag" style="color:' + s.color + '">' + s.q + ' · ' + kindName(s.kind) + '</span>') + '</div>' +
         '<div class="ds">' + s.desc + '</div>' +
         '<div class="ds" style="color:#6fb0cf">' + kindName(s.kind) + ' · 穿上后 ' + s.cap + ' 格 · 整备界面穿 / 脱</div>' +
         '<div class="bars">' + bar('容量', s.cap / 50) + '</div>' +
         '<div class="buyrow">' +
           '<span class="price"><i>¥</i>' + fmtMoney(s.price) + '</span>' +
-          '<button class="buybtn' + (owned ? ' owned' : '') + '"' + (owned || !canAfford ? ' disabled' : '') + '>' +
-          (owned ? '已拥有' : (canAfford ? '购买' : '资金不足')) + '</button>' +
+          '<button class="buybtn"' + (!canAfford ? ' disabled' : '') + '>' +
+          (canAfford ? (gowned ? '再 购' : '购买') : '资金不足') + '</button>' +
         '</div>';
 
-      if (!owned) el.querySelector('.buybtn').addEventListener('click', () => buyGear(key));
+      el.querySelector('.buybtn').addEventListener('click', () => buyGear(key));
       grid.appendChild(el);
     }
     return;
@@ -17704,9 +17744,9 @@ function autoAssign(id) {
 
 function buyWeapon(id) {
   const w = WEAPONS[id];
-  if (SAVE.owned[id] || SAVE.credits < w.price) return;
+  if (SAVE.credits < w.price) return;
   SAVE.credits -= w.price;
-  SAVE.owned[id] = true;
+  SAVE.owned[id] = (SAVE.owned[id] | 0) + 1;   // 多实例：买几把囤几把
   const slot = autoAssign(id);
   saveGame();
   Sfx.init(); Sfx.resume(); Sfx.pickup();
@@ -17829,10 +17869,10 @@ function selectAmmo(cal, lv) {
 
 function buyGear(key) {
   const s = GEAR[key];
-  if (!s || !SAVE.gearOwned || SAVE.gearOwned[key]) return;
+  if (!s) return;
   if (SAVE.credits < s.price) return;
   SAVE.credits -= s.price;
-  SAVE.gearOwned[key] = 1;          // 买一次永久拥有，穿不穿在整备界面自己决定
+  SAVE.gearOwned[key] = (SAVE.gearOwned[key] | 0) + 1;   // 多实例：买几件有几件，穿不穿在整备界面自己决定
   saveGame();
   Sfx.init(); Sfx.resume(); Sfx.pickup();
   refreshShop();
@@ -18447,20 +18487,18 @@ function renderLoStock() {
      已经装在槽里的那把：先从槽里退出来再拿，别搞出「身上一把手上一把」的幻影副本 */
   sect('武 器', 'weapon');
   for (const id of WEAPON_ORDER) {
-    if (!SAVE.owned[id]) continue;
+    if (!WEAPONS[id] || (SAVE.owned[id] | 0) <= 0) continue;
     const W = WEAPONS[id];
-    /* 已装在槽里的直接不显示（槽位右键可脱下） */
-    if (SAVE.loadout.primary === id || SAVE.loadout.secondary === id || SAVE.loadout.pistol === id) continue;
+    /* 槽里装着的那几把不显示（槽位右键可脱下）；剩下的备用件才列出来 */
+    const inSlots = (SAVE.loadout.primary === id ? 1 : 0) + (SAVE.loadout.secondary === id ? 1 : 0) +
+                    (SAVE.loadout.pistol === id ? 1 : 0);
+    const spare = (SAVE.owned[id] | 0) - inSlots;
+    if (spare <= 0) continue;
     row({
       nm: W.short, color: '#ffca7a',
       sub: weaponCatOf(W).cn + ' · ' + caliberOf(id).short + ' · ' + W.mag + ' 发弹匣',
-      ct: '在库',
-      pick: () => {
-        if (SAVE.loadout.primary === id) SAVE.loadout.primary = null;
-        else if (SAVE.loadout.secondary === id) SAVE.loadout.secondary = null;
-        else if (SAVE.loadout.pistol === id) SAVE.loadout.pistol = null;
-        loSetHeld({ t: 'gun', id });
-      },
+      ct: '在库 ×' + spare,
+      pick: () => loSetHeld({ t: 'gun', id }),   // 拿的是备用件，槽里那把不受影响
       quick: () => {                          // F：直接装上（手枪进手枪槽，长枪先进主槽再进副槽）
         if (PISTOL_IDS[id]) SAVE.loadout.pistol = id;
         else if (!SAVE.loadout.primary) SAVE.loadout.primary = id;
@@ -18517,21 +18555,20 @@ function renderLoStock() {
   sect('携 行', 'gear');
   let gearAny = false;
   for (const key in GEAR) {
-    if (!gearOwnedOf(key)) continue;
+    const g0 = GEAR[key];
+    const gcnt = (SAVE.gearOwned && SAVE.gearOwned[key]) | 0;
+    if (gcnt <= 0) continue;
     gearAny = true;
-    const g = GEAR[key];
-    if (SAVE.worn && SAVE.worn[g.kind] === key) continue;    // 已穿的不显示（左槽右键脱下）
+    const g = g0;
+    /* 身上穿的那件不算库存；剩下的备用件列出来（同款囤几件显示几件） */
+    const wornThis = !!(SAVE.worn && SAVE.worn[g.kind] === key);
+    const gspare = gcnt - (wornThis ? 1 : 0);
+    if (gspare <= 0) continue;    // 只有身上那件：不显示（左槽右键脱下）
     row({
       nm: g.name, color: g.color || '#ffb08a',
       sub: (g.q ? g.q + ' · ' : '') + (g.kind === 'rig' ? '弹挂 · 快捷可用 · ' : '背包 · Tab 倒腾 · ') + g.cap + ' 格',
-      ct: g.cap + ' 格',
-      pick: () => {
-        if (SAVE.worn && SAVE.worn[g.kind] === key) {   // 穿着的这件：先脱下再拿
-          SAVE.worn[g.kind] = null;
-          trimCarryToCap();
-        }
-        loSetHeld({ t: 'gear', key });
-      },
+      ct: '备用 ×' + gspare,
+      pick: () => loSetHeld({ t: 'gear', key }),   // 拿备用件，身上穿着的不动
       quick: () => {                          // F：直接穿上，容量变化立刻结算（多出的格子回仓）
         SAVE.worn[g.kind] = key;
         trimCarryToCap();
@@ -18888,6 +18925,40 @@ function swapWearArmor(pc) {
   return true;
 }
 
+/* 局内捡到弹挂 / 背包：直接换穿。
+   容量变大补空格；变小把多出格子的东西掉在脚边；换下来的旧装备也掉脚边（可再捡回去换穿）。
+   同款再捡 = 备用件直接收下（撤离 +1）。fromLoot = 这是这局捡的（计缴获台账）。 */
+function wearGearInRaid(key, fromLoot) {
+  const g = GEAR[key];
+  if (!g || !SAVE.worn) return false;
+  const kind = g.kind;
+  const prevKey = SAVE.worn[kind] || null;
+  if (prevKey === key) {
+    if (fromLoot) P.gearLoot[key] = (P.gearLoot[key] | 0) + 1;
+    uiToast(g.name + ' · 备用件已收下', 'small');
+    return true;
+  }
+  const arr = kind === 'rig' ? P.rig : P.pack;
+  if (!arr) return false;
+  SAVE.worn[kind] = key;
+  const overflow = [];
+  while (arr.length < g.cap) arr.push(null);
+  while (arr.length > g.cap) { const x = arr.pop(); if (x) overflow.push(x); }
+  for (const c of overflow) {
+    G.pickups.push({ x: P.x + rand(-14, 14), y: P.y + rand(18, 40),
+      kind: 'cell', cell: c, life: 600, bob: rand(0, TAU), value: 0, relicId: null, cool: 1.6 });
+  }
+  if (prevKey && GEAR[prevKey]) {
+    G.pickups.push({ x: P.x + rand(-14, 14), y: P.y + rand(18, 40),
+      kind: 'cell', cell: { t: 'gear', key: prevKey }, life: 600, bob: rand(0, TAU), value: 0, relicId: null, cool: 1.6 });
+  }
+  if (fromLoot) P.gearLoot[key] = (P.gearLoot[key] | 0) + 1;
+  recountLoot();
+  uiToast(g.name + ' 已换上' + (prevKey && GEAR[prevKey] ? '（' + GEAR[prevKey].name + ' 在脚边）' : ''), 'small');
+  Sfx.pickup();
+  return true;
+}
+
 /* 地上捡枪的兜底：有空武器槽直接装上；主副手枪槽全占着就和手上这把换 ——
    手上的枪掉回原地（不吞枪）。没背包也能捡。成功返回 true。 */
 function groundGunTake(c, gx, gy) {
@@ -18917,6 +18988,7 @@ function groundGunTake(c, gx, gy) {
     P.ammo[wid] = { mag: weaponStats(wid).mag, tier: ammoPickOf(calOfWeapon(wid)), cal: calOfWeapon(wid) };
     addReserve(calOfWeapon(wid), weaponStats(wid).mag * 2, P.ammo[wid].tier);   // 缴获自带两个弹匣
   }
+  P.gunLoot[wid] = (P.gunLoot[wid] | 0) + 1;     // 缴获台账：撤离时仓库 +1 把（新枪、同款都算）
   recountLoot();
   return true;
 }
@@ -18985,8 +19057,8 @@ function dropHeldToGround() {
     const stillSlotted = GUN_SLOTS.some(sl => P.slots && P.slots[sl] === h.id);
     const stillCarried = allCarryZones().some(arr => arr.some(c => c && c.t === 'gun' && c.id === h.id));
     if (!stillSlotted && !stillCarried && P.owned[h.id]) {
-      delete P.owned[h.id];
-      delete P.ammo[h.id];
+      if ((P.gunLoot[h.id] | 0) > 0) P.gunLoot[h.id]--;   // 丢的是缴获副本：台账 -1
+      else { delete P.owned[h.id]; delete P.ammo[h.id]; }
     }
   }
   recountLoot();
@@ -19424,8 +19496,15 @@ function endRaid(success) {
       inV += r.price * it.n;
     }
 
-    // 保留局内获得的装备
-    for (const k in P.owned) if (P.owned[k]) SAVE.owned[k] = true;
+    // 缴获按实例入库：这局捡了几把枪 / 几件弹挂背包，仓库各 +n（带进来的本来就在仓库）
+    for (const wid in P.gunLoot) {
+      const n = P.gunLoot[wid] | 0;
+      if (n > 0 && WEAPONS[wid]) SAVE.owned[wid] = Math.min(9, (SAVE.owned[wid] | 0) + n);
+    }
+    for (const key in P.gearLoot) {
+      const n = P.gearLoot[key] | 0;
+      if (n > 0 && GEAR[key]) SAVE.gearOwned[key] = Math.min(9, (SAVE.gearOwned[key] | 0) + n);
+    }
     // 搜到并带到撤离点的枪，自动补进还空着的槽位
     for (const sl of ['primary', 'secondary']) {
       if (SAVE.loadout[sl] && SAVE.owned[SAVE.loadout[sl]]) continue;
@@ -19464,6 +19543,12 @@ function endRaid(success) {
     rows.push(['撤离奖励', '+ ¥' + fmtMoney(bonus), 'pos']);
     rows.push(['击杀 ' + G.kills + ' 名敌人', '+ ¥' + fmtMoney(G.score), 'neu']);
     rows.push(['配件带回', modN ? modN + ' 件 · 可上改装台' : '无', modN ? 'pos' : 'neu']);
+    {
+      const gunN = Object.values(P.gunLoot || {}).reduce((a, b) => a + (b | 0), 0);
+      const gearN = Object.values(P.gearLoot || {}).reduce((a, b) => a + (b | 0), 0);
+      const txt = (gunN ? gunN + ' 把枪' : '') + (gunN && gearN ? ' · ' : '') + (gearN ? gearN + ' 件弹挂 / 背包' : '');
+      rows.push(['缴获入库', txt || '无', (gunN || gearN) ? 'pos' : 'neu']);
+    }
     /* 局内捡到的护甲：以背包格子的形式原样带回，仓库 / 整备界面能直接穿 */
     let armorN = 0;
     for (const arr of allCarryZones()) for (const c of arr) if (c && c.t === 'armor') armorN++;
@@ -19480,24 +19565,28 @@ function endRaid(success) {
 
     const lostNames = [];
     let lostModN = 0;
+    const loseGun = id => {
+      if (!WEAPONS[id]) return;
+      lostNames.push(WEAPONS[id].short);
+      SAVE.owned[id] = (SAVE.owned[id] | 0) - 1;
+      if ((SAVE.owned[id] | 0) <= 0) {
+        delete SAVE.owned[id];
+        lostModN += gunModCount(id);
+        delete SAVE.mods[id];        // 最后一把才连配件一起没（同款还有就改装还在）
+      }
+    };
     for (const sl of GUN_SLOTS) {
       const id = SAVE.loadout[sl];
-      if (!id || !SAVE.owned[id]) continue;
-      lostNames.push(WEAPONS[id].short);
-      lostModN += gunModCount(id);
-      delete SAVE.owned[id];
-      delete SAVE.mods[id];          // 枪没了，装在上面的配件跟着一起没
+      if (!id || (SAVE.owned[id] | 0) <= 0) continue;
+      loseGun(id);
       SAVE.loadout[sl] = null;
     }
     /* 背在包里的枪也算「身上带着的」—— 一起丢。
        （以前只清武器槽，塞包里的枪会跟着 SAVE.owned 留在仓库里，等于白嫖一趟） */
     for (const arr of allCarryZones()) {
       for (const c of arr) {
-        if (!c || c.t !== 'gun' || !SAVE.owned[c.id]) continue;
-        lostNames.push(WEAPONS[c.id] ? WEAPONS[c.id].short : c.id);
-        lostModN += gunModCount(c.id);
-        delete SAVE.owned[c.id];
-        delete SAVE.mods[c.id];
+        if (!c || c.t !== 'gun' || (SAVE.owned[c.id] | 0) <= 0) continue;
+        loseGun(c.id);
       }
     }
     const lostWeapon = lostNames.length ? lostNames.join(' · ') : null;
@@ -19509,7 +19598,8 @@ function endRaid(success) {
       const key = SAVE.worn && SAVE.worn[kind];
       if (!key || !GEAR[key]) continue;
       lostGear.push(GEAR[key].name);
-      if (SAVE.gearOwned) delete SAVE.gearOwned[key];
+      SAVE.gearOwned[key] = (SAVE.gearOwned[key] | 0) - 1;
+      if ((SAVE.gearOwned[key] | 0) <= 0) delete SAVE.gearOwned[key];   // 多实例：死一次只丢身上这件
     }
     SAVE.worn = { rig: null, pack: null };
     const lostN = relicCount();
