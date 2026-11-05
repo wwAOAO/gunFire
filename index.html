@@ -10089,6 +10089,9 @@ function collectPickup(p) {
       recountLoot();
       popup(P.x, P.y - 30, cellName(c) + (c.t === 'ammo' ? ' ' + (c.n | 0) + ' 发' : ''), cellColor(c), 14);
       Sfx.pickup();
+    } else if (c.t === 'gun' && groundGunTake(c, p.x, p.y)) {
+      ok = true;                                   // 没背包 / 背包满：空槽装上或和手上这把换
+      popup(P.x, P.y - 30, WEAPONS[c.id].short + ' 已拿起', cellColor(c), 14);
     } else if (c.t === 'armor' && swapWearArmor(c)) {
       ok = true;                                   // 背包满：直接换穿，身上那件掉脚边
       popup(P.x, P.y - 30, cellName(c) + ' 已穿上', cellColor(c), 14);
@@ -10989,8 +10992,10 @@ function applyLootItem(it, c) {
     const spots = isP ? ['pistol'] : ['primary', 'secondary'];
     const freeSlot = spots.find(k => !P.slots || !P.slots[k]);
     const cellSlot = freeSlot ? null : stowCell({ t: 'gun', id: w });
-    if (!freeSlot && !cellSlot) { ok = false; it.blocked = '武器槽和背包都满了'; }
-    else {
+    const swapped = !freeSlot && !cellSlot;
+    /* 槽和背包都满：和手上这把换（旧枪掉脚边），不再「带不走」卡在箱里 */
+    if (swapped && !groundGunTake({ id: w }, c ? c.x : P.x, c ? c.y : P.y)) { ok = false; it.blocked = '武器槽和背包都满了'; }
+    else if (!swapped) {
       const cal = calOfWeapon(w);
       if (!P.owned[w]) {
         P.owned[w] = true;
@@ -18859,9 +18864,16 @@ function currentArmorPiece() {
     ? { id: P.armorId, hp: Math.round(P.armorHp), max: Math.max(1, Math.round(P.armorMax)) }
     : null;
 }
-/* 背包塞不下时的兜底：直接换穿 —— 身上那件（耐久原样）掉在脚边，不吞任何东西 */
+/* 背包塞不下时的兜底：直接换穿 —— 身上那件（耐久原样）掉在脚边，不吞任何东西。
+   只升不降：裸奔 / 更高级 / 同级更大杯才换，不然低级甲会把身上的好甲顶掉。 */
 function swapWearArmor(pc) {
+  const AR = ARMORS[pc && pc.id];
+  if (!AR || AR.lv <= 0) return false;
   const prev = currentArmorPiece();
+  if (prev) {
+    const better = AR.lv > P.armorLv || (AR.lv === P.armorLv && Math.round(pc.max) > P.armorMax);
+    if (!better) return false;                   // 不如身上的：不自动换，留给玩家 Tab 里自己决定
+  }
   if (!wearArmorPiece(pc)) return false;
   if (prev) {
     G.pickups.push({
@@ -18873,6 +18885,39 @@ function swapWearArmor(pc) {
   recountLoot();
   uiToast('背包满了 · 直接穿上 ' + ARMORS[P.armorId].name + (prev ? '（换下的在脚边）' : ''), 'small');
   Sfx.pickup();
+  return true;
+}
+
+/* 地上捡枪的兜底：有空武器槽直接装上；主副手枪槽全占着就和手上这把换 ——
+   手上的枪掉回原地（不吞枪）。没背包也能捡。成功返回 true。 */
+function groundGunTake(c, gx, gy) {
+  const wid = c && c.id;
+  if (!wid || !WEAPONS[wid]) return false;
+  const isP = !!PISTOL_IDS[wid];
+  if (!P.slots) P.slots = { primary: null, secondary: null, pistol: null };
+  const spots = isP ? ['pistol'] : ['primary', 'secondary'];
+  let target = spots.find(k => !P.slots[k]);
+  if (!target) {
+    /* 全占着：换下当前手上的枪（手持近战 / 医疗时退而换主武器） */
+    const cur = (P.curSlot === 'primary' || P.curSlot === 'secondary' || P.curSlot === 'pistol') ? P.curSlot : 'primary';
+    const oldId = P.slots[cur];
+    if (!oldId) return false;
+    target = cur;
+    G.pickups.push({
+      x: gx + rand(-8, 8), y: gy + rand(22, 40),
+      kind: 'cell', cell: { t: 'gun', id: oldId },
+      life: 600, bob: rand(0, TAU), value: 0, relicId: null, cool: 1.6,
+    });
+    uiToast('换枪 · ' + WEAPONS[oldId].short + ' 掉在脚边', 'small');
+  }
+  P.slots[target] = wid;
+  if (P.curSlot === target) P.weapon = wid;      // 换的就是手里这把：枪口立刻跟上
+  if (!P.owned[wid]) {
+    P.owned[wid] = true;
+    P.ammo[wid] = { mag: weaponStats(wid).mag, tier: ammoPickOf(calOfWeapon(wid)), cal: calOfWeapon(wid) };
+    addReserve(calOfWeapon(wid), weaponStats(wid).mag * 2, P.ammo[wid].tier);   // 缴获自带两个弹匣
+  }
+  recountLoot();
   return true;
 }
 
