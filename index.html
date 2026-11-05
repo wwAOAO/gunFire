@@ -2404,20 +2404,20 @@ function penTableText(pen) {
    hp/max 是耐久 —— 挡弹会磨甲，磨光就裸奔；dr 只对没弹级的伤害（爆炸/近战/火/冻）生效；
    eff 是维修效率：甲修包修甲时，恢复 X 点耐久，上限掉 X/eff —— 效率越高修得越不亏。 */
 const ARMORS = [
-  { id: 0, name: '无护甲',   short: '无护甲',   lv: 0, dr: 0,    hp: 0,   price: 0,     load: 0,   eff: 0,   effName: '—',
+  { id: 0, name: '无护甲',   short: '无护甲',   lv: 0, dr: 0,    hp: 0,   price: 0,     load: 0,   eff: 0,    effName: '—', loss: 0,    lossName: '—',
     desc: '没有任何防护，承受全额伤害 —— 但身上最轻，走得最快、跑得最久。' },
-  { id: 1, name: '轻型护甲', short: '轻型护甲', lv: 1, dr: 0.10, hp: 60,  price: 700,   load: 0.6, eff: 0.9, effName: '高',
-    desc: '轻便的防弹背心。1 级甲：同级弹减半，2 级弹 75% 穿入，3 级弹以上全穿。耐久 60，维修效率高（修一次几乎不掉上限）。' },
-  { id: 2, name: '战术护甲', short: '战术护甲', lv: 2, dr: 0.15, hp: 90,  price: 2000,  load: 1.3, eff: 0.9, effName: '高',
-    desc: '复合插板。2 级甲：1 级弹被完全挡下，同级弹减半，3 级弹 75% 穿入。耐久 90，维修效率高。' },
-  { id: 3, name: '重型护甲', short: '重型护甲', lv: 3, dr: 0.20, hp: 130, price: 4600,  load: 2.2, eff: 0.7, effName: '中',
-    desc: '全覆式重甲。3 级甲：1-2 级弹全挡，同级弹减半，4 级弹 75% 穿入。耐久 130，维修效率中。' },
-  { id: 4, name: '精英护甲', short: '精英护甲', lv: 4, dr: 0.25, hp: 170, price: 9600,  load: 2.8, eff: 0.7, effName: '中',
-    desc: '特种部队制式。4 级甲：1-3 级弹全挡，同级弹减半，5 级弹 75% 穿入。耐久 170，维修效率中。' },
-  { id: 5, name: '特勤护甲', short: '特勤护甲', lv: 5, dr: 0.30, hp: 220, price: 18000, load: 3.4, eff: 0.5, effName: '低',
-    desc: '哈夫克高层同款。5 级甲：1-4 级弹全挡，同级弹减半，6 级弹 75% 穿入。耐久 220，维修效率低（修一次掉不少上限）。' },
-  { id: 6, name: '动力装甲', short: '动力装甲', lv: 6, dr: 0.35, hp: 300, price: 36000, load: 4.0, eff: 0.5, effName: '低',
-    desc: '外骨骼框架 + 陶瓷复合板。6 级甲：1-5 级弹全挡，只有 6 级弹能对穿。耐久 300，又重又难修。' },
+  { id: 1, name: '轻型护甲', short: '轻型护甲', lv: 1, dr: 0.10, hp: 60,  price: 700,   load: 0.6, eff: 1.2,  effName: '高', loss: 0.09, lossName: '高',
+    desc: '轻便的防弹背心。1 级甲：同级弹减半，2 级弹 75% 穿入，3 级弹以上全穿。修起来最省料（1 点甲修剂恢复 1.2 耐久），但每次修满上限磨掉 9% —— 一次性甲。' },
+  { id: 2, name: '战术护甲', short: '战术护甲', lv: 2, dr: 0.15, hp: 90,  price: 2000,  load: 1.3, eff: 1.2,  effName: '高', loss: 0.09, lossName: '高',
+    desc: '复合插板。2 级甲：1 级弹被完全挡下，同级弹减半，3 级弹 75% 穿入。维修效率高（1 点恢复 1.2），耐久损耗高（修满一次磨 9% 上限）。' },
+  { id: 3, name: '重型护甲', short: '重型护甲', lv: 3, dr: 0.20, hp: 130, price: 4600,  load: 2.2, eff: 0.9,  effName: '中', loss: 0.09, lossName: '高',
+    desc: '全覆式重甲。3 级甲：1-2 级弹全挡，同级弹减半，4 级弹 75% 穿入。维修效率中（1 点恢复 0.9），耐久损耗高：0/130 修满一次磨 9%（约 11.7 点）上限。' },
+  { id: 4, name: '精英护甲', short: '精英护甲', lv: 4, dr: 0.25, hp: 170, price: 9600,  load: 2.8, eff: 0.9,  effName: '中', loss: 0.075, lossName: '中',
+    desc: '特种部队制式。4 级甲：1-3 级弹全挡，同级弹减半，5 级弹 75% 穿入。维修效率中（1 点恢复 0.9），耐久损耗中（修满一次磨 7.5% 上限）。' },
+  { id: 5, name: '特勤护甲', short: '特勤护甲', lv: 5, dr: 0.30, hp: 220, price: 18000, load: 3.4, eff: 0.59, effName: '低', loss: 0.075, lossName: '中',
+    desc: '哈夫克高层同款。5 级甲：1-4 级弹全挡，同级弹减半，6 级弹 75% 穿入。维修效率低（1 点只恢复 0.59），耐久损耗中（修满一次磨 7.5% 上限）。' },
+  { id: 6, name: '动力装甲', short: '动力装甲', lv: 6, dr: 0.35, hp: 300, price: 36000, load: 4.0, eff: 0.59, effName: '低', loss: 0.06, lossName: '低',
+    desc: '外骨骼框架 + 陶瓷复合板。6 级甲：1-5 级弹全挡，只有 6 级弹能对穿。耐久损耗最低（修满一次只磨 6% 上限），但维修效率也最低：1 点甲修剂只恢复 0.59 耐久，修满一次要烧掉五百多点。' },
 ];
 /* 甲的耐久条颜色随等级走（和敌人装甲同色系） */
 function armorLvColor(lv) {
@@ -2425,28 +2425,28 @@ function armorLvColor(lv) {
 }
 
 /* ── 甲修包：修护甲用的消耗品，跟医疗包一样有耐久（点数）。
-   点数消耗 = 恢复的护甲耐久；上限损失 = 恢复的耐久 ÷ 甲的维修效率。
+   恢复量 = 消耗点数 × 甲的维修效率（1 点修几耐久）；上限损耗 = 恢复量 × 甲的耐久损耗率。
    capLv：能修的最高甲级 —— 蓝修 1-3 级，紫修 1-4，金修 1-5，红修全甲。 ── */
 const REPAIRS = {
   repair_b: {
     name: '甲修包 · 蓝', short: '蓝甲修', code: 'ARMOR KIT II',
     dur: 30, capLv: 3, wind: 2.4, price: 600, color: '#4aa8ff', size: 0.55,
-    desc: '30 点甲修剂，可修 3 级及以下护甲。恢复多少耐久就耗多少点数；甲的上限按维修效率再掉一份。',
+    desc: '30 点甲修剂，可修 3 级及以下护甲。1 点能修回多少耐久看甲的维修效率（中效率甲 0.9、高效率甲 1.2）；每修 1 点耐久，上限按甲的损耗率（6%~9%）磨掉一点。',
   },
   repair_p: {
     name: '甲修包 · 紫', short: '紫甲修', code: 'ARMOR KIT IV',
     dur: 75, capLv: 4, wind: 3.0, price: 1600, color: '#b46bff', size: 0.62,
-    desc: '75 点甲修剂，可修 4 级及以下护甲。纳米补料，补完的板子略逊新板（上限照掉）。',
+    desc: '75 点甲修剂，可修 4 级及以下护甲。纳米补料，修低效甲（1 点修 0.59）也吃得消。',
   },
   repair_g: {
     name: '甲修包 · 金', short: '金甲修', code: 'ARMOR KIT V',
     dur: 120, capLv: 5, wind: 3.6, price: 3600, color: '#ffc94a', size: 0.78,
-    desc: '120 点甲修剂，可修 5 级及以下护甲。军规陶瓷修补剂，一次能顶回来小半件甲。',
+    desc: '120 点甲修剂，可修 5 级及以下护甲。军规陶瓷修补剂，5 级甲（1 点修 0.59）修满一次要 373 点，得备三块多。',
   },
   repair_r: {
     name: '甲修包 · 红', short: '红甲修', code: 'ARMOR KIT VI',
     dur: 200, capLv: 6, wind: 4.2, price: 7200, color: '#ff5c5c', size: 0.95,
-    desc: '200 点甲修剂，可修全部 6 级护甲。动力装甲的专用修复液，什么甲都能喂饱。',
+    desc: '200 点甲修剂，可修全部 6 级护甲。动力装甲（1 点修 0.59）打空一次修满要约 509 点，得带上两块半。',
   },
 };
 const REPAIR_ORDER = ['repair_b', 'repair_p', 'repair_g', 'repair_r'];
@@ -5547,7 +5547,7 @@ function startSurgery(id) {
   return true;
 }
 
-/* 甲修包：读条完把护甲耐久敲回去 —— 点数消耗 = 恢复的耐久，上限损失 = 恢复 ÷ 维修效率 */
+/* 甲修包：读条完把护甲耐久敲回去 —— 恢复 = 点数 × 维修效率，上限损耗 = 恢复 × 耐久损耗率 */
 function startArmorRepair(id) {
   if (!P.alive) return false;
   const key = REPAIRS[id] ? id : REPAIR_ORDER[0];
@@ -5563,7 +5563,8 @@ function startArmorRepair(id) {
   }
   if (careBusy()) return false;
 
-  const restore = Math.min(repairLeftOf(key), missing);
+  const kitLeft = repairLeftOf(key);
+  const restore = Math.min(kitLeft * ARMORS[P.armorLv].eff, missing);   // 点数 × 维修效率 = 可恢复耐久
   P.medOn = careKeyMake('repair', key);
   P.medKind = 'repair';
   P.carePick = P.medOn;
@@ -5572,7 +5573,7 @@ function startArmorRepair(id) {
   P.medWindT = P.medWind;
   P.medHealW = restore;              // 计划恢复量（结算时按剩余重算）
 
-  popup(P.x, P.y - 34, R.name + ' · 敲甲 ' + Math.round(restore) + ' 点', R.color, 13);
+  popup(P.x, P.y - 34, R.name + ' · 敲甲 +' + Math.floor(restore), R.color, 13);
   Sfx.tone(360, 0.1, 0.05, 'square', 520);
   return true;
 }
@@ -5732,21 +5733,25 @@ function updateMedHeal(dt) {
       const s = repairUnit(id);
       if (!s || s.left <= 0.01) { uiToast(R.name + ' 用完了', 'small warn'); P.medOn = null; backToGun(); return; }
       if (P.armorLv <= 0) { uiToast('身上没穿甲', 'small'); P.medOn = null; backToGun(); return; }
+      const A = ARMORS[P.armorLv];
       const missing = P.armorMax - P.armorHp;
       if (missing <= 0.5) { uiToast('护甲完好', 'small'); P.medOn = null; backToGun(); return; }
-      const A = ARMORS[P.armorLv];
-      /* 「修满但不溢出」：恢复 R 点耐久的同时上限掉 R/eff ——
-         要刚好填满而不把上限压到耐久以下，解 R = 缺口 × eff/(eff+1)。
-         甲修点数不够就按点数修，剩下的缺口留着下次。 */
-      const fillCap = missing * A.eff / (A.eff + 1);
-      const restore = Math.min(s.left, fillCap);
+      /* ── 修甲公式 ──
+         维修效率 A.eff：1 点甲修剂恢复 A.eff 点护甲耐久（中 0.9 / 低 0.59 / 高 1.2）；
+         耐久损耗 A.loss：每恢复 1 点耐久，上限磨掉 A.loss 点（高 9% / 中 7.5% / 低 6%）。
+         从 0 修满时上限正好掉「当前上限 × 损耗率」，且逐次复利：
+           0/150 修满 → 扣 13.5 → 136.5；再打空再修满 → 扣 12.285 → 124.215。
+         点数按 missing/eff 精确扣，恢复量不溢出缺口。 */
+      const want = missing / A.eff;                       // 修满缺口需要的点数
+      const used = Math.min(s.left, want);
+      const restore = used * A.eff;
       if (restore <= 0.5) { uiToast('修不动了', 'small'); P.medOn = null; backToGun(); return; }
-      s.left = Math.max(0, s.left - restore);
+      s.left = Math.max(0, s.left - used);
       if (s.left <= 0.01) consumeRepairUnit(id);          // 点数烧完的空格清出来
-      const maxLoss = restore / A.eff;
+      const maxLoss = restore * A.loss;
       P.armorHp += restore;
       P.armorMax = Math.max(1, P.armorMax - maxLoss);
-      popup(P.x, P.y - 46, '修甲 +' + Math.round(restore) + ' · 上限 -' + Math.round(maxLoss), R.color, 14);
+      popup(P.x, P.y - 46, '修甲 +' + Math.floor(restore) + ' · 上限 -' + (Math.floor(maxLoss * 10) / 10), R.color, 14);
       popup(P.x, P.y - 64, ARMORS[P.armorLv].short + ' 耐久 ' + Math.round(P.armorHp) + '/' + Math.round(P.armorMax), armorLvColor(P.armorLv), 12);
       Sfx.heal();
       if (repairCount(id) <= 0) uiToast(R.name + ' 用完了', 'small warn');
@@ -10541,7 +10546,7 @@ function makeArmorItem(lv, hp, max) {
     kind: 'armor', lv: A.lv, hp: h, max: m,
     icon: '⛨', name: A.name, val: h + '/' + m,
     color: armorLvColor(A.lv), tier: ARMOR_TIER_Q[A.lv] || 'epic',
-    note: A.lv + ' 级 · 维修效率 ' + A.effName,
+    note: A.lv + ' 级 · 修 ' + A.eff + '/点 · 损耗 ' + A.lossName,
   };
 }
 function rollArmorDrop(bob) {
@@ -14747,7 +14752,7 @@ function drawHUD() {
     ctx.fill();
     ctx.fillStyle = '#5f9fc4';
     ctx.font = '600 9px ' + mono;
-    ctx.fillText(P.armorLv + ' 级甲 · ' + Math.ceil(P.armorHp) + '/' + P.armorMax, hpX + aw + 10, ay + 6);
+    ctx.fillText(P.armorLv + ' 级甲 · ' + Math.floor(P.armorHp) + '/' + Math.floor(P.armorMax), hpX + aw + 10, ay + 6);
   }
 
   /* 体力条：常驻 —— 能不能跑全看这一条 */
@@ -17267,7 +17272,7 @@ function refreshShop() {
         (have > 0 ? '<span class="tag own">仓库 ×' + have + '</span>' : '<span class="tag">' + a.lv + ' 级甲</span>') + '</div>' +
         '<div class="ds">' + a.desc + '</div>' +
         '<div class="bars">' + bar('耐久', a.hp / 300) + '</div>' +
-        '<div class="ds" style="color:#6fb0cf">耐久 ' + a.hp + ' · 爆炸/近战减免 ' + Math.round(a.dr * 100) + '% · 维修效率 ' + a.effName + '（' + Math.round(a.eff * 100) + '%）</div>' +
+        '<div class="ds" style="color:#6fb0cf">耐久 ' + a.hp + ' · 爆炸/近战减免 ' + Math.round(a.dr * 100) + '% · 维修效率 ' + a.effName + '（1 点甲修剂修 ' + a.eff + ' 耐久） · 耐久损耗 ' + a.lossName + '（修满一次磨上限 ' + Math.round(a.loss * 100) + '%）</div>' +
         '<div class="buyrow">' +
           '<span class="price"><i>¥</i>' + fmtMoney(a.price) + '</span>' +
           '<button class="buybtn"' + (!canAfford ? ' disabled' : '') + '>' +
@@ -17647,8 +17652,8 @@ function cellSub(c) {
   if (c.t === 'armor') {
     const A = ARMORS[c.id];
     if (!A) return '';
-    const m = Math.max(1, Math.round(c.max || A.hp));
-    return A.lv + ' 级 · ' + Math.round(c.hp) + '/' + m + ' · 减伤 ' + Math.round(A.dr * 100) + '%';
+    const m = Math.max(1, Math.floor(c.max || A.hp));
+    return A.lv + ' 级 · ' + Math.floor(c.hp) + '/' + m + ' · 减伤 ' + Math.round(A.dr * 100) + '%';
   }
   if (c.t === 'gear') return GEAR[c.key] ? (GEAR[c.key].kind === 'rig' ? '弹挂 · ' : '背包 · ') + GEAR[c.key].cap + ' 格' : '';
   return '';
@@ -18053,7 +18058,7 @@ function renderLoSlot(slot) {
     if (v) {
       const A = ARMORS[v.lv];
       ic = '⛨'; nm = A.name; color = armorLvColor(v.lv);
-      sub = A.lv + ' 级甲 · 耐久 ' + Math.round(v.hp) + '/' + v.max + ' · 负重 ' + A.load + (v.hp <= 0 ? ' · 已击穿！' : '');
+      sub = A.lv + ' 级甲 · 耐久 ' + Math.floor(v.hp) + '/' + Math.floor(v.max) + ' · 负重 ' + A.load + (v.hp <= 0 ? ' · 已击穿！' : '');
     } else { nm = '护甲 · 没穿'; sub = '裸奔 · 走得最快'; }
   } else {
     if (v) {
@@ -18143,7 +18148,7 @@ function renderLoStock() {
     const A = ARMORS[pc.lv];
     row({
       nm: A.name, color: armorLvColor(pc.lv),
-      sub: A.lv + ' 级甲 · 耐久 ' + Math.round(pc.hp) + '/' + pc.max + ' · 维修效率 ' + A.effName + ' · 阵亡丢身上这件',
+      sub: A.lv + ' 级甲 · 耐久 ' + Math.floor(pc.hp) + '/' + Math.floor(pc.max) + ' · 维修效率 ' + A.effName + '（1 点修 ' + A.eff + '） · 损耗 ' + A.lossName + ' · 阵亡丢身上这件',
       ct: '在库 ×1',
       pick: () => {
         SAVE.armorPieces.splice(i, 1);
@@ -18157,7 +18162,7 @@ function renderLoStock() {
     const A = ARMORS[pc.lv];
     row({
       nm: A.name + '（已穿）', color: armorLvColor(pc.lv),
-      sub: A.lv + ' 级甲 · 耐久 ' + Math.round(pc.hp) + '/' + pc.max + ' · 维修效率 ' + A.effName,
+      sub: A.lv + ' 级甲 · 耐久 ' + Math.floor(pc.hp) + '/' + Math.floor(pc.max) + ' · 维修效率 ' + A.effName + '（1 点修 ' + A.eff + '） · 损耗 ' + A.lossName,
       ct: '已穿',
       pick: () => {
         SAVE.wornPiece = null;                                 // 脱下：手里拿着
