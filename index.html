@@ -3598,7 +3598,8 @@ window.addEventListener('keydown', e => {
   /* 倒地：F 是长按自救（在 updateDowned 里读 keys），其他交互 / 技能 / 开火全部封死 */
   if (isDowned()) return;
   if (k === 'f' && !e.repeat) searchInteract();   // 点一下开箱，不用长按
-  if (k === 'e' && !e.repeat) { if (!gearSearchInteract()) switchInteract(); }   // E：搜弹挂 / 背包 → 拉总闸 / 丢包丢背包
+  if (k === 'e' && !e.repeat) switchInteract();   // E：拉总闸 / 丢包丢背包
+  if (k === 'h' && !e.repeat) searchKeyH();        // H：搜弹挂 / 背包；周围 ≥3 件掉落叠在一起时按一次捡一件
   if (k === 'r') startReload();
 /* 干员技能：G 战术道具 / V 小技能 / X 大招 / C 被动滑铲 */
   if (k === 'g' && !e.repeat) skillGDown();
@@ -11128,7 +11129,7 @@ function cellToLootItem(c) {
   return it;
 }
 
-/* E：搜索地上的一件弹挂 / 背包（里面的东西翻出来拿；不拿的还留在装备里） */
+/* H：搜索地上的一件弹挂 / 背包（里面的东西翻出来拿；不拿的还留在装备里） */
 function gearSearchInteract() {
   if (G.scene !== 'playing' || G.lootPanel) return false;
   let best = null, bd = 1e9;
@@ -11148,6 +11149,20 @@ function gearSearchInteract() {
   popup(best.x, best.y - 40, '搜 ' + g.name, g.color || '#ffb08a', 12);
   Sfx.loot();
   return true;
+}
+
+/* H 键：先试搜装备；没装备可搜、且周围 ≥3 件掉落挤在一起（叠着看不出名堂）时，
+   按一次捡一件 —— 最近的先拿，捡走下一件自动顶上来，连按 H 就能一件件清空这堆 */
+function searchKeyH() {
+  if (G.scene !== 'playing' || G.lootPanel) return false;
+  if (gearSearchInteract()) return true;
+  let n = 0;
+  for (const p of G.pickups) {
+    if (p.cool > 0) continue;
+    if (dist(P.x, P.y, p.x, p.y) <= 120) n++;
+  }
+  if (n >= 3) return pickupInteract();
+  return false;
 }
 
 function startLoot(c) {
@@ -11780,13 +11795,18 @@ function drawPickups() {
   if (np) {
     const bob = Math.sin(t * 3 + np.bob) * 3;
     const pulse = 0.62 + Math.sin(t * 6) * 0.38;
+    let pile = 0;
+    for (const p of G.pickups) if (p.cool <= 0 && dist(P.x, P.y, p.x, p.y) <= 120) pile++;
+    let tip = '[F]';
+    if (np.cell && np.cell.t === 'gear') tip = '[F] 拾取 · [H] 搜索';
+    else if (pile >= 3) tip = '[F] 拾取 · [H] 连捡';
     ctx.save();
     ctx.globalAlpha = pulse;
     ctx.font = '800 11px ui-monospace, Consolas, monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#ffe9b0';
-    ctx.fillText(np.cell && np.cell.t === 'gear' ? '[F] 拾取 · [E] 搜索' : '[F]', np.x, np.y + bob - 26);
+    ctx.fillText(tip, np.x, np.y + bob - 26);
     ctx.strokeStyle = 'rgba(255,233,176,' + (pulse * 0.5).toFixed(2) + ')';
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.arc(np.x, np.y + bob, 17, 0, TAU); ctx.stroke();
