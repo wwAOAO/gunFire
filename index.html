@@ -836,6 +836,8 @@
       <section class="lo-main">
         <div class="lo-ttl" id="pkGunNote">武 器 槽 · 拖背包里的枪到这儿装上，拖下来收回背包</div>
         <div class="lo-grid" id="pkGuns"></div>
+        <div class="lo-ttl" id="pkGearNote"></div>
+        <div class="lo-grid" id="pkGear"></div>
         <div class="lo-ttl" id="pkRigNote"></div>
         <div class="lo-grid" id="pkRig"></div>
         <div class="lo-ttl" id="pkPocketNote"></div>
@@ -3596,7 +3598,7 @@ window.addEventListener('keydown', e => {
   /* 倒地：F 是长按自救（在 updateDowned 里读 keys），其他交互 / 技能 / 开火全部封死 */
   if (isDowned()) return;
   if (k === 'f' && !e.repeat) searchInteract();   // 点一下开箱，不用长按
-  if (k === 'e' && !e.repeat) switchInteract();   // E：拉总闸 / 丢包点丢背包
+  if (k === 'e' && !e.repeat) { if (!gearSearchInteract()) switchInteract(); }   // E：搜弹挂 / 背包 → 拉总闸 / 丢包丢背包
   if (k === 'r') startReload();
 /* 干员技能：G 战术道具 / V 小技能 / X 大招 / C 被动滑铲 */
   if (k === 'g' && !e.repeat) skillGDown();
@@ -4814,6 +4816,7 @@ function freeCellFor(t) {
 /* 把一件合法格子物品塞进随身容器（按类型选区）。成功返回 { zone, i }。 */
 function stowCell(cell) {
   if (!cell) return null;
+  if (cell.t === 'gear') return null;          // 弹挂 / 背包是穿着的装备，不占格子
   const slot = freeCellFor(cell.t);
   if (slot) allCarryZones()[slot.zone][slot.i] = cell;
   return slot;
@@ -10085,7 +10088,7 @@ function killEnemy(e) {
 function dropPickup(x, y, kind, value, relicId, cell) {
   G.pickups.push({
     x: x + rand(-10, 10), y: y + rand(-10, 10),
-    kind, life: cell ? 60 : 30, bob: rand(0, TAU), value: value || 0,
+    kind, life: cell ? 600 : 180, bob: rand(0, TAU), value: value || 0,
     relicId: relicId || null, cell: cell || null,
   });
 }
@@ -10101,7 +10104,7 @@ function collectPickup(p) {
       recountLoot();
       popup(P.x, P.y - 30, cellName(c) + (c.t === 'ammo' ? ' ' + (c.n | 0) + ' 发' : ''), cellColor(c), 14);
       Sfx.pickup();
-    } else if (c.t === 'gear' && wearGearInRaid(c.key, true)) {
+    } else if (c.t === 'gear' && wearGearInRaid(c.key, true, c.cells)) {
       ok = true;                                   // 弹挂 / 背包：直接换穿（同款 = 备用件）
       popup(P.x, P.y - 30, cellName(c) + ' 已换上', cellColor(c), 14);
     } else if (c.t === 'gun' && groundGunTake(c, p.x, p.y)) {
@@ -10994,13 +10997,28 @@ function applyLootItem(it, c) {
     else { ok = false; it.blocked = '身上没有空位'; }
   }
   else if (it.kind === 'med') {
-    if (addMed(it.med || STARTER_MEDKIT, it.n || 1) <= 0) { ok = false; it.blocked = '身上没有空位'; }
+    let placed = 0;
+    if (it.left !== undefined) {               // 搜装备搜出来的：保剩余耐久
+      const slot = freeCellFor('med');
+      if (slot) { allCarryZones()[slot.zone][slot.i] = { t: 'med', id: it.med || STARTER_MEDKIT, left: clamp(Math.round(it.left), 1, MEDKITS[it.med].dur) }; placed = 1; recountLoot(); }
+    }
+    if (!placed && addMed(it.med || STARTER_MEDKIT, it.n || 1) <= 0) { ok = false; it.blocked = '身上没有空位'; }
+  }
+  else if (it.kind === 'repair') {
+    const slot = freeCellFor('repair');
+    if (slot) { allCarryZones()[slot.zone][slot.i] = { t: 'repair', id: it.repair, left: clamp(Math.round(it.left), 1, REPAIRS[it.repair].dur) }; recountLoot(); }
+    else { ok = false; it.blocked = '身上没有空位'; }
   }
   else if (it.kind === 'stop') {
     if (addStop(it.stop || 'bandage', it.n || 1) <= 0) { ok = false; it.blocked = '身上没有空位'; }
   }
   else if (it.kind === 'surg') {
-    const got = addSurg(it.surg || SURG_ORDER[0], it.n || 1);
+    let placed = 0;
+    if (it.uses !== undefined) {               // 保剩余次数
+      const slot = freeCellFor('surg');
+      if (slot) { allCarryZones()[slot.zone][slot.i] = { t: 'surg', id: it.surg || SURG_ORDER[0], uses: clamp(it.uses | 0, 1, SURGERIES[it.surg].uses) }; placed = 1; recountLoot(); }
+    }
+    const got = placed ? 1 : addSurg(it.surg || SURG_ORDER[0], it.n || 1);
     if (got <= 0) { ok = false; it.blocked = '身上没有空位'; }
   }
   else if (it.kind === 'bullet') {
@@ -11078,6 +11096,58 @@ function crateLeft(c) {
   let n = 0;
   for (const it of c.items) if (!it.taken) n++;
   return n;
+}
+
+/* 地上弹挂 / 背包搜索用：把里面的一格东西转成面板行；__cell 原样带着，收面板时写回去 */
+function cellToLootItem(c) {
+  let it = null;
+  if (c.t === 'med') {
+    it = makeMedItem(c.id, 1);
+    it.left = c.left;
+    const l = Math.round(c.left);
+    if (l < MEDKITS[c.id].dur - 0.5) it.val = '剩 ' + l + '/' + MEDKITS[c.id].dur;
+  }
+  else if (c.t === 'repair') {
+    const R = REPAIRS[c.id];
+    it = { kind: 'repair', repair: c.id, left: c.left, icon: '修', name: R.short,
+           val: '剩 ' + Math.round(c.left) + '/' + R.dur, color: R.color, tier: 'supply',
+           note: '修 ' + R.capLv + ' 级以内护甲' };
+  }
+  else if (c.t === 'stop') it = makeStopItem(c.id);
+  else if (c.t === 'surg') {
+    it = makeSurgItem(c.id);
+    it.uses = c.uses;
+    it.val = '剩 ' + (c.uses | 0) + ' 次';
+  }
+  else if (c.t === 'ammo') it = makeBulletItem(c.cal, c.lv, c.n | 0);
+  else if (c.t === 'gun') it = makeWeaponItem(c.id);
+  else if (c.t === 'armor') it = makeArmorItem(c.id, c.hp, c.max);
+  else if (c.t === 'relic') it = makeRelicItem(c.id);
+  else if (c.t === 'mod') it = makeModItem(c.id);
+  if (it) it.__cell = c;
+  return it;
+}
+
+/* E：搜索地上的一件弹挂 / 背包（里面的东西翻出来拿；不拿的还留在装备里） */
+function gearSearchInteract() {
+  if (G.scene !== 'playing' || G.lootPanel) return false;
+  let best = null, bd = 1e9;
+  for (const p of G.pickups) {
+    if (!p.cell || p.cell.t !== 'gear') continue;
+    const d = dist(P.x, P.y, p.x, p.y);
+    if (d < LOOT_RANGE && d < bd) { best = p; bd = d; }
+  }
+  if (!best) return false;
+  const g = GEAR[best.cell.key];
+  const items = (best.cell.cells || []).filter(Boolean).map(cellToLootItem).filter(Boolean);
+  if (!items.length) { uiToast(g.name + ' · 里面是空的', 'small'); return true; }
+  const total = layoutLoot(items, 0.8);
+  G.lootPanel = { items, t: 0, shown: 0, taken: 0, closeT: 0, crate: best, total,
+    col: { name: g.name, en: 'SEARCH ' + (g.kind === 'rig' ? 'RIG' : 'PACK'), color: g.color || '#ffb08a', dim: 'rgba(255,176,138,' },
+    again: true, sel: 0, gear: best };
+  popup(best.x, best.y - 40, '搜 ' + g.name, g.color || '#ffb08a', 12);
+  Sfx.loot();
+  return true;
 }
 
 function startLoot(c) {
@@ -11158,6 +11228,9 @@ function closeLootPanel() {
   const L = G.lootPanel;
   if (!L) return;
   const crate = L.crate;
+  if (L.gear) {                                   // 搜装备：没拿走的原样写回装备里
+    L.gear.cell.cells = L.items.filter(it => !it.taken && it.__cell).map(it => it.__cell);
+  }
   G.lootPanel = null;
   if (crate) {
     const left = crateLeft(crate);
@@ -11713,7 +11786,7 @@ function drawPickups() {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#ffe9b0';
-    ctx.fillText('[F]', np.x, np.y + bob - 26);
+    ctx.fillText(np.cell && np.cell.t === 'gear' ? '[F] 拾取 · [E] 搜索' : '[F]', np.x, np.y + bob - 26);
     ctx.strokeStyle = 'rgba(255,233,176,' + (pulse * 0.5).toFixed(2) + ')';
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.arc(np.x, np.y + bob, 17, 0, TAU); ctx.stroke();
@@ -18928,30 +19001,33 @@ function swapWearArmor(pc) {
 /* 局内捡到弹挂 / 背包：直接换穿。
    容量变大补空格；变小把多出格子的东西掉在脚边；换下来的旧装备也掉脚边（可再捡回去换穿）。
    同款再捡 = 备用件直接收下（撤离 +1）。fromLoot = 这是这局捡的（计缴获台账）。 */
-function wearGearInRaid(key, fromLoot) {
+function gearDropCell(c) {
+  G.pickups.push({ x: P.x + rand(-14, 14), y: P.y + rand(18, 40),
+    kind: 'cell', cell: c, life: 600, bob: rand(0, TAU), value: 0, relicId: null, cool: 1.6 });
+}
+function wearGearInRaid(key, fromLoot, incoming) {
   const g = GEAR[key];
   if (!g || !SAVE.worn) return false;
   const kind = g.kind;
   const prevKey = SAVE.worn[kind] || null;
   if (prevKey === key) {
+    /* 同款：装备本身 = 备用件；带来的东西直接往身上塞，塞不下掉脚边 */
+    for (const c of (incoming || [])) { if (!stowCell(c)) gearDropCell(c); }
     if (fromLoot) P.gearLoot[key] = (P.gearLoot[key] | 0) + 1;
-    uiToast(g.name + ' · 备用件已收下', 'small');
+    recountLoot();
+    uiToast(g.name + ' · 备用件已收下' + ((incoming || []).length ? '（里面的东西已并入）' : ''), 'small');
     return true;
   }
   const arr = kind === 'rig' ? P.rig : P.pack;
   if (!arr) return false;
+  const outgoing = arr.filter(c => c);          // 旧装备自己的东西跟着旧装备走
   SAVE.worn[kind] = key;
-  const overflow = [];
-  while (arr.length < g.cap) arr.push(null);
-  while (arr.length > g.cap) { const x = arr.pop(); if (x) overflow.push(x); }
-  for (const c of overflow) {
-    G.pickups.push({ x: P.x + rand(-14, 14), y: P.y + rand(18, 40),
-      kind: 'cell', cell: c, life: 600, bob: rand(0, TAU), value: 0, relicId: null, cool: 1.6 });
-  }
-  if (prevKey && GEAR[prevKey]) {
-    G.pickups.push({ x: P.x + rand(-14, 14), y: P.y + rand(18, 40),
-      kind: 'cell', cell: { t: 'gear', key: prevKey }, life: 600, bob: rand(0, TAU), value: 0, relicId: null, cool: 1.6 });
-  }
+  arr.length = 0;
+  for (let i = 0; i < g.cap; i++) arr.push(null);
+  const leftover = [];
+  for (const c of (incoming || [])) { if (!stowCell(c)) leftover.push(c); }
+  if (prevKey && GEAR[prevKey]) gearDropCell({ t: 'gear', key: prevKey, cells: outgoing });
+  for (const c of leftover) gearDropCell(c);
   if (fromLoot) P.gearLoot[key] = (P.gearLoot[key] | 0) + 1;
   recountLoot();
   uiToast(g.name + ' 已换上' + (prevKey && GEAR[prevKey] ? '（' + GEAR[prevKey].name + ' 在脚边）' : ''), 'small');
@@ -18992,6 +19068,8 @@ function groundGunTake(c, gx, gy) {
   recountLoot();
   return true;
 }
+
+$('pack').addEventListener('contextmenu', e => e.preventDefault());   // 右键是快捷操作，不弹浏览器菜单
 
 function togglePackPanel() {
   if (G.packOpen) closePackPanel();
@@ -19082,7 +19160,7 @@ function renderPackPanel() {
       const A = ARMORS[P.armorId] || ARMORS[0];
       el.innerHTML = '<span class="ic" style="color:' + armorLvColor(P.armorLv) + '">⛨</span>' +
         '<span class="nm">' + A.short + '</span>' +
-        '<span class="sub">' + P.armorLv + ' 级 · ' + Math.round(P.armorHp) + '/' + Math.round(P.armorMax) + '</span>';
+        '<span class="sub">' + P.armorLv + ' 级 · ' + Math.round(P.armorHp) + '/' + Math.round(P.armorMax) + ' · 右键脱下</span>';
     } else el.innerHTML = '<span class="sub" style="color:#7fb8d4">护 甲</span>';
 
     const pickArmor = () => {                     // 拿起：脱下来（回到无护甲）
@@ -19108,8 +19186,74 @@ function renderPackPanel() {
       Sfx.tone(620, 0.05, 0.04, 'square');
     };
     el.__pkPlace = placeArmor;
+    el.oncontextmenu = e => { e.preventDefault(); e.stopPropagation(); pickArmor(); renderPackPanel(); };   // 右键 = 脱下到手上
     pkPressable(el, pickArmor, placeArmor);
     gunGrid.appendChild(el);
+  }
+
+  /* 弹挂 / 背包槽：拖背包里的装备到这儿换上（旧的下到手上，里面的东西跟着走）；
+     点住 / 右键脱下到手上 —— 连里面的东西一起，拖到丢弃区扔地上就是「连包带物一起丢」 */
+  {
+    const gearNote = $('pkGearNote');
+    gearNote.textContent = '弹 挂 / 背 包 槽 · 拖上换穿 · 点住或右键脱下（里面的东西跟着走）';
+    const gearGrid = $('pkGear');
+    gearGrid.innerHTML = '';
+    for (const kind of ['rig', 'pack']) {
+      const key = SAVE.worn ? SAVE.worn[kind] : null;
+      const g = key ? GEAR[key] : null;
+      const arr = kind === 'rig' ? P.rig : P.pack;
+      const used = arr ? arr.filter(c => c).length : 0;
+      const el = document.createElement('div');
+      el.className = 'lo-cell pk-slot' + (g ? '' : ' empty');
+      el.innerHTML = g
+        ? '<span class="ic" style="color:' + (g.color || '#ffb08a') + '">' + (kind === 'rig' ? '\u25a4' : '\u25a9') + '</span>' +
+          '<span class="nm">' + g.name + '</span>' +
+          '<span class="sub">' + g.cap + ' 格 · 里面 ' + used + ' 件</span>'
+        : '<span class="sub" style="color:#7fb8d4">' + (kind === 'rig' ? '\u5f39 \u6302' : '\u80cc \u5305') + '</span>';
+
+      const pickGearSlot = () => {              // 脱下到手上（连内容）
+        if (!g) return null;
+        const cells = (arr || []).filter(c => c);
+        SAVE.worn[kind] = null;
+        if (arr) arr.length = 0;
+        PK_UI.held = { t: 'gear', key, cells };
+        recountLoot();
+        Sfx.tone(500, 0.05, 0.04, 'square');
+        return () => {                          // 取消：穿回去（东西还原）
+          if (SAVE.worn && !SAVE.worn[kind] && PK_UI.held && PK_UI.held.t === 'gear' && PK_UI.held.key === key) {
+            const gg = GEAR[key];
+            const a = kind === 'rig' ? P.rig : P.pack;
+            a.length = 0;
+            for (let i = 0; i < gg.cap; i++) a.push(PK_UI.held.cells[i] || null);
+            PK_UI.held = null;
+            recountLoot();
+          }
+        };
+      };
+      const placeGearSlot = () => {             // 换上（旧的下到手上，新装备带来的东西入格，装不下掉脚边）
+        if (!PK_UI.held || PK_UI.held.t !== 'gear') {
+          uiToast(kind === 'rig' ? '弹挂槽只能穿弹挂（背包槽在右边）' : '背包槽只能穿背包（弹挂槽在左边）', 'small warn');
+          return;
+        }
+        const nk = PK_UI.held.key, ng = GEAR[nk];
+        if (!ng || ng.kind !== kind) { uiToast('这是' + (GEAR[nk] && GEAR[nk].kind === 'rig' ? '弹挂' : '背包') + '，拖到对应的槽', 'small warn'); return; }
+        const incoming = PK_UI.held.cells || [];
+        const prevKey = SAVE.worn[kind];
+        const outgoing = (arr || []).filter(c => c);
+        PK_UI.held = prevKey && GEAR[prevKey] ? { t: 'gear', key: prevKey, cells: outgoing } : null;
+        SAVE.worn[kind] = nk;
+        arr.length = 0;
+        for (let i = 0; i < ng.cap; i++) arr.push(null);
+        for (const c of incoming) { if (!stowCell(c)) gearDropCell(c); }
+        recountLoot();
+        uiToast(ng.name + ' 已换上' + (prevKey && GEAR[prevKey] ? '（' + GEAR[prevKey].name + ' 在手上）' : ''), 'small');
+        Sfx.tone(620, 0.05, 0.04, 'square');
+      };
+      el.__pkPlace = placeGearSlot;
+      el.oncontextmenu = e => { e.preventDefault(); e.stopPropagation(); pickGearSlot(); renderPackPanel(); };  // 右键 = 脱下到手上
+      pkPressable(el, pickGearSlot, placeGearSlot);
+      gearGrid.appendChild(el);
+    }
   }
 
   for (const sl of GUN_SLOTS) {
@@ -19190,6 +19334,17 @@ function renderPackPanel() {
       };
       const placeCell = () => pkPlaceInto(arr, i, zone);   // 放置 / 交换 / 合并
       el.__pkPlace = placeCell;                   // 拖拽落在哪格就用哪格的回调
+      if (c && c.t === 'armor') {
+        el.oncontextmenu = e => {                 // 右键护甲 = 直接穿上（身上那件换回这个格子）
+          e.preventDefault(); e.stopPropagation();
+          const prev = currentArmorPiece();
+          if (!wearArmorPiece(c)) { uiToast('这件护甲有问题，穿不上', 'small warn'); return; }
+          arr[i] = prev ? { t: 'armor', id: prev.id, hp: prev.hp, max: prev.max } : null;
+          uiToast('已穿上 ' + ARMORS[P.armorId].name + (prev ? ' · 换下的在格子里' : ''), 'small');
+          Sfx.tone(620, 0.05, 0.04, 'square');
+          renderPackPanel();
+        };
+      }
       pkPressable(el, pickCell, placeCell);
       grid.appendChild(el);
     });
