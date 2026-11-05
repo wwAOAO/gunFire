@@ -589,6 +589,8 @@
   .minibtn.off:hover { background:#ff4060; color:#12060a; }
   .minibtn.sell { background:rgba(255,176,46,.1); color:#ffbf55; border-color:rgba(255,176,46,.38); }
   .minibtn.sell:hover { background:#ffb02e; color:#1a1004; }
+  .minibtn.buy { background:rgba(70,224,138,.1); color:#63d68a; border-color:rgba(70,224,138,.38); }
+  .minibtn.buy:hover { background:#46e08a; color:#04180c; }
 
   .strow { display:flex; align-items:baseline; gap:6px; font-size:11px; color:#6b9ab5; padding:6px 0; border-bottom:1px dashed rgba(80,140,185,.14); }
   .strow:last-child { border-bottom:none; }
@@ -17068,6 +17070,8 @@ function refreshGunsmith() {
             ? '<button class="minibtn off" data-act="off">卸 下</button>'
             : '<button class="minibtn"' + (stock > 0 ? '' : ' disabled') + ' data-act="on">' +
               (stock > 0 ? '装 上' : '无 库 存') + '</button>') +
+          '<button class="minibtn buy"' + (SAVE.credits >= m.price ? '' : ' disabled') +
+            ' data-act="buy" title="原价买入一件入库">购 ¥' + fmtMoney(m.price) + '</button>' +
           (stock > 0 ? '<button class="minibtn sell" data-act="sell" title="出售一件，回收一半价钱">¥</button>' : '') +
         '</div>';
 
@@ -17077,6 +17081,7 @@ function refreshGunsmith() {
           if (act === 'on') equipMod(wid, gsPick.slot, id);
           else if (act === 'off') unequipMod(wid, gsPick.slot);
           else if (act === 'sell') sellMod(id);
+          else if (act === 'buy') buyMod(id);
         });
       });
       box.appendChild(card);
@@ -17114,8 +17119,8 @@ function refreshGunsmith() {
   const bag = $('gsBag');
   bag.innerHTML = '';
   if (!bagIds.length) {
-    bag.innerHTML = '<span style="font-size:10px;color:#3f5d72;line-height:1.7">配件库是空的 —— ' +
-      '进封锁区开补给箱，箱子里会翻出枪和配件</span>';
+    bag.innerHTML = '<span style="font-size:10px;color:#3f5d72;line-height:1.7">配件库是空的 —— 进封锁区开补给箱翻配件，' +
+      '或者直接在左边的配件卡上花钱购入</span>';
   } else {
     for (const id of bagIds) {
       const m = MODS[id];
@@ -17207,6 +17212,23 @@ function sellMod(mid) {
   saveGame();
   Sfx.tone(760, 0.06, 0.14, 'triangle');
   uiToast('出售 ' + m.name + '　+ ¥' + fmtMoney(gain), 'small');
+  refreshGunsmith();
+}
+
+/* 局外也能买配件：改装台原价掏钱直接入库，不用再全靠局内翻箱 */
+function buyMod(mid) {
+  const m = MODS[mid];
+  if (!m) return;
+  if (SAVE.credits < m.price) {
+    uiToast('钱不够 · 还差 ¥' + fmtMoney(m.price - SAVE.credits), 'small warn');
+    Sfx.tone(200, 0.09, 0.05, 'square');
+    return;
+  }
+  SAVE.credits -= m.price;
+  SAVE.modBag[mid] = (SAVE.modBag[mid] | 0) + 1;
+  saveGame();
+  Sfx.tone(880, 0.06, 0.12, 'triangle');
+  uiToast('购入 ' + m.name + '　- ¥' + fmtMoney(m.price), 'small');
   refreshGunsmith();
 }
 
