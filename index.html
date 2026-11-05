@@ -844,7 +844,7 @@
   <div class="frame">
     <header class="topbar">
       <div class="logo" style="font-size:22px">背 包</div>
-      <div class="wallet" style="font-size:12px;color:#5e87a0">时间已暂停 · 弹挂和口袋里的东西才能按 5 / R 直接用</div>
+      <div class="wallet" style="font-size:12px;color:#5e87a0">时间不会暂停 · 被打会强制退出背包 · 弹挂和口袋里的东西才能按 5 / R 直接用</div>
       <button id="closePack" class="btn ghost small">关 闭 [Tab]</button>
     </header>
     <div class="lo-wrap">
@@ -3605,9 +3605,9 @@ function updateSkillHold(dt) {
 window.addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
   if ([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) e.preventDefault();
-  keys[k] = true;
 
   if (k === 'escape') {
+    keys[k] = true;
     if (G.modWin) closeModWin();                   // 改装窗最先收
     else if (G.packOpen) closePackPanel();
     else if (G.scene === 'playing' && G.lootPanel) closeLootPanel();
@@ -3616,14 +3616,18 @@ window.addEventListener('keydown', e => {
     else if (G.scene === 'lobby' && !$('loadout').classList.contains('hidden')) closeLoadout();
     else if (G.scene === 'lobby' && !$('maps').classList.contains('hidden')) closeMaps();
   }
-  /* Tab：开着就关（面板开着时 scene 是 paused，要在场景守卫之前接住）；没开且在局内才打开 */
+  /* Tab：开着就关；没开且在局内才打开 */
   if (k === 'tab' && !e.repeat) {
     e.preventDefault();
+    keys['tab'] = true;
     if (G.packOpen) closePackPanel();
     else if (G.scene === 'playing') openPackPanel();
     return;
   }
+  /* 背包开着：时间在走、世界在动，但局内按键全封（移动/换弹/技能），防止背着面板瞎走 */
+  if (G.packOpen) return;
   if (G.scene !== 'playing') return;
+  keys[k] = true;
   /* 倒地：F 是长按自救（在 updateDowned 里读 keys），其他交互 / 技能 / 开火全部封死 */
   if (isDowned()) return;
   if (k === 'f' && !e.repeat) searchInteract();   // 点一下开箱，不用长按
@@ -3713,7 +3717,7 @@ const G = {
   shakeY: 0,
   searchTarget: null,
   lootPanel: null,     // 开箱中的战利品面板
-  packOpen: false,     // Tab 背包面板开着（时间暂停）
+  packOpen: false,     // Tab 背包面板开着（时间继续流动，被打会强制退出）
   extractT: 0,
   extractHold: 6,
   inExtract: null,
@@ -6350,6 +6354,7 @@ function armorBreak() {
 
 function damagePlayer(amount, srcX, srcY, inv, pen) {
   if (P.invuln > 0 || !P.alive) return;
+  if (G.packOpen) closePackPanel();                // 背包里挨打：面板立刻被拍掉，时间可没停
   /* 倒地：独立的 100 点血条，无护甲减伤、不吃止痛不吃创伤 —— 敌人打多少扣多少 */
   if (isDowned()) {
     P.downHp -= amount;
@@ -8778,6 +8783,7 @@ function frostSprayHit(e, S) {
   let dmg = S.dmg * (e.dmgMul || 1) * (1 - armDr());
   if (P.painT > 0) dmg *= 1 - PAIN_DR;
   P.hp -= dmg;
+  if (G.packOpen) closePackPanel();                // 被特殊攻击拍中：背包立刻收
   P.hurtFlash = Math.max(P.hurtFlash, 0.4);
   addChill(S.chill);
   if (Math.random() < 0.4) Sfx.tone(rand(1500, 1900), 0.05, 0.02, 'sine', 1200);
@@ -10576,6 +10582,7 @@ function updateFires(dt) {
 /* 火场伤害不吃受伤无敌帧，单独结算 */
 function burnPlayer(dmg, srcX, srcY) {
   if (!P.alive || !P.hp) return;
+  if (G.packOpen) closePackPanel();                // 着火也一样：先把背包拍掉
   P.hp -= dmg * (1 - armDr() * 0.6);
   rollTrauma(dmg, 'burn');                // 烧穿皮肤也会挂流血
   P.hurtFlash = Math.max(P.hurtFlash, 0.6);
@@ -19193,9 +19200,9 @@ function openPackPanel() {
   if (P.medOn) endCareBack('已收手');                 // 收拾背包前先把手上的药收了
   G.packOpen = true;
   PK_UI.held = null;
-  G.scene = 'paused';
   mouse.down = false; mouse.pressed = false;
   MED_SEL.down = false; MED_SEL.open = false;
+  for (const k in keys) keys[k] = false;             // 松开所有移动键：面板后面不再瞎走
   renderPackPanel();
   $('pack').classList.remove('hidden');
 }
@@ -19210,8 +19217,6 @@ function closePackPanel() {
   }
   G.packOpen = false;
   $('pack').classList.add('hidden');
-  G.scene = 'playing';
-  lastT = 0;
 }
 
 /* ── 局内改装窗：Tab 背包里右键枪槽弹出。
@@ -19742,22 +19747,9 @@ if (typeof document !== 'undefined' && !window.__pkDragWired) {
     pkHighlight(pkDropTargetAt(e.clientX, e.clientY));
   });
   document.addEventListener('pointerup', e => {
-    if (PK_DRAG.pending) {                          // 没拖动：按「点击」处理（拿起 / 放下）
+    if (PK_DRAG.pending) {                          // 单击（没拖动）：什么都不做 —— 防误点把东西拿在手上 / 弄丢
       clearTimeout(PK_DRAG.timer);
-      const p = PK_DRAG.pending;
       PK_DRAG.pending = null;
-      if (PK_UI.held) {                             // 手上有东西：点到哪儿放到哪儿
-        const t = pkDropTargetAt(e.clientX, e.clientY);
-        if (t.kind === 'drop') { dropHeldToGround(); renderPackPanel(); }
-        else if (t.kind === 'cell' && t.el && t.el.__pkPlace) {
-          PK_DRAG.place = t.el.__pkPlace;
-          PK_DRAG.revert = null; PK_DRAG.active = true; pkFinishDrag(t);
-        }
-        else renderPackPanel();                     // 空处：保持手持（原有点击手感）
-      } else {
-        p.pick();                                   // 点一下 = 拿起
-        renderPackPanel();
-      }
       return;
     }
     if (!PK_DRAG.active) return;
