@@ -455,6 +455,21 @@
     border-left-color:#ff5f6d;
     background:linear-gradient(90deg, rgba(120,20,30,0) 0%, rgba(150,30,40,.32) 100%);
   }
+  /* 局内改装窗：右键枪槽弹出，标题栏拖着走，Esc 关闭 */
+  #modWin {
+    position:absolute; z-index:40; width:300px;
+    background:rgba(8,15,22,.96); border:1px solid rgba(67,217,245,.35); border-radius:6px;
+    box-shadow:0 10px 40px rgba(0,0,0,.6);
+    display:flex; flex-direction:column; max-height:78vh;
+  }
+  #modWin.hidden { display:none; }
+  #modWinHead {
+    display:flex; align-items:center; gap:8px; padding:8px 10px;
+    border-bottom:1px solid rgba(67,217,245,.2); cursor:move; user-select:none;
+  }
+  #modWinTitle { font-size:13px; font-weight:800; letter-spacing:.12em; color:#7fe3f7; flex:1; }
+  #modWinBody { padding:10px; overflow-y:auto; display:flex; flex-direction:column; gap:6px; }
+  #modWin .lo-ttl { margin:2px 0 0; }
   .lo-foot { display:flex; align-items:center; gap:10px; margin-top:14px; }
   .lo-hint { font-size:11px; color:#3f5d72; margin-left:auto; letter-spacing:.04em; }
   .lo-holding { position:fixed; pointer-events:none; z-index:99; font-size:12px; font-weight:800;
@@ -849,6 +864,19 @@
     </div>
   </div>
   <div id="pkDropZone" class="hidden">⬅ 拖 到 这 里 丢 弃</div>
+  <!-- 局内改装窗：右键枪槽弹出 · 标题栏拖动 · Esc 关闭 -->
+  <div id="modWin" class="hidden">
+    <div id="modWinHead">
+      <span id="modWinTitle">改 装</span>
+      <button id="modWinClose" class="btn ghost small">关 闭 [Esc]</button>
+    </div>
+    <div id="modWinBody">
+      <div class="lo-ttl">已 装 配 件 · 拖下来卸下 · 右键拆进包</div>
+      <div class="lo-grid" id="modWinSlots"></div>
+      <div class="lo-ttl">身 上 的 配 件 · 拖到槽位装上</div>
+      <div class="lo-grid" id="modWinBag"></div>
+    </div>
+  </div>
 </div>
 
 <!-- ══════════ 改装台 ══════════ -->
@@ -3580,7 +3608,8 @@ window.addEventListener('keydown', e => {
   keys[k] = true;
 
   if (k === 'escape') {
-    if (G.packOpen) closePackPanel();
+    if (G.modWin) closeModWin();                   // 改装窗最先收
+    else if (G.packOpen) closePackPanel();
     else if (G.scene === 'playing' && G.lootPanel) closeLootPanel();
     else if (G.scene === 'playing') pauseRaid();
     else if (G.scene === 'paused') resumeRaid();
@@ -19167,6 +19196,7 @@ function openPackPanel() {
 function closePackPanel() {
   if (!G.packOpen) return;
   if (PK_DRAG.active) pkFinishDrag(null);          // 拖拽收尾（回原位）
+  if (G.modWin) { G.modWin = null; $('modWin').classList.add('hidden'); }   // 改装窗跟着关
   if (PK_UI.held) {                                // 手上还拿着：塞回任意空格，实在没有就丢地上
     if (!stowCell(PK_UI.held)) dropHeldToGround();
     PK_UI.held = null;
@@ -19176,6 +19206,157 @@ function closePackPanel() {
   $('pack').classList.add('hidden');
   G.scene = 'playing';
   lastT = 0;
+}
+
+/* ── 局内改装窗：Tab 背包里右键枪槽弹出。
+   槽位行：拖配件上去装（旧的下到手上）/ 拖已装的下来卸 / 右键拆进包；
+   下面列身上（弹挂 / 口袋 / 背包）的配件，拖到槽位装枪。
+   标题栏按住拖动窗口，Esc / 关闭按钮收窗（手上的配件自动塞包）。 ── */
+function openModWin(wid) {
+  if (!G.packOpen || !wid || !WEAPONS[wid]) return;
+  if (!GUN_SLOTS.some(sl => P.slots && P.slots[sl] === wid)) return;
+  G.modWin = { gun: wid, x: null, y: null };
+  $('modWin').classList.remove('hidden');
+  if (G.modWin.x == null) {                        // 默认停在面板右侧（记住上次拖到的位置）
+    const win = $('modWin');
+    const px = window.__modWinPos ? window.__modWinPos.x : Math.round(innerWidth / 2 + 210);
+    const py = window.__modWinPos ? window.__modWinPos.y : 110;
+    win.style.left = px + 'px';
+    win.style.top = py + 'px';
+  }
+  renderModWin();
+  Sfx.tone(760, 0.05, 0.04, 'square');
+}
+
+function closeModWin() {
+  if (!G.modWin) return;
+  if (PK_DRAG.active) pkFinishDrag(null);
+  if (PK_UI.held) {                                // 手上还拿着（多半是刚拆下的配件）：塞包 / 丢地上
+    if (!stowCell(PK_UI.held)) dropHeldToGround();
+    PK_UI.held = null;
+    recountLoot();
+  }
+  G.modWin = null;
+  $('modWin').classList.add('hidden');
+  renderPackPanel();
+}
+
+function renderModWin() {
+  if (!G.modWin) return;
+  const wid = G.modWin.gun;
+  if (!GUN_SLOTS.some(sl => P.slots && P.slots[sl] === wid)) { closeModWin(); return; }   // 枪不在身上了
+  const W = WEAPONS[wid];
+  $('modWinTitle').textContent = W.short + ' · 改装 ' + gunModCount(wid) + '/' + modSlotTotal(wid);
+  const slotsEl = $('modWinSlots');
+  slotsEl.innerHTML = '';
+  const eq = (SAVE.mods && SAVE.mods[wid]) || {};
+
+  /* 槽位行：这把枪能装的每个槽位一格 */
+  for (const s of MOD_SLOTS) {
+    if (!slotAllowed(wid, s.id)) continue;
+    const mid = eq[s.id] && MODS[eq[s.id]] ? eq[s.id] : null;
+    const m = mid ? MODS[mid] : null;
+    const el = document.createElement('div');
+    el.className = 'lo-cell' + (mid ? '' : ' empty');
+    el.innerHTML = mid
+      ? '<span class="ic" style="color:' + (QUALITY[m.q] ? QUALITY[m.q].color : '#c9a3ff') + '">' + m.icon + '</span>' +
+        '<span class="nm">' + m.name + '</span>' +
+        '<span class="sub">' + s.cn + '</span>'
+      : '<span class="nm" style="color:#5e87a0">' + s.cn + '</span><span class="sub">空 · 拖配件上枪</span>';
+
+    const installPlace = () => {                    // 拖配件到这个槽位 = 装上（旧的下到手上）
+      if (!PK_UI.held) return;
+      if (PK_UI.held.t !== 'mod') { uiToast('只有配件能装上枪', 'small warn'); return; }
+      const nm = MODS[PK_UI.held.id];
+      if (!nm) return;
+      if (nm.slot !== s.id) { uiToast('这是' + ((MOD_SLOTS.find(x => x.id === nm.slot) || {}).cn || '其他') + '配件，拖到对应槽位', 'small warn'); return; }
+      SAVE.mods[wid] = SAVE.mods[wid] || {};
+      const old = SAVE.mods[wid][s.id];
+      SAVE.mods[wid][s.id] = PK_UI.held.id;
+      PK_UI.held = old ? { t: 'mod', id: old } : null;
+      Sfx.tone(760, 0.06, 0.05, 'square');
+      renderModWin(); renderPackPanel();
+    };
+    el.__pkPlace = installPlace;
+
+    if (mid) {
+      const pickMod = () => {                       // 拿起 = 拆下（拖去包格 / 丢弃区；空处松手装回去）
+        delete SAVE.mods[wid][s.id];
+        PK_UI.held = { t: 'mod', id: mid };
+        Sfx.tone(420, 0.05, 0.04, 'square');
+        return () => {                              // 取消：槽位还空着就装回去
+          if (!SAVE.mods[wid][s.id]) { SAVE.mods[wid][s.id] = PK_UI.held.id; PK_UI.held = null; }
+        };
+      };
+      el.oncontextmenu = e => {                     // 右键 = 拆下直接塞进随身容器
+        e.preventDefault(); e.stopPropagation();
+        if (PK_UI.held) { uiToast('先放下手上的东西', 'small warn'); return; }
+        delete SAVE.mods[wid][s.id];
+        const cell = { t: 'mod', id: mid };
+        if (stowCell(cell)) uiToast('已拆下 · ' + m.name + ' 收进包', 'small');
+        else { PK_UI.held = cell; uiToast('包满了 · ' + m.name + ' 在手上（拖进格子或丢地上）', 'small warn'); }
+        Sfx.tone(420, 0.05, 0.04, 'square');
+        recountLoot(); renderModWin(); renderPackPanel();
+      };
+      pkPressable(el, pickMod, installPlace);
+    } else {
+      pkPressable(el, () => null, installPlace);
+    }
+    slotsEl.appendChild(el);
+  }
+
+  /* 身上的配件：弹挂 / 口袋 / 背包里的 mod 格子，都能拿起拖去装枪 */
+  const bagEl = $('modWinBag');
+  bagEl.innerHTML = '';
+  let found = 0;
+  const bagZones = [[() => P.rig, 0, '弹挂'], [() => P.pocket, 1, '口袋'], [() => P.pack, 2, '背包']];
+  for (const [getArr, zone, zn] of bagZones) {
+    const arr = getArr();
+    arr.forEach((c, i) => {
+      if (!c || c.t !== 'mod' || !MODS[c.id]) return;
+      found++;
+      const mm = MODS[c.id];
+      const el = document.createElement('div');
+      el.className = 'lo-cell';
+      el.innerHTML = '<span class="ic" style="color:' + (QUALITY[mm.q] ? QUALITY[mm.q].color : '#c9a3ff') + '">' + mm.icon + '</span>' +
+        '<span class="nm">' + mm.name + '</span>' +
+        '<span class="sub">' + zn + ' · ' + ((MOD_SLOTS.find(x => x.id === mm.slot) || {}).cn || '?') + '</span>';
+      const pickBag = () => {                       // 拿起（拖去槽位装枪 / 拖回格子）
+        arr[i] = null;
+        PK_UI.held = c;
+        Sfx.tone(500, 0.05, 0.04, 'square');
+        return () => { if (!arr[i]) { arr[i] = PK_UI.held; PK_UI.held = null; } };
+      };
+      const placeBag = () => pkPlaceInto(arr, i, zone);
+      el.__pkPlace = placeBag;
+      pkPressable(el, pickBag, placeBag);
+      bagEl.appendChild(el);
+    });
+  }
+  if (!found) bagEl.innerHTML = '<span style="font-size:11px;color:#3f5d72;padding:4px">身上没有配件 · 翻箱搜到的配件放进弹挂 / 背包后出现在这里</span>';
+}
+
+/* 改装窗拖动：按住标题栏跟着指针走，位置记在 G.modWin 里换枪重开不跑位 */
+if (typeof document !== 'undefined' && !window.__modWinWired) {
+  window.__modWinWired = true;
+  let mwOff = null;
+  $('modWinHead').addEventListener('pointerdown', e => {
+    if (e.button !== 0 || !G.modWin || e.target.closest('#modWinClose')) return;
+    const win = $('modWin');
+    mwOff = { dx: e.clientX - win.offsetLeft, dy: e.clientY - win.offsetTop };
+    e.preventDefault();
+  });
+  document.addEventListener('pointermove', e => {
+    if (!mwOff || !G.modWin) return;
+    const win = $('modWin');
+    G.modWin.x = clamp(e.clientX - mwOff.dx, 4, Math.max(4, innerWidth - win.offsetWidth - 4));
+    G.modWin.y = clamp(e.clientY - mwOff.dy, 4, Math.max(4, innerHeight - 60));
+    win.style.left = G.modWin.x + 'px';
+    win.style.top = G.modWin.y + 'px';
+    window.__modWinPos = { x: G.modWin.x, y: G.modWin.y };
+  });
+  document.addEventListener('pointerup', () => { mwOff = null; });
+  $('modWinClose').addEventListener('click', closeModWin);
 }
 
 /* 背包面板的放置结算：手上的东西放进 (arr, i)。合并 / 交换 / 拒收都处理。 */
@@ -19227,7 +19408,7 @@ function renderPackPanel() {
   /* 武器槽：拖背包里的枪到这儿装上（原来的枪换到手上），拖下来收回背包；
      拖配件到枪上直接改装（换下来的配件回到手上）；护甲拖到护甲槽直接穿上 */
   const gunGrid = $('pkGuns');
-  $('pkGunNote').textContent = '武 器 / 护 甲 槽 · 拖枪装上 · 拖护甲穿上 · 拖配件上枪 · 右键枪拆配件';
+  $('pkGunNote').textContent = '武 器 / 护 甲 槽 · 拖枪装上 · 拖护甲穿上 · 拖配件上枪 · 右键枪开改装窗';
   gunGrid.innerHTML = '';
 
   /* 护甲槽：拖背包里的甲到这儿穿上，身上那件（耐久原样）换到手上 */
@@ -19381,20 +19562,10 @@ function renderPackPanel() {
       Sfx.tone(620, 0.05, 0.04, 'square');
     };
     el.__pkPlace = placeSlot;                     // 拖拽落点用「目标格」自己的放置回调
-    el.oncontextmenu = e => {                     // 右键 = 拆一件配件到手上（按槽位顺序，连按拆光）
+    el.oncontextmenu = e => {                     // 右键 = 打开这把枪的改装窗（拖上装 / 拖下卸）
       e.preventDefault(); e.stopPropagation();
       if (!id) return;
-      if (PK_UI.held) { uiToast('先放下手上的东西再拆配件', 'small warn'); return; }
-      const eq = (SAVE.mods && SAVE.mods[id]) || {};
-      const sid = (MOD_SLOTS.find(s => eq[s.id] && MODS[eq[s.id]]) || {}).id;
-      if (!sid) { uiToast('这把枪没有装配件', 'small warn'); return; }
-      const mid = eq[sid];
-      delete SAVE.mods[id][sid];
-      PK_UI.held = { t: 'mod', id: mid };         // 拆下来的配件回到手上（可以塞包 / 丢地上 / 装别的枪）
-      const left = gunModCount(id);
-      uiToast('已拆下 ' + MODS[mid].name + (left ? ' · 还剩 ' + left + ' 件，继续右键拆' : ' · 配件拆完了'), 'small');
-      Sfx.tone(420, 0.05, 0.04, 'square');
-      renderPackPanel();
+      openModWin(id);
     };
     pkPressable(el, pickSlot, placeSlot);
     gunGrid.appendChild(el);
@@ -19544,6 +19715,7 @@ function pkFinishDrag(target) {
     PK_DRAG.place = null;
     pkEndVisuals();
     renderPackPanel();
+    if (G.modWin) renderModWin();                  // 拖拽可能动了配件：改装窗跟着刷
   }
 }
 
