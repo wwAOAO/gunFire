@@ -3599,7 +3599,7 @@ window.addEventListener('keydown', e => {
   if (isDowned()) return;
   if (k === 'f' && !e.repeat) searchInteract();   // 点一下开箱，不用长按
   if (k === 'e' && !e.repeat) switchInteract();   // E：拉总闸 / 丢包丢背包
-  if (k === 'h' && !e.repeat) searchKeyH();        // H：搜弹挂 / 背包；周围 ≥3 件掉落叠在一起时按一次捡一件
+  if (k === 'h' && !e.repeat) searchKeyH();        // H：搜弹挂 / 背包；周围掉落叠着时开「地面物资」面板选中拾取
   if (k === 'r') startReload();
 /* 干员技能：G 战术道具 / V 小技能 / X 大招 / C 被动滑铲 */
   if (k === 'g' && !e.repeat) skillGDown();
@@ -11151,18 +11151,54 @@ function gearSearchInteract() {
   return true;
 }
 
-/* H 键：先试搜装备；没装备可搜、且周围 ≥3 件掉落挤在一起（叠着看不出名堂）时，
-   按一次捡一件 —— 最近的先拿，捡走下一件自动顶上来，连按 H 就能一件件清空这堆 */
+/* 地上掉落 → 搜索面板的一行；__pickup 原样带着，选中拾取时找回实体 */
+function pickupToLootItem(p) {
+  let it = null;
+  if (p.kind === 'cell' && p.cell) it = cellToLootItem(p.cell);
+  else if (p.kind === 'medkit') {
+    it = makeMedItem('bandage', 1);
+    it.name = '医疗物资';
+    it.val = '开出来随机';
+  }
+  else if (p.kind === 'ammo') {
+    const cal = P.weapon ? calOfWeapon(P.weapon) : '919';
+    it = makeBulletItem(cal, p.value || 1, 1);
+    it.name = '弹药补给';
+    it.val = '按身上枪的口径';
+    it.n = 0;
+  }
+  else if (p.kind === 'relic' && p.relicId && RELICS[p.relicId]) it = makeRelicItem(p.relicId);
+  if (it) it.__pickup = p;
+  return it;
+}
+
+/* H：把周围叠在一起的掉落全部列进搜索面板 ——
+   滚轮 / 点选挑一件，按 F 捡走选中的那件；没拿的留在地上 */
+function pileSearchInteract() {
+  if (G.scene !== 'playing' || G.lootPanel) return false;
+  const near = [];
+  for (const p of G.pickups) {
+    const d = dist(P.x, P.y, p.x, p.y);
+    if (d <= 120) near.push({ p, d });
+  }
+  if (near.length < 2) return false;        // 只有一件直接 F 就行，不开面板
+  near.sort((a, b) => a.d - b.d);           // 最近的排最前
+  const items = near.map(o => pickupToLootItem(o.p)).filter(Boolean);
+  if (!items.length) return false;
+  const total = layoutLoot(items, 0.8);
+  G.lootPanel = { items, t: 0, shown: 0, taken: 0, closeT: 0, crate: near[0].p, total,
+    col: { name: '地面物资', en: 'GROUND PILE', color: '#8ef2ff', dim: 'rgba(142,242,255,' },
+    again: true, sel: 0, pile: true };
+  popup(near[0].p.x, near[0].p.y - 40, '搜 地面物资 ×' + items.length, '#8ef2ff', 12);
+  Sfx.loot();
+  return true;
+}
+
+/* H 键：搜地上装备 / 搜地面物资堆；都没有则不接管 */
 function searchKeyH() {
   if (G.scene !== 'playing' || G.lootPanel) return false;
-  if (gearSearchInteract()) return true;
-  let n = 0;
-  for (const p of G.pickups) {
-    if (p.cool > 0) continue;
-    if (dist(P.x, P.y, p.x, p.y) <= 120) n++;
-  }
-  if (n >= 3) return pickupInteract();
-  return false;
+  if (gearSearchInteract()) return true;    // 弹挂 / 背包优先
+  return pileSearchInteract();
 }
 
 function startLoot(c) {
@@ -11228,12 +11264,34 @@ function lootPickSelected() {
   if (!L) return false;
   const it = L.items[L.sel];
   if (!it || it.taken || L.t < it.ready) return false;
+  const hi0 = it.tier === 'myth' || it.tier === 'legend' || it.tier === 'epic';
+  const pickOk = () => {
+    Sfx.tone(620 + L.sel * 70 + (hi0 ? 220 : 0), 0.06, hi0 ? 0.11 : 0.07, 'square');
+    if (hi0) shake(it.tier === 'myth' ? 4.5 : (it.tier === 'legend' ? 3 : 1.5));
+  };
+  /* 地面物资堆：面板行对应地上一件实体 —— 收纳 / 换穿 / 空槽装枪全走 collectPickup */
+  if (L.pile) {
+    const pk = it.__pickup;
+    const idx = pk ? G.pickups.indexOf(pk) : -1;
+    if (idx < 0) {                            // 实体已经不在地上（被别的途径拿走）：行直接勾掉
+      it.taken = true; L.taken++; lootSelMove(1); return true;
+    }
+    if (!collectPickup(pk)) {
+      pk.cool = 1.2;                          // 没空位：进冷却，行上标「带不走」
+      it.blocked = '带不走';
+      Sfx.tone(200, 0.09, 0.05, 'square');
+      return false;
+    }
+    G.pickups.splice(idx, 1);
+    it.taken = true; L.taken++;
+    pickOk();
+    lootSelMove(1);
+    return true;
+  }
   if (applyLootItem(it, L.crate) === false) { Sfx.tone(200, 0.09, 0.05, 'square'); return false; }
   it.taken = true;
   L.taken++;
-  const hi = it.tier === 'myth' || it.tier === 'legend' || it.tier === 'epic';
-  Sfx.tone(620 + L.sel * 70 + (hi ? 220 : 0), 0.06, hi ? 0.11 : 0.07, 'square');
-  if (hi) shake(it.tier === 'myth' ? 4.5 : (it.tier === 'legend' ? 3 : 1.5));
+  pickOk();
   lootSelMove(1);
   return true;
 }
@@ -11799,7 +11857,7 @@ function drawPickups() {
     for (const p of G.pickups) if (p.cool <= 0 && dist(P.x, P.y, p.x, p.y) <= 120) pile++;
     let tip = '[F]';
     if (np.cell && np.cell.t === 'gear') tip = '[F] 拾取 · [H] 搜索';
-    else if (pile >= 3) tip = '[F] 拾取 · [H] 连捡';
+    else if (pile >= 2) tip = '[F] 拾取 · [H] 搜索';
     ctx.save();
     ctx.globalAlpha = pulse;
     ctx.font = '800 11px ui-monospace, Consolas, monospace';
