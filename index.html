@@ -10618,7 +10618,7 @@ const Q_TREMBLE = { supply: 0.5, common: 0.7, rare: 1.0, epic: 1.35, legend: 1.7
 /* 给一箱物品排出逐件时间轴：at 开始打码 / hold 打码 / flip 翻开 / ready 到手
    speed 是容器自己的翻找倍率：保险柜 1.9 倍，弹药箱 0.55 倍 */
 function layoutLoot(items, speed) {
-  const sp0 = speed || 1;
+  const sp0 = (speed === undefined || speed === null) ? 1 : speed;   // 0 是合法速度 = 全部秒开
   let t = LOOT_LEAD * sp0;
   for (const it of items) {
     const sp = revealSpec(it.tier);
@@ -11214,7 +11214,7 @@ function pileSearchInteract() {
   near.sort((a, b) => a.d - b.d);           // 最近的排最前
   const items = near.map(o => pickupToLootItem(o.p)).filter(Boolean);
   if (!items.length) return false;
-  const total = layoutLoot(items, 0.8);
+  const total = layoutLoot(items, 0);       // 空地上的东西不用「搜」：面板一开全部直接可拿
   G.lootPanel = { items, t: 0, shown: 0, taken: 0, closeT: 0, crate: near[0].p, total,
     col: { name: '地面物资', en: 'GROUND PILE', color: '#8ef2ff', dim: 'rgba(142,242,255,' },
     again: true, sel: 0, pile: true };
@@ -11240,7 +11240,7 @@ function startLoot(c) {
   c.opened = true;
   c.hover = 1;
   for (const it of left) it.blocked = '';
-  const total = layoutLoot(left, again ? Math.min(C.speed, 0.7) : C.speed);
+  const total = layoutLoot(left, again ? 0 : C.speed);   // 搜过的箱子：全部直接翻开，不用再等一遍翻牌
   G.lootPanel = { items: left, t: 0, shown: 0, taken: 0, closeT: 0, crate: c, total, col: C, again, sel: Math.max(0, left.findIndex(it => !it.taken)) };
   Sfx.loot();
 
@@ -11258,6 +11258,12 @@ function startLoot(c) {
 function updateLootPanel(dt) {
   const L = G.lootPanel;
   if (!L) return;
+  /* 动了就收手：面板开着时按移动键 = 立刻收面板（不用等走出范围） */
+  if (keys['w'] || keys['a'] || keys['s'] || keys['d'] ||
+      keys['arrowup'] || keys['arrowdown'] || keys['arrowleft'] || keys['arrowright']) {
+    closeLootPanel();
+    return;
+  }
   L.t += dt;
 
   // 逐件翻牌只负责「看清是什么」：翻出来的不会自动进包 —— 滚轮选中、按 F 自己拿
