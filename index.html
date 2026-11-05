@@ -424,10 +424,10 @@
   .lo-row .sub { font-size:10px; color:#5e87a0; }
   .lo-row .ct { font-size:12px; font-weight:800; color:#ffd08a; font-variant-numeric:tabular-nums; }
   .lo-grid { display:grid; grid-template-columns:repeat(auto-fill, 86px); gap:8px; }
-  /* 隔舱（弹挂的 blocks）：一行一个舱，虚线框标出连续格范围 */
+  /* 隔舱（弹挂的 blocks）：方块拼图 —— 每舱一个紧贴的正方格网格，1x2/1x3 竖条、2x2、2x3 一眼可辨 */
   .pk-blk {
-    grid-column: 1 / -1; display:flex; flex-wrap:wrap; gap:8px; align-items:flex-start;
-    border:1px dashed rgba(80,140,185,.35); border-radius:6px; padding:8px;
+    grid-column: 1 / -1; display:flex; flex-wrap:wrap; gap:12px; align-items:flex-start;
+    border:1px dashed rgba(80,140,185,.35); border-radius:6px; padding:12px 8px 8px;
     background:rgba(16,28,40,.28); position:relative;
   }
   .pk-blk::before {
@@ -435,8 +435,19 @@
     font-size:9px; font-weight:800; color:#4f7f9f; letter-spacing:.15em;
     background:#0b1420; padding:0 6px; border-radius:4px;
   }
-  .lo-cell.cont { opacity:.55; border-style:dashed; }
-  .lo-cell.sz2 { outline:1px dashed rgba(67,217,245,.3); outline-offset:2px; }
+  .blk-grid { --bcell:46px; display:grid; gap:2px; }
+  .lo-cell.bcell {
+    width:var(--bcell); height:var(--bcell); min-height:var(--bcell);
+    padding:2px; gap:1px; border-radius:3px;
+  }
+  .lo-cell.bcell.empty { border-color:rgba(80,140,185,.13); background:rgba(12,20,30,.35); }
+  .lo-cell.bcell.empty::after { content:''; width:5px; height:5px; border-radius:50%; background:rgba(80,140,185,.2); }
+  .lo-cell.bcell .ic { font-size:19px; line-height:1; }
+  .lo-cell.bcell .nm { font-size:10px; }
+  .lo-cell.bcell .ct {
+    position:absolute; right:3px; bottom:1px; font-size:9px; font-weight:800;
+    color:#eaf6ff; text-shadow:0 1px 2px #000; font-variant-numeric:tabular-nums;
+  }
 
   .lo-cell {
     height:86px; border:1px solid rgba(80,140,185,.22); border-radius:4px;
@@ -4943,52 +4954,96 @@ function cellSize(c) {
   if (c.t === 'melee' || c.t === 'surg' || c.t === 'repair') return 2;
   return 1;
 }
-/* 某容器（'rig' | 'pocket' | 'pack'）的隔舱 → [[start,end), ...] 下标区间 */
+/* ── 隔舱 2D 化：每个舱摆成一个正方格小网格（1x2 / 1x3 竖条、2x2、2x3 …），
+      存储仍是行优先的一维数组 + head/cont 占位，但铺设与渲染都按矩形来 ── */
+/* 舱的列数：1x2 / 1x3 = 1 列竖条；4 = 2x2；6 = 3x2；大背包尽量接近方形 */
+function blkCols(n) {
+  if (n <= 3) return 1;
+  for (let c = Math.ceil(Math.sqrt(n)); c <= 10; c++) if (n % c === 0) return c;
+  return 10;
+}
+/* sz 格物品在 C 列舱里的 w×h 形状（与铺设、渲染一一对应） */
+function itemShape(sz, C) {
+  if (C <= 1) return [1, Math.max(1, sz)];   // 竖条舱：一律竖放（1x2 的来源）
+  if (sz <= 1) return [1, 1];
+  if (sz === 2) return [2, 1];               // 多列舱：横放 Domino
+  if (sz === 4) return [2, 2];               // 枪：2x2
+  const w = Math.min(sz, C);
+  return [w, Math.ceil(sz / w)];
+}
+/* 某容器（'rig' | 'pocket' | 'pack'）的隔舱 → [[start, end, cols], ...] */
 function zoneBlocks(zone) {
-  if (zone === 'pocket') return [[0, pocketCap()]];
+  if (zone === 'pocket') return [[0, pocketCap(), 1]];       // 口袋：1 列竖条
   const g = wornGear(zone);
   if (!g || !(g.cap > 0)) return [];
-  if (!g.blocks) return [[0, g.cap]];
+  if (!g.blocks) return [[0, g.cap, blkCols(g.cap)]];
   const out = []; let s = 0;
-  for (const b of g.blocks) { out.push([s, s + b]); s += b; }
+  for (const b of g.blocks) { out.push([s, s + b, blkCols(b)]); s += b; }
   return out;
 }
-/* 在隔舱里找 sz 格连续空位：返回起点下标，找不到 -1 */
+function blkAt(blocks, i) { for (const b of blocks) if (i >= b[0] && i < b[1]) return b; return null; }
+/* 矩形判定：i 在隔舱 [s,e) 内，从 i 铺 sz 格物品是否放得下（全空 + 行内不折行） */
+function rectFitsAt(arr, s, e, C, i, sz) {
+  if (i < s || i >= e) return false;
+  if (sz <= 1) return !arr[i];
+  const [w, h] = itemShape(sz, C);
+  if ((i - s) % C + w > C) return false;
+  for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) {
+    const j = i + dy * C + dx;
+    if (j >= e || arr[j]) return false;
+  }
+  return true;
+}
+/* 一件 sz 格物品从 i 铺开的全部下标（行优先矩形） */
+function spanIdxs(i, sz, s, e, C) {
+  const [w, h] = itemShape(sz, C);
+  const out = [];
+  for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) {
+    const j = i + dy * C + dx;
+    if (j < e) out.push(j);
+  }
+  return out;
+}
+/* 在隔舱里找 sz 格物品的落点：返回起点下标，找不到 -1 */
 function findFitRun(arr, blocks, sz) {
-  for (const [s, e] of blocks) {
-    for (let i = s; i + sz <= e; i++) {
-      let ok = true;
-      for (let k = 0; k < sz; k++) if (arr[i + k]) { ok = false; break; }
-      if (ok) return i;
-    }
+  for (const [s, e, C] of blocks) {
+    for (let i = s; i < e; i++) if (rectFitsAt(arr, s, e, C, i, sz)) return i;
   }
   return -1;
 }
-/* 指定下标能否放下 sz 格（下标在隔舱内、后面 sz 格全空） */
+/* 指定下标能否放下 sz 格物品 */
 function fitsAtRun(arr, blocks, i, sz) {
-  for (const [s, e] of blocks) {
-    if (i >= s && i + sz <= e) {
-      for (let k = 0; k < sz; k++) if (arr[i + k]) return false;
-      return true;
-    }
-  }
-  return false;
+  const b = blkAt(blocks, i);
+  return b ? rectFitsAt(arr, b[0], b[1], b[2], i, sz) : false;
 }
-/* 放置：head 落 i，占位标记铺满后续格 */
-function placeAtRun(arr, i, cell) {
+/* 放置：head 落 i，占位标记按矩形铺（blocks 缺省时退回扁平铺，兼容老调用） */
+function placeAtRun(arr, i, cell, blocks) {
   arr[i] = cell;
   const sz = cellSize(cell);
-  for (let k = 1; k < sz; k++) arr[i + k] = { cont: 1, head: i };
+  if (sz <= 1) return;
+  const b = blocks ? blkAt(blocks, i) : null;
+  const idxs = b ? spanIdxs(i, sz, b[0], b[1], b[2]) : null;
+  for (let k = 1; k < sz; k++) {
+    const j = idxs ? (idxs.length > k ? idxs[k] : -1) : i + k;
+    if (j >= 0) arr[j] = { cont: 1, head: i };
+  }
 }
-/* 清除一件（i 可以是 head 也可以是 cont 占位格），整个 span 一起清空 */
-function clearSpanAt(arr, i) {
+/* 清除一件（i 可以是 head 也可以是 cont 占位格），整个矩形一起清空 */
+function clearSpanAt(arr, i, blocks) {
   const c = arr[i];
   if (!c) return;
   const h = c.cont ? c.head : i;
   const head = arr[h];
   if (!head || head.cont) { arr[i] = null; return; }   // 孤儿占位：只清自己
   const sz = cellSize(head);
-  for (let k = 0; k < sz; k++) if (h + k < arr.length) arr[h + k] = null;
+  if (sz <= 1) { arr[h] = null; return; }
+  const b = blocks ? blkAt(blocks, h) : null;
+  const idxs = b ? spanIdxs(h, sz, b[0], b[1], b[2]) : null;
+  const n = idxs ? idxs.length : sz;
+  for (let k = 0; k < n; k++) {
+    const j = idxs ? idxs[k] : h + k;
+    if (j >= 0 && j < arr.length) arr[j] = null;
+  }
 }
 /* 孤儿占位清理（容量截断后 head 被挤掉、cont 还留着之类） */
 function sanitizeSpans(arr) {
@@ -5014,15 +5069,15 @@ function freeCellFor(cell) {
   }
   return null;
 }
-/* 把一件合法格子物品塞进随身容器（按类型选区 + 隔舱连续空位）。成功返回 { zone, i }。 */
+/* 把一件合法格子物品塞进随身容器（按类型选区 + 隔舱矩形空位）。成功返回 { zone, i }。 */
 function stowCell(cell) {
   if (!cell) return null;
   if (cell.t === 'gear') return null;          // 弹挂 / 背包是穿着的装备，不占格子
   const slot = freeCellFor(cell);
-  if (slot) placeAtRun(allCarryZones()[slot.zone], slot.i, cell);
+  if (slot) placeAtRun(allCarryZones()[slot.zone], slot.i, cell, zoneBlocks(ZONE_NAMES[slot.zone]));
   return slot;
 }
-function removeCell(zone, i) { clearSpanAt(allCarryZones()[zone], i); }
+function removeCell(zone, i) { clearSpanAt(allCarryZones()[zone], i, zoneBlocks(ZONE_NAMES[zone])); }
 function carryCellTotal() {
   let n = 0;
   for (const arr of allCarryZones()) for (const c of arr) if (c) n++;
@@ -18838,9 +18893,10 @@ function loQuickStow(c) {
   const sz = cellSize(cell);
   for (const [zi, arr] of [[0, C.rig], [2, C.pack], [1, C.pocket]]) {
     if (!Array.isArray(arr) || !cellAccepts(c, zi)) continue;
-    const at = findFitRun(arr, zoneBlocks(ZONE_NAMES[zi]), sz);
+    const blocks = zoneBlocks(ZONE_NAMES[zi]);
+    const at = findFitRun(arr, blocks, sz);
     if (at < 0) continue;
-    placeAtRun(arr, at, cell);
+    placeAtRun(arr, at, cell, blocks);
     return true;
   }
   return false;
@@ -19146,24 +19202,32 @@ function renderLoadout() {
     grid.innerHTML = '';
     if (cap <= 0) continue;
     const zone = gridId === 'loRig' ? 0 : (gridId === 'loPocket' ? 1 : 2);
-    for (const [s, e] of zoneBlocks(ZONE_NAMES[zone])) {
+    const blocks = zoneBlocks(ZONE_NAMES[zone]);
+    for (const [s, e, C] of blocks) {
       const blk = document.createElement('div');
       blk.className = 'pk-blk';
       blk.dataset.cap = '隔舱 ' + (e - s) + ' 格';
+      const bgrid = document.createElement('div');
+      bgrid.className = 'blk-grid';
+      bgrid.style.gridTemplateColumns = 'repeat(' + C + ', var(--bcell))';
       for (let i = s; i < e; i++) {
         const c = arr[i];
-        const hi = c && c.cont ? c.head : i;         // 延续格 → 指向 head
-        const it = arr[hi];
-        const sz = cellSize(it);
+        if (c && c.cont) continue;                   // 多格物品：整块画在 head 上
+        const hi = i;
+        const rel = i - s;
+        const [w, h] = c ? itemShape(cellSize(c), C) : [1, 1];
         const el = document.createElement('div');
-        el.className = 'lo-cell' + (it ? '' : ' empty') + (c && c.cont ? ' cont' : '') + (it && !c.cont && sz > 1 ? ' sz2' : '');
-        if (c && c.cont) {
-          el.innerHTML = '<span class="sub">┄</span>';
-        } else if (it) {
-          el.innerHTML = '<span class="ic" style="color:' + cellColor(it) + '">' + cellIcon(it) + '</span>' +
-            '<span class="nm">' + cellName(it) + '</span>' +
-            '<span class="sub">' + cellSub(it) + (sz > 1 ? ' · 占 ' + sz + ' 格' : '') + '</span>';
-        } else el.innerHTML = '<span class="sub">空</span>';
+        el.className = 'lo-cell bcell' + (c ? '' : ' empty');
+        el.style.gridColumn = (rel % C + 1) + ' / span ' + w;
+        el.style.gridRow = ((rel / C | 0) + 1) + ' / span ' + h;
+        if (c) {
+          el.title = cellName(c) + ' · ' + cellSub(c);
+          let html = '<span class="ic" style="color:' + cellColor(c) + '">' + cellIcon(c) + '</span>';
+          if (w > 1 || h > 1) html += '<span class="nm">' + cellName(c) + '</span>' +
+            '<span class="sub">' + cellSub(c) + '</span>';
+          else if (c.t === 'ammo') html += '<span class="ct">' + (c.n | 0) + '</span>';
+          el.innerHTML = html;
+        }
 
         const placeHere = () => {
           if (!LO_UI.held) return;
@@ -19175,20 +19239,20 @@ function renderLoadout() {
           const isz = cellSize(cell);
           const c2 = arr[hi];
           if (!c2) {                                  // 空位：整个塞进同一隔舱
-            if (!fitsAtRun(arr, zoneBlocks(ZONE_NAMES[zone]), hi, isz)) {
-              uiToast(isz > 1 ? '这个隔舱的连续空位不够（需要 ' + isz + ' 格）' : '这里放不下', 'small warn');
+            if (!fitsAtRun(arr, blocks, hi, isz)) {
+              uiToast(isz > 1 ? '这个隔舱放不下（需要 ' + isz + ' 格整块空位）' : '这里放不下', 'small warn');
               return;
             }
-            placeAtRun(arr, hi, cell);
+            placeAtRun(arr, hi, cell, blocks);
             loSetHeld(null);
           } else if (stackInto(LO_UI.held, c2, SAVE.owned)) {    // 同弹药合并
             if (LO_UI.held.n <= 0) loSetHeld(null);
             else loSetHeld(LO_UI.held);
           } else if (!c2.cont) {                      // 交换 / 换位
-            clearSpanAt(arr, hi);
-            const at = fitsAtRun(arr, zoneBlocks(ZONE_NAMES[zone]), hi, isz) ? hi : findFitRun(arr, zoneBlocks(ZONE_NAMES[zone]), isz);
-            if (at < 0) { placeAtRun(arr, hi, c2); uiToast('这个隔舱塞不下 ' + cellName(cell) + '（需要 ' + isz + ' 连格）', 'small warn'); return; }
-            placeAtRun(arr, at, cell);
+            clearSpanAt(arr, hi, blocks);
+            const at = fitsAtRun(arr, blocks, hi, isz) ? hi : findFitRun(arr, blocks, isz);
+            if (at < 0) { placeAtRun(arr, hi, c2, blocks); uiToast('这个隔舱塞不下 ' + cellName(cell) + '（需要 ' + isz + ' 格整块）', 'small warn'); return; }
+            placeAtRun(arr, at, cell, blocks);
             loSetHeld(c2);
           }
           Sfx.tone(620, 0.05, 0.04, 'square');
@@ -19199,7 +19263,7 @@ function renderLoadout() {
           const t = arr[hi];
           if (!t || t.cont || LO_UI.held) return;
           cellToStock(t);
-          clearSpanAt(arr, hi);
+          clearSpanAt(arr, hi, blocks);
           Sfx.tone(440, 0.05, 0.04, 'square');
           saveGame();
           renderLoadout();
@@ -19207,16 +19271,17 @@ function renderLoadout() {
         loPressable(el, () => {                      // 长按拿起：整件清格，空处松手放回原位
           const t = arr[hi];
           if (!t || t.cont) return null;
-          clearSpanAt(arr, hi);
+          clearSpanAt(arr, hi, blocks);
           loSetHeld(t);
           Sfx.tone(500, 0.05, 0.04, 'square');
           return () => {                             // revert：原位还空着就放回去
-            if (!arr[hi]) { placeAtRun(arr, hi, LO_UI.held); loSetHeld(null); }
+            if (!arr[hi]) { placeAtRun(arr, hi, LO_UI.held, blocks); loSetHeld(null); }
             else { heldToStock(LO_UI.held); loSetHeld(null); }
           };
         });
-        blk.appendChild(el);
+        bgrid.appendChild(el);
       }
+      blk.appendChild(bgrid);
       grid.appendChild(blk);
     }
   }
@@ -19278,14 +19343,15 @@ function autoRestock() {
       let placed = false;
       for (let zi = 0; zi < zones.length && !placed; zi++) {
         const arr = zones[zi];
-        const at = findFitRun(arr, zoneBlocks(ZONE_NAMES[zi]), isz);
+        const blocks = zoneBlocks(ZONE_NAMES[zi]);
+        const at = findFitRun(arr, blocks, isz);
         if (at < 0) continue;
         let c = null;
         if (it.kind === 'stop') c = stockTakeCell('stop', it.id);
         else if (it.kind === 'med') c = stockTakeCell('med', it.id);
         else if (it.kind === 'repair') c = stockTakeCell('repair', it.id);
         else c = stockTakeCell('surg', it.id);
-        if (c) { placeAtRun(arr, at, c); did++; placed = true; }
+        if (c) { placeAtRun(arr, at, c, blocks); did++; placed = true; }
       }
       if (!placed) break;
     }
@@ -19299,11 +19365,13 @@ function autoRestock() {
 /* 全部卸下：所有格子原物回仓 */
 function clearCarryAll() {
   const C = SAVE.carry;
-  for (const arr of [C.rig, C.pocket, C.pack]) {
+  const zoneNames = ['rig', 'pocket', 'pack'];
+  [C.rig, C.pocket, C.pack].forEach((arr, zi) => {
+    const blocks = zoneBlocks(zoneNames[zi]);
     for (let i = 0; i < arr.length; i++) {
-      if (arr[i] && !arr[i].cont) { cellToStock(arr[i]); clearSpanAt(arr, i); }
+      if (arr[i] && !arr[i].cont) { cellToStock(arr[i]); clearSpanAt(arr, i, blocks); }
     }
-  }
+  });
   saveGame();
   renderLoadout();
   uiToast('已全部卸下回仓库', 'small');
@@ -19640,17 +19708,17 @@ function pkPlaceInto(arr, i, zone) {
   const sz = cellSize(cell);
   const c = arr[hi];
   if (!c) {                                          // 空格：必须整个塞进同一隔舱
-    if (!fitsAtRun(arr, blocks, hi, sz)) { uiToast(sz > 1 ? '这个隔舱的连续空位不够（需要 ' + sz + ' 格）' : '这里放不下', 'small warn'); return; }
-    placeAtRun(arr, hi, cell);
+    if (!fitsAtRun(arr, blocks, hi, sz)) { uiToast(sz > 1 ? '这个隔舱放不下（需要 ' + sz + ' 格的整块空位）' : '这里放不下', 'small warn'); return; }
+    placeAtRun(arr, hi, cell, blocks);
     PK_UI.held = null;
   } else if (stackInto(held, c, ownedMapLive())) {   // 同弹药合并（补满为止，剩余留在手上）
     if ((held.n | 0) <= 0) PK_UI.held = null;
   } else {                                           // 交换：原来的那件整块换到手上
     if (!c.cont) {
-      clearSpanAt(arr, hi);
+      clearSpanAt(arr, hi, blocks);
       let at = fitsAtRun(arr, blocks, hi, sz) ? hi : findFitRun(arr, blocks, sz);
-      if (at < 0) { placeAtRun(arr, hi, c); uiToast('这个隔舱塞不下 ' + cellName(cell) + '（需要 ' + sz + ' 连格）', 'small warn'); return; }
-      placeAtRun(arr, at, cell);
+      if (at < 0) { placeAtRun(arr, hi, c, blocks); uiToast('这个隔舱塞不下 ' + cellName(cell) + '（需要 ' + sz + ' 格整块）', 'small warn'); return; }
+      placeAtRun(arr, at, cell, blocks);
       PK_UI.held = c;
     }
   }
@@ -19857,52 +19925,61 @@ function renderPackPanel() {
     if (noteEl) noteEl.textContent = noteTxt + ' · ' + heads + ' 件 / ' + arr.length + ' 格';
     const grid = $(gridId);
     grid.innerHTML = '';
-    for (const [s, e] of zoneBlocks(ZONE_NAMES[zone])) {
+    const blocks = zoneBlocks(ZONE_NAMES[zone]);
+    for (const [s, e, C] of blocks) {
       const blk = document.createElement('div');
       blk.className = 'pk-blk';
       blk.dataset.cap = '隔舱 ' + (e - s) + ' 格';
+      const bgrid = document.createElement('div');
+      bgrid.className = 'blk-grid';
+      bgrid.style.gridTemplateColumns = 'repeat(' + C + ', var(--bcell))';
       for (let i = s; i < e; i++) {
         const c = arr[i];
-        const hi = c && c.cont ? c.head : i;         // 延续格 → 指向 head
-        const it = arr[hi];
-        const sz = cellSize(it);
+        if (c && c.cont) continue;                   // 多格物品：整块画在 head 上
+        const hi = i;
+        const rel = i - s;
+        const [w, h] = c ? itemShape(cellSize(c), C) : [1, 1];
         const el = document.createElement('div');
-        el.className = 'lo-cell' + (it ? '' : ' empty') + (c && c.cont ? ' cont' : '') + (it && !c.cont && sz > 1 ? ' sz2' : '');
-        if (c && c.cont) {
-          el.innerHTML = '<span class="sub">┄</span>';  // 多格物品的延续格（点它 = 点那件东西）
-        } else if (it) {
-          el.innerHTML = '<span class="ic" style="color:' + cellColor(it) + '">' + cellIcon(it) + '</span>' +
-            '<span class="nm">' + cellName(it) + (it.t === 'ammo' ? ' ' + (it.n | 0) : '') + '</span>' +
-            '<span class="sub">' + cellSub(it) + (sz > 1 ? ' · 占 ' + sz + ' 格' : '') + '</span>';
-        } else el.innerHTML = '<span class="sub">空</span>';
+        el.className = 'lo-cell bcell' + (c ? '' : ' empty');
+        el.style.gridColumn = (rel % C + 1) + ' / span ' + w;
+        el.style.gridRow = ((rel / C | 0) + 1) + ' / span ' + h;
+        if (c) {
+          el.title = cellName(c) + (c.t === 'ammo' ? ' ×' + (c.n | 0) : '') + ' · ' + cellSub(c);
+          let html = '<span class="ic" style="color:' + cellColor(c) + '">' + cellIcon(c) + '</span>';
+          if (w > 1 || h > 1) html += '<span class="nm">' + cellName(c) + (c.t === 'ammo' ? ' ' + (c.n | 0) : '') + '</span>' +
+            '<span class="sub">' + cellSub(c) + '</span>';
+          else if (c.t === 'ammo') html += '<span class="ct">' + (c.n | 0) + '</span>';
+          el.innerHTML = html;
+        }
 
-        const pickCell = () => {                    // 拿起（延续格也能拿：整件一起）
+        const pickCell = () => {                    // 拿起（多格物品整块一起）
           if (!arr[hi]) return null;
           const picked = arr[hi];
-          clearSpanAt(arr, hi);
+          clearSpanAt(arr, hi, blocks);
           PK_UI.held = picked;
           Sfx.tone(500, 0.05, 0.04, 'square');
           return () => {                            // 取消：原位还空着就放回去
-            if (!arr[hi]) { placeAtRun(arr, hi, PK_UI.held); PK_UI.held = null; }
+            if (!arr[hi]) { placeAtRun(arr, hi, PK_UI.held, blocks); PK_UI.held = null; }
           };
         };
         const placeCell = () => pkPlaceInto(arr, hi, zone);   // 放置 / 交换 / 合并
         el.__pkPlace = placeCell;                   // 拖拽落在哪格就用哪格的回调
-        if (it && !c?.cont && it.t === 'armor') {
+        if (c && c.t === 'armor') {
           el.oncontextmenu = e => {                 // 右键护甲 = 直接穿上（身上那件换回这个格子）
             e.preventDefault(); e.stopPropagation();
             const prev = currentArmorPiece();
-            if (!wearArmorPiece(it)) { uiToast('这件护甲有问题，穿不上', 'small warn'); return; }
-            clearSpanAt(arr, hi);
-            if (prev) placeAtRun(arr, hi, { t: 'armor', id: prev.id, hp: prev.hp, max: prev.max });
+            if (!wearArmorPiece(c)) { uiToast('这件护甲有问题，穿不上', 'small warn'); return; }
+            clearSpanAt(arr, hi, blocks);
+            if (prev) placeAtRun(arr, hi, { t: 'armor', id: prev.id, hp: prev.hp, max: prev.max }, blocks);
             uiToast('已穿上 ' + ARMORS[P.armorId].name + (prev ? ' · 换下的在格子里' : ''), 'small');
             Sfx.tone(620, 0.05, 0.04, 'square');
             renderPackPanel();
           };
         }
         pkPressable(el, pickCell, placeCell);
-        blk.appendChild(el);
+        bgrid.appendChild(el);
       }
+      blk.appendChild(bgrid);
       grid.appendChild(blk);
     }
   }
