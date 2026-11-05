@@ -2450,9 +2450,9 @@ const ARMORS = [
   { id: 17, name: 'HA-2 重型防弹衣', short: 'HA-2', lv: 6, dr: 0.35, hp: 115, aim: 0.03, move: 0.01, price: 22000, load: 0.3, eff: 0.9, effName: '中', loss: 0.075, lossName: '中',
     desc: '6 级甲的入门价：115 点耐久刚过线，但 3% + 1% 的惩罚轻得像件 4 级甲 —— 想要 6 级兜底又不想变成铁罐头，就是它。' },
 ];
-/* 甲的耐久条颜色随等级走（和敌人装甲同色系） */
+/* 甲的耐久条颜色随等级走（和敌人装甲同色系：1 白 2 绿 3 蓝 4 紫 5 金 6 红） */
 function armorLvColor(lv) {
-  return ['#5e87a0', '#8fd8f2', '#7fd4a8', '#ffd24a', '#ff9b6b', '#ff5c7a', '#c96bff'][lv | 0] || '#5e87a0';
+  return ARMOR_LV_COLOR[lv | 0] || '#5e87a0';
 }
 const ARMOR_MAX_HP = 150;
 /* 按甲级取同级的所有具名护甲 / 随机抽一件（敌人穿甲、图内掉落用） */
@@ -18223,15 +18223,21 @@ function closeLoadout() {
   refreshLobby();
 }
 
-/* 整备界面：F = 快捷拿取鼠标悬停的那行仓库物品（等同长按拿起） */
+/* 整备界面：F = 快捷放入鼠标悬停的那行仓库物品
+   弹药 / 药品 / 甲修包直接塞进随身容器（弹挂优先 → 背包 → 口袋）；
+   枪 / 近战 / 护甲 / 携行直接装上对应槽位。手上已有东西或正在拖拽时不抢动作。 */
 document.addEventListener('keydown', e => {
   if (e.key.toLowerCase() !== 'f' || e.repeat) return;
   if ($('loadout').classList.contains('hidden')) return;          // 整备没开
   if (LO_UI.held || LO_DRAG.active || LO_DRAG.pending) return;    // 手上有东西 / 正在拖：不抢
   const r = LO_UI.hoverRow;
-  if (r && r.isConnected && typeof r.__loPick === 'function') {
-    r.__loPick();
-    try { saveGame(); } catch (err) {}
+  if (r && r.isConnected) {
+    const fn = r.__loQuick || r.__loPick;
+    if (typeof fn === 'function') {
+      fn();
+      try { saveGame(); } catch (err) {}
+      try { renderLoadout(); } catch (err) {}      // 数量 / 槽位立刻刷新
+    }
   }
 });
 
@@ -18359,6 +18365,39 @@ function renderLoSlot(slot) {
 }
 
 /* ── 右侧：仓库（武器 / 护甲 / 携行 / 弹药 / 医疗）── */
+/* F 快捷放入：小物件（弹药 / 药品 / 甲修包）直接塞随身容器 —— 弹挂优先，没位置进背包，最后口袋；
+   弹药先往同类堆上补齐再开新格。注意整备页操作的是 SAVE.carry（不是局内的 P）。成功返回 true。 */
+function loQuickStow(c) {
+  if (!c || !SAVE.carry) return false;
+  const C = SAVE.carry;
+  if (c.t === 'ammo') {
+    for (const arr of [C.rig, C.pocket, C.pack]) {
+      for (const dst of arr) {
+        if (dst && stackInto(c, dst, SAVE.owned) && (c.n | 0) <= 0) return true;
+      }
+    }
+    if ((c.n | 0) <= 0) return true;
+  }
+  /* 弹挂 → 背包 → 口袋（zone 编号：0 弹挂 / 1 口袋 / 2 背包） */
+  for (const [zi, arr] of [[0, C.rig], [2, C.pack], [1, C.pocket]]) {
+    if (!Array.isArray(arr) || !cellAccepts(c, zi)) continue;
+    for (let i = 0; i < arr.length; i++) {
+      if (arr[i]) continue;
+      arr[i] = heldToCell(c);
+      return true;
+    }
+  }
+  return false;
+}
+
+/* 小物件 F 快捷行的统一入口：拿一件 → 塞容器；塞不下原样退回仓库 */
+function loQuickRow(kind, id, short) {
+  const c = stockTakeCell(kind, id);
+  if (!c) return;
+  if (loQuickStow(c)) { uiToast(short + ' 已装入', 'small'); Sfx.tone(620, 0.05, 0.04, 'square'); }
+  else { cellToStock(c); uiToast('弹挂 / 背包都满了', 'small warn'); }
+}
+
 function renderLoStock() {
   const stockEl = $('loStock');
   stockEl.innerHTML = '';
@@ -18393,7 +18432,8 @@ function renderLoStock() {
       '<span class="ct">' + o.ct + '</span>';
     if (!o.off) {
       loPressable(el, o.pick);                   // 长按拿起（点击不再拾取）
-      el.__loPick = o.pick;                      // F 键快捷拿取：只认鼠标悬停的这行
+      el.__loPick = o.pick;                      // 长按拖拽拿取：只认鼠标悬停的这行
+      el.__loQuick = o.quick || o.pick;          // F 快捷放入：直接装进容器 / 装上槽位
       el.addEventListener('mouseenter', () => { LO_UI.hoverRow = el; });
       el.addEventListener('mouseleave', () => { if (LO_UI.hoverRow === el) LO_UI.hoverRow = null; });
     }
@@ -18418,6 +18458,14 @@ function renderLoStock() {
         else if (SAVE.loadout.pistol === id) SAVE.loadout.pistol = null;
         loSetHeld({ t: 'gun', id });
       },
+      quick: () => {                          // F：直接装上（手枪进手枪槽，长枪先进主槽再进副槽）
+        if (PISTOL_IDS[id]) SAVE.loadout.pistol = id;
+        else if (!SAVE.loadout.primary) SAVE.loadout.primary = id;
+        else if (!SAVE.loadout.secondary) SAVE.loadout.secondary = id;
+        else SAVE.loadout.primary = id;       // 都占着就换下主武器（所有权在仓库，顶下来还在列表里）
+        uiToast(W.short + ' 已装上', 'small');
+        Sfx.tone(620, 0.05, 0.04, 'square');
+      },
     });
   }
   for (const id of MELEE_ORDER) {
@@ -18431,6 +18479,7 @@ function renderLoStock() {
         if (SAVE.equippedMelee === id) SAVE.equippedMelee = null;
         loSetHeld({ t: 'melee', id });
       },
+      quick: () => { SAVE.equippedMelee = id; uiToast(M.name + ' 已装上', 'small'); Sfx.tone(620, 0.05, 0.04, 'square'); },
     });
   }
 
@@ -18449,6 +18498,13 @@ function renderLoStock() {
       pick: () => {
         SAVE.armorPieces.splice(i, 1);
         loSetHeld({ t: 'armor', id: pc.id, piece: pc });
+      },
+      quick: () => {                          // F：直接穿上，身上那件脱下来回仓库
+        SAVE.armorPieces.splice(i, 1);
+        if (SAVE.wornPiece) SAVE.armorPieces.push(SAVE.wornPiece);
+        SAVE.wornPiece = pc;
+        uiToast(A.name + ' 已穿上', 'small');
+        Sfx.tone(620, 0.05, 0.04, 'square');
       },
     });
   }
@@ -18472,6 +18528,12 @@ function renderLoStock() {
           trimCarryToCap();
         }
         loSetHeld({ t: 'gear', key });
+      },
+      quick: () => {                          // F：直接穿上，容量变化立刻结算（多出的格子回仓）
+        SAVE.worn[g.kind] = key;
+        trimCarryToCap();
+        uiToast(g.name + ' 已穿上', 'small');
+        Sfx.tone(620, 0.05, 0.04, 'square');
       },
     });
   }
@@ -18500,6 +18562,12 @@ function renderLoStock() {
       sub: T.grade + ' · 格上限 ' + ammoCellCap(cal, SAVE.owned) + (isPick ? ' · 选用' : ''),
       ct: have + ' 发', off: !hasGun,
       pick: () => { const c = stockTakeAmmo(cal, T.lv); if (c) loSetHeld(c); },
+      quick: () => {
+        const c = stockTakeAmmo(cal, T.lv);
+        if (!c) return;
+        if (loQuickStow(c)) { uiToast(C.short + ' ' + T.grade + ' 已装入 ×' + c.n, 'small'); Sfx.tone(620, 0.05, 0.04, 'square'); }
+        else { addAmmoStock(cal, T.lv, c.n); uiToast('弹挂 / 背包都满了', 'small warn'); }
+      },
     });
     }
   }
@@ -18514,6 +18582,7 @@ function renderLoStock() {
       nm: M.short, color: M.color, sub: M.dur + ' 耐久 · ' + M.hps + '/s',
       ct: '×' + have, off: have <= 0,
       pick: () => { const c = stockTakeCell('med', id); if (c) loSetHeld(c); },
+      quick: () => loQuickRow('med', id, M.short),
     });
   }
   for (const id of STOP_ORDER) {
@@ -18525,6 +18594,7 @@ function renderLoStock() {
       sub: S.pain ? ('止痛 ' + S.pain + 's') : (S.layers > 1 ? '全止血' : '止 1 层'),
       ct: '×' + have, off: have <= 0,
       pick: () => { const c = stockTakeCell('stop', id); if (c) loSetHeld(c); },
+      quick: () => loQuickRow('stop', id, S.short),
     });
   }
   for (const id of SURG_ORDER) {
@@ -18535,6 +18605,7 @@ function renderLoStock() {
       nm: S.short, color: S.color, sub: S.uses + ' 次 · ' + S.sec + 's',
       ct: have + ' 次', off: have <= 0,
       pick: () => { const c = stockTakeCell('surg', id); if (c) loSetHeld(c); },
+      quick: () => loQuickRow('surg', id, S.short),
     });
   }
   /* 甲修包：修护甲的消耗品，跟医疗包一样抓进格子带出门 */
@@ -18548,10 +18619,11 @@ function renderLoStock() {
       sub: R.dur + ' 点 · 修 ' + R.capLv + ' 级及以下 · 读条 ' + R.wind + 's',
       ct: '×' + have,
       pick: () => { const c = stockTakeCell('repair', id); if (c) loSetHeld(c); },
+      quick: () => loQuickRow('repair', id, R.short),
     });
   }
 
-  $('loStockNote').textContent = '按住拖动 · 鼠标所在行按 F 快捷拿取 · 拖回这里放回仓库';
+  $('loStockNote').textContent = '按住拖动 · 鼠标所在行按 F 快捷放入（弹药 / 药品进弹挂，枪 / 甲直接装备）· 拖回这里放回仓库';
   stockEl._loDrop = () => {                      // 拖进仓库 = 放回仓库
     if (LO_UI.held) { heldToStock(LO_UI.held); loSetHeld(null); Sfx.tone(440, 0.05, 0.04, 'square'); }
   };
@@ -18564,7 +18636,7 @@ function renderLoStock() {
 function cellAccepts(h, zone) {
   if (!h) return false;
   if (h.t === 'med' || h.t === 'stop' || h.t === 'surg' || h.t === 'ammo' ||
-      h.t === 'relic' || h.t === 'mod') return true;
+      h.t === 'repair' || h.t === 'relic' || h.t === 'mod') return true;
   if (h.t === 'gun' || h.t === 'armor') return zone === 2;   // 枪和护甲只进背包
   return false;
 }
