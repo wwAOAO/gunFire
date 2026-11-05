@@ -19227,7 +19227,7 @@ function renderPackPanel() {
   /* 武器槽：拖背包里的枪到这儿装上（原来的枪换到手上），拖下来收回背包；
      拖配件到枪上直接改装（换下来的配件回到手上）；护甲拖到护甲槽直接穿上 */
   const gunGrid = $('pkGuns');
-  $('pkGunNote').textContent = '武 器 / 护 甲 槽 · 拖枪装上 · 拖护甲穿上 · 拖配件到枪上改装';
+  $('pkGunNote').textContent = '武 器 / 护 甲 槽 · 拖枪装上 · 拖护甲穿上 · 拖配件上枪 · 右键枪拆配件';
   gunGrid.innerHTML = '';
 
   /* 护甲槽：拖背包里的甲到这儿穿上，身上那件（耐久原样）换到手上 */
@@ -19381,6 +19381,21 @@ function renderPackPanel() {
       Sfx.tone(620, 0.05, 0.04, 'square');
     };
     el.__pkPlace = placeSlot;                     // 拖拽落点用「目标格」自己的放置回调
+    el.oncontextmenu = e => {                     // 右键 = 拆一件配件到手上（按槽位顺序，连按拆光）
+      e.preventDefault(); e.stopPropagation();
+      if (!id) return;
+      if (PK_UI.held) { uiToast('先放下手上的东西再拆配件', 'small warn'); return; }
+      const eq = (SAVE.mods && SAVE.mods[id]) || {};
+      const sid = (MOD_SLOTS.find(s => eq[s.id] && MODS[eq[s.id]]) || {}).id;
+      if (!sid) { uiToast('这把枪没有装配件', 'small warn'); return; }
+      const mid = eq[sid];
+      delete SAVE.mods[id][sid];
+      PK_UI.held = { t: 'mod', id: mid };         // 拆下来的配件回到手上（可以塞包 / 丢地上 / 装别的枪）
+      const left = gunModCount(id);
+      uiToast('已拆下 ' + MODS[mid].name + (left ? ' · 还剩 ' + left + ' 件，继续右键拆' : ' · 配件拆完了'), 'small');
+      Sfx.tone(420, 0.05, 0.04, 'square');
+      renderPackPanel();
+    };
     pkPressable(el, pickSlot, placeSlot);
     gunGrid.appendChild(el);
   }
