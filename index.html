@@ -410,6 +410,8 @@
   .lo-slot.on { border-color:rgba(255,138,76,.55); background:rgba(40,24,12,.55); }
   .lo-ttl { font-size:12px; letter-spacing:.28em; color:#8fd8f2; margin:10px 0 8px; font-weight:800; }
   .lo-ttl b { color:#ffd08a; margin-left:10px; letter-spacing:.06em; font-weight:700; font-size:11px; }
+  .lo-sect { cursor:pointer; user-select:none; }
+  .lo-sect:hover { color:#e8f6ff; }
   .lo-stock { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:4px; padding-right:4px; }
   .lo-row {
     display:flex; align-items:center; gap:10px; padding:7px 10px;
@@ -1506,13 +1508,13 @@ const MEDKITS = {
   box_outdoor: {
     name: '户外医疗箱', short: '户外箱', code: 'OUTDOOR MED BOX',
     dur: 350, hps: 20, wind: 4, price: 500, color: '#7fd4ff', size: 1.32,
-    desc: '350 点耐久，20 血/秒，启动 4s。缺 100 血读 4+5=9s；开箱即处理伤口、注射止痛剂（30 秒减伤 10%）。',
+    desc: '350 点耐久，20 血/秒，启动 4s。缺 100 血读 4+5=9s；开箱即处理伤口、注射止痛剂（30 秒减伤 10%），还带止血敷料：起效时一把压住全部流血层，每压 1 层额外烧 12 点耐久。',
     perk: 'cure', pain: 30,
   },
   box_battle: {
     name: '战地医疗箱', short: '战地箱', code: 'BATTLEFIELD MED CRATE',
     dur: 800, hps: 30, wind: 3.5, price: 800, color: '#ffd66b', size: 1.66,
-    desc: '800 点耐久，30 血/秒，启动 3.5s。缺 80 血读 3.5+3=6.5s、缺 100 血读 3.5+4=7.5s；治伤口 + 60 秒止痛，一支撑满一个据点。',
+    desc: '800 点耐久，30 血/秒，启动 3.5s。缺 80 血读 3.5+3=6.5s、缺 100 血读 3.5+4=7.5s；治伤口 + 60 秒止痛，还带战地止血钳：起效时一把压住全部流血层，每压 1 层额外烧 12 点耐久。一支撑满一个据点。',
     perk: 'cure', pain: 60,
   },
 };
@@ -1520,6 +1522,7 @@ const MEDKIT_ORDER = ['inject_s', 'inject_m', 'kit_vehicle', 'kit_field', 'box_o
 const STARTER_MEDKIT = 'inject_s';
 const PAIN_DR = 0.10;      // 止痛效果：受伤减免
 const WOUND_HEAL_K = 0.75; // 带伤口时包扎效率
+const MEDBOX_STOP_COST = 12; // 医疗箱止血：每压 1 层流血额外扣的耐久
 
 /* ── 止血 / 止痛消耗品 ──
    流血只能靠前两种东西止住：绷带做局部压迫，止血带把近心端的血流掐住。
@@ -1999,7 +2002,7 @@ const CALIBERS = {
   '762': { id:'762', name:'7.62×51mm NATO', short:'7.62×51', full:'7.62×51mm', box:20, base:12,
            desc:'全威力步枪弹：SR9 拿它打半自动，R93 拿它拉栓，同一盒弹喂两把枪。不卖白弹绿弹，上架从蓝弹起步，最高 6 级红弹。' },
   '338': { id:'338', name:'.338 Lapua Magnum', short:'.338 LM', full:'.338 Lapua Magnum', box:10, base:25,
-           desc:'AWM 的远程重弹，一发就是一笔钱。全游戏唯一上架 7 级顶级弹的口径。' },
+           desc:'AWM 的远程重弹，一发就是一笔钱。全游戏唯一上架 7 级顶级弹的口径，而且只卖高级弹：5 级金弹起步，6 级红弹、7 级顶级弹。' },
 };
 const CAL_ORDER = ['919', '918', '762x39', '545', '58', '12g', '556', '762', '338'];
 
@@ -2030,7 +2033,7 @@ const AMMO_LV_MAX = AMMO_TIERS.length - 1;
      手枪 / 霰弹（9×19、9×18、12Ga）     → 0~4 级，最多到紫
      中间威力 / 小口径步枪（39 系、556、58）→ 0~5 级，到金为止
      全威力 7.62×51                        → 0、3~6 级（不卖白绿，起步就是蓝弹）
-     .338 LM                               → 全弹级 0~7（7 级顶级弹是 AWM 专属） */
+     .338 LM                               → 只卖高级弹 5~7 级（金弹起步，7 级顶级弹是 AWM 专属） */
 const CAL_TIERS = {
   '919':    [0, 1, 2, 3, 4],
   '918':    [0, 1, 2, 3, 4],
@@ -2040,7 +2043,7 @@ const CAL_TIERS = {
   '58':     [0, 1, 2, 3, 4, 5],
   '556':    [0, 1, 2, 3, 4, 5],
   '762':    [0, 3, 4, 5, 6],
-  '338':    [0, 1, 2, 3, 4, 5, 6, 7],
+  '338':    [5, 6, 7],
 };
 function calHasTier(cal, lv) {
   const t = CAL_TIERS[cal];
@@ -2543,7 +2546,7 @@ const SKILL = {
   /* 激素枪：充能 30s/发、上限 3 发；打烟染色、打敌人穿甲 0 级、长按 X 自用 */
   heal: { charges: 3, recharge: 30, dmg: 8, pen: 0, heal: 34, regen: 4.2, regenT: 8,
           speed: 940, homing: 3.0, range: 34 * 18 },
-  /* 专业救援：倒地 8 秒自己爬起来，10 血复活；每局一次（CD 360s） */
+  /* 专业救援：倒地后 WASD 爬行 + 长按 F 八秒自救，10 血复活；每局一次（CD 360s） */
   rescue: { down: 8.0, hp: 10, cd: 360, weakCut: 1 },
 
   /* ── 乌鲁鲁（工程）── */
@@ -2641,7 +2644,7 @@ const OPERATORS = {
   beeser: {
     id: 'beeser', name: '蜂医', role: '支援', en: 'HIVES',
     color: '#7dffb0', glow: '#26d96f',
-    desc: '队医。烟是自己的手术室，激素针是自己的止血钳 —— 一个人也能把自己从地上捞起来，只是得躺满八秒。',
+    desc: '队医。烟是自己的手术室，激素针是自己的止血钳 —— 倒下了也会先扑出一团烟，然后按着 F 把自己从地上捞起来。',
     g: {
       name: '蜂巢科技烟雾弹', short: '蜂巢烟', tag: '战术道具', kind: 'beesmoke',
       desc: '按 G 直接投出一枚蜂巢烟：15 秒大烟，和普通烟一样遮断视线。用激素枪打中这团烟（左键或长按 X 自扎都算）会把它染成绿色治疗场：范围 6.8 米，持续 60 秒，敌我站进去都按每秒 3.4 点回血 —— 包括敌人。储备 2 颗，按 40 秒回充。',
@@ -2659,7 +2662,7 @@ const OPERATORS = {
     },
     passive: {
       name: '专业救援', short: '专业救援', tag: '被动', kind: 'rescue',
-      desc: '一个人出勤也死不了：血量见底时不是直接倒下，而是进入倒地状态 8 秒 —— 这 8 秒里敌人照样能把你打死，但你自己能爬。撑满 8 秒自动起身：10 点血、移除「血量上限降低」的虚弱。每局只有一次（CD 360 秒）。',
+      desc: '血量见底时不是直接死，而是倒地：倒地瞬间自动扑出一团蜂巢烟把手术室铺上，之后只能用 WASD 慢慢爬（打不了枪、用不了技能）。倒地有独立的 100 点血条，无护甲减伤 —— 敌人打多少扣多少，扣光直接阵亡。长按 F 累计 8 秒完成自救：10 点血爬起来，松手进度暂停但不回退。每局只有一次（CD 360 秒）。',
     },
   },
 
@@ -3585,6 +3588,8 @@ window.addEventListener('keydown', e => {
     return;
   }
   if (G.scene !== 'playing') return;
+  /* 倒地：F 是长按自救（在 updateDowned 里读 keys），其他交互 / 技能 / 开火全部封死 */
+  if (isDowned()) return;
   if (k === 'f' && !e.repeat) searchInteract();   // 点一下开箱，不用长按
   if (k === 'e' && !e.repeat) switchInteract();   // E：拉总闸 / 丢包点丢背包
   if (k === 'r') startReload();
@@ -3724,12 +3729,15 @@ const P = {
   speed: 165,                   // 走路基础速度（配合 0.85 相机缩放：屏幕速度再降 15%）
   stamina: 100,                 // 体力：跑步消耗，不跑才回
   sprinting: false,             // 这一帧是否在跑
+  sprintLatch: false,           // 跑步姿态锁存：移动中按过 Shift 就一直跑，停下来才解除
   exhaust: 0,                   // 力竭锁定剩余时间
   armorLoad: 0,                 // 当前护甲的负重（影响走速与体力消耗）
   /* 干员技能运行时：g/v 各自 {cd,use}（use = 本局剩余储备），x = {cd,on,t}，
      volley 是三连发的排程，slide/slideA 是滑铲的剩余时间与方向 */
   op: null,
-  downed: 0,                    // 蜂医被动：倒地剩余时间（>0 就趴着）
+  downed: 0,                    // 蜂医被动：>0 = 倒地中（要长按 F 自救，或被打死）
+  downHp: 0,                    // 倒地血条：100 点，无护甲减伤，扣光直接阵亡
+  downRev: 0,                   // 长按 F 自救已累计的秒数
   regenT: 0,                    // 激素针的后续回血剩余时间
   concuss: 0,                   // 被自己的榴弹震到：眩晕，重影 + 不能开镜
   aim: 0,
@@ -4553,6 +4561,9 @@ function initOperatorSkills() {
   P.concuss = 0;
   P.kd = 0;                // 被虎蹲炮掀翻的剩余时间
   P.downed = 0;            // 每局重新开始，倒地状态清零
+  P.downHp = 0;
+  P.downRev = 0;
+  P.sprintLatch = false;   // 跑步姿态锁存一并清掉
   P.regenT = 0;
 }
 
@@ -4955,12 +4966,16 @@ function painWorthIt() {
 function careAutoPick() {
   const d = P.deb || {};
 
-  /* ① 止血：两层以上有止血带就一把压完（2.6s），只有一层先用便宜的绷带（1.8s） */
+  /* ① 止血：两层以上有止血带就一把压完（2.6s），只有一层先用便宜的绷带（1.8s）
+     没带绷带 / 止血带时，带止血功能的医疗箱（户外箱 / 战地箱）也能一把压住 —— 烧的是箱子耐久 */
   if (d.bleed > 0) {
     const band = stopCount('bandage'), tour = stopCount('tourniquet');
     if (d.bleed >= 2 && tour > 0) return careKeyMake('stop', 'tourniquet');
     if (band > 0) return careKeyMake('stop', 'bandage');
     if (tour > 0) return careKeyMake('stop', 'tourniquet');
+    for (const mid of MEDKIT_ORDER) {
+      if (MEDKITS[mid].perk === 'cure' && medCount(mid) > 0) return careKeyMake('med', mid);
+    }
   }
 
   /* ② 止痛：药效还在就不重复吃（不叠加，只是烧库存）；挑最便宜的那种先吃 */
@@ -5855,6 +5870,22 @@ function updateMedHeal(dt) {
       P.burnTick = 0;
       P.painT = Math.max(P.painT, M.pain || 20);
       if (had) popup(P.x, P.y - 48, '伤口处理 · 止痛 ' + M.pain + 's', '#9fffd0', 14);
+      /* 开箱即止血：一把压住全部流血层，每压 1 层额外烧 MEDBOX_STOP_COST 点耐久 */
+      const s0 = medUnit(id);
+      const layers = P.deb.bleed | 0;
+      if (layers > 0 && s0) {
+        const cost = Math.min(layers * MEDBOX_STOP_COST, s0.left);
+        s0.left = Math.max(0, s0.left - cost);
+        stopBleeding(layers);
+        popup(P.x, P.y - 62, '止血 ×' + layers + ' · 耐久 -' + Math.ceil(cost), M.color, 13);
+        if (s0.left <= 0.01) {          // 止血就把这支烧干了：直接收手
+          consumeMedUnit(id);
+          P.medOn = null;
+          uiToast(M.name + ' 用完了', 'small warn');
+          backToGun();
+          return;
+        }
+      }
     }
     Sfx.heal();
     popup(P.x, P.y - 44, '开始回血 · ' + P.medHealT.toFixed(1) + 's', M.color, 12);
@@ -5908,15 +5939,20 @@ function updateMedHeal(dt) {
   }
 }
 
-/* ── 跑步结算：按住 Shift 就跑，体力见底进入力竭 ──
+/* ── 跑步结算：移动中按一下 Shift 就进入跑步姿态 ──
+   姿态是「锁存」的：只要人还在移动就一直跑，不用按着不放；
+   松开方向键（停下来）姿态解除，再次移动后要重新按 Shift 才会接着跑。
    只有「在动 + 没开镜 + 没换弹 + 没在包扎 + 腿没断 + 没力竭」才跑得起来；
    已经在跑的人可以一直跑到 0，重新起跑要 >= resumeAt，避免在 0 附近反复抖。 */
 function updateSprint(dt, il) {
   const load = P.armorLoad || 0;
-  if (dashOn() || knockOn() || isDowned()) { P.sprinting = false; return; }   // 推进 / 倒地时不算跑
+  if (dashOn() || knockOn() || isDowned()) { P.sprinting = false; P.sprintLatch = false; return; }   // 推进 / 倒地时不算跑
   const ready = P.alive && il > 0 && P.ads < 0.3 && P.reloading <= 0 &&
                 P.medOn === null && !legBroken() && P.exhaust <= 0 && !modeOn();
-  const run = ready && !!keys['shift'] &&
+  /* 锁存：移动中按 Shift 上膛；一停下来就解除，重新起跑要再按一次 */
+  if (keys['shift'] && il > 0 && ready && P.stamina >= SPRINT.resumeAt) P.sprintLatch = true;
+  if (il <= 0 || !ready) P.sprintLatch = false;
+  const run = ready && P.sprintLatch &&
               (P.sprinting ? P.stamina > 0 : P.stamina >= SPRINT.resumeAt);
 
   if (run && !P.sprinting) Sfx.dash();          // 起跑：一声脚步
@@ -5953,12 +5989,12 @@ function updatePlayer(dt) {
     P.hp = Math.min(P.maxHp, P.hp + SKILL.heal.regen * dt);
   }
 
-  /* 蜂医倒地：动不了、打不了，只能等着自己爬起来（或者被打死） */
+  /* 蜂医倒地：只能 WASD 爬行 + 长按 F 自救，打不了枪用不了技能 */
   if (isDowned()) {
     updateDowned(dt);
     P.aim = Math.atan2(mouse.y / ZOOM + G.cam.y - P.y, mouse.x / ZOOM + G.cam.x - P.x);
-    P.vx = 0; P.vy = 0;
     mouse.pressed = false;
+    mouse.right = false;
     return;
   }
 
@@ -6174,18 +6210,28 @@ function pickupInteract() {
 }
 
 /* ── 蜂医被动：专业救援 ──
-   一个人出勤时，血量见底不是直接结账，而是「倒地」8 秒：
-   这 8 秒里敌人照样能补枪把你打死，撑过去就 10 血自己爬起来。 */
+   血量见底不是直接结账，而是「倒地」：倒地瞬间自动扑出一团蜂巢烟遮住自己，
+   只能用 WASD 慢慢爬（很慢），打不了枪、用不了技能。
+   倒地有独立的 100 点血条，无护甲减伤 —— 敌人打多少扣多少，扣光直接阵亡。
+   长按 F 累计 8 秒完成自救：10 点血爬起来。松开 F 进度暂停但不回退。 */
+const DOWNED_MAX_HP = 100;    // 倒地血条
+const DOWNED_SPEED = 46;      // 爬行速度（走路 165 的 ~28%，真的慢）
 function isDowned() { return (P.downed || 0) > 0; }
 
 function startDowned() {
-  P.downed = SKILL.rescue.down;
+  P.downed = 1;
+  P.downHp = DOWNED_MAX_HP;
+  P.downRev = 0;
   P.hp = 0;
   P.invuln = 1.2;
   P.burnT = 0;
   if (P.op) P.op.rescueCd = SKILL.rescue.cd;
   exitMode(true);
-  uiToast('倒地 · 8 秒后自行爬起', 'small warn');
+  if (G.lootPanel) closeLootPanel();          // 倒地瞬间还开着容器：收起来，别挡 F 自救
+  /* 倒地自动扑烟：蜂医的烟是自己的手术室，躺下之前先把自己的手术室铺上 */
+  G.smokes.push({ x: P.x, y: P.y, t: 0, r: 0, seed: rand(0, 100), life: SKILL.bee.life, bee: true });
+  popup(P.x, P.y - 66, '蜂 巢 烟', '#8dffc0', 12);
+  uiToast('倒地 · 长按 F 自救（8 秒）· 爬行中', 'small warn');
   popup(P.x, P.y - 54, '倒 地', '#8dffc0', 16);
   Sfx.hurt();
   shake(12);
@@ -6193,18 +6239,46 @@ function startDowned() {
 }
 
 function updateDowned(dt) {
-  P.downed = Math.max(0, P.downed - dt);
-  if (Math.random() < dt * 9) {
-    addParticle(P.x + rand(-12, 12), P.y + rand(-6, 12), {
-      vx: rand(-10, 10), vy: rand(-24, -6), life: rand(0.4, 0.8), r: rand(2, 4),
-      color: pick(['#8dffc0', '#ff4060']), drag: 0.92, glow: true,
+  P.invuln = Math.max(0, P.invuln - dt);   // 倒地分支不走 updatePlayer 的衰减，这里自己扣
+
+  /* ── 爬行：只有 WASD，速度很慢，撞墙照样被挡 ── */
+  let ix = 0, iy = 0;
+  if (keys['a'] || keys['arrowleft']) ix -= 1;
+  if (keys['d'] || keys['arrowright']) ix += 1;
+  if (keys['w'] || keys['arrowup']) iy -= 1;
+  if (keys['s'] || keys['arrowdown']) iy += 1;
+  const il = Math.hypot(ix, iy);
+  if (il > 0) { ix /= il; iy /= il; }
+  P.x += ix * DOWNED_SPEED * dt;
+  P.y += iy * DOWNED_SPEED * dt;
+  P.vx = ix * DOWNED_SPEED;
+  P.vy = iy * DOWNED_SPEED;
+  resolveCircleRects(P);
+  clampWorld(P);
+  P.walkPhase += dt * (il > 0 ? 5 : 0);
+  if (il > 0 && Math.random() < dt * 8) {
+    addParticle(P.x - ix * 14 + rand(-6, 6), P.y - iy * 14 + rand(-4, 8), {
+      vx: rand(-14, 14), vy: rand(-16, 2), life: rand(0.3, 0.6), r: rand(1.6, 3),
+      color: 'rgba(150,170,190,0.4)', drag: 0.9,
     });
   }
-  if (P.downed <= 0) reviveSelf();
+
+  /* ── 长按 F 自救：累计满 8 秒爬起来；松手进度停住但不倒退 ── */
+  const pulling = !!keys['f'] && !G.lootPanel;
+  P.downRev = clamp(P.downRev + (pulling ? dt : 0), 0, SKILL.rescue.down);
+  if (pulling && Math.random() < dt * 10) {
+    addParticle(P.x + rand(-14, 14), P.y + rand(-10, 8), {
+      vx: rand(-8, 8), vy: rand(-30, -8), life: 0.45, r: rand(1.6, 3),
+      color: pick(['#8dffc0', '#d8ffe8']), drag: 0.93, glow: true,
+    });
+  }
+  if (P.downRev >= SKILL.rescue.down) reviveSelf();
 }
 
 function reviveSelf() {
   P.downed = 0;
+  P.downHp = 0;
+  P.downRev = 0;
   P.hp = SKILL.rescue.hp;
   P.deb.weak = 0;              // 专业救援：把「血量上限降低」一并清掉
   recalcMaxHp();
@@ -6237,6 +6311,21 @@ function armorBreak() {
 
 function damagePlayer(amount, srcX, srcY, inv, pen) {
   if (P.invuln > 0 || !P.alive) return;
+  /* 倒地：独立的 100 点血条，无护甲减伤、不吃止痛不吃创伤 —— 敌人打多少扣多少 */
+  if (isDowned()) {
+    P.downHp -= amount;
+    P.invuln = 0.3;
+    P.hurtFlash = 1;
+    if (typeof srcX === 'number' && typeof srcY === 'number') {
+      P.hurtDir = Math.atan2(srcY - P.y, srcX - P.x);
+      P.hurtDirT = 1.5;
+    }
+    shake(7);
+    Sfx.hurt();
+    burst(P.x, P.y, 8, { color: ['#ff4060', '#ff8fa3'], life: 0.4, r: 3, spdMin: 60, spdMax: 200 });
+    if (P.downHp <= 0) { P.hp = 0; playerLethal(); }
+    return;
+  }
   let dmg = amount;
   /* 护甲：有耐久才生效 ——
      带弹级的伤害（子弹）走弹级对照表：同级弹减半、低两级全挡、高两级全穿；挡下的部分磨甲；
@@ -15915,7 +16004,8 @@ function updateFog(dt) {
     }
   }
 
-  // 玩家脚下的贴身感知圈（正面半圆）：窄巷里准星怼着墙时，至少能看清身周一圈
+  // 玩家脚下的贴身感知圈（正面半圆）：窄巷里准星怼着墙时，至少能看清身周一圈。
+  // 每格做一次视线步进：隔着墙的格子不点亮（墙本身照常亮），修掉「面对墙却看见墙后面」的视野穿透。
   const pc = (px / cell) | 0, pr = (py / cell) | 0;
   const nearC = Math.ceil(FOG_NEAR / cell);
   for (let r = pr - nearC; r <= pr + nearC; r++) {
@@ -15924,9 +16014,23 @@ function updateFog(dt) {
       if (k < 0 || k >= cols) continue;
       const dx = (k + 0.5) * cell - px, dy = (r + 0.5) * cell - py;
       if (dx * adx + dy * ady < 0) continue;        // 落在身后就不给光
-      if (dx * dx + dy * dy > FOG_NEAR * FOG_NEAR) continue;
-      vis[r * cols + k] = 1;
-      seen[r * cols + k] = 1;
+      const d2 = dx * dx + dy * dy;
+      if (d2 > FOG_NEAR * FOG_NEAR) continue;
+      const idx = r * cols + k;
+      if (!block[idx]) {
+        // 目标格不是墙：从玩家到格心步进，中途撞到别的墙格 = 隔墙，不给光
+        const dist = Math.sqrt(d2);
+        const steps = Math.max(1, Math.ceil(dist / (cell * 0.45)));
+        let clear = true;
+        for (let s = 1; s < steps; s++) {
+          const t = s / steps;
+          const sx = px + dx * t, sy = py + dy * t;
+          if (block[((sy / cell) | 0) * cols + ((sx / cell) | 0)]) { clear = false; break; }
+        }
+        if (!clear) continue;
+      }
+      vis[idx] = 1;
+      seen[idx] = 1;
     }
   }
 
@@ -16216,10 +16320,10 @@ function render() {
   }
 }
 
-/* 倒地：画面压红、四角收暗，中间一条起身进度 —— 这 8 秒敌人还能补枪 */
+/* 倒地：画面压红、四角收暗 —— 上面是倒地血条，下面是长按 F 的自救进度 */
 function drawDownedOverlay() {
   if (!isDowned() || !P.alive) return;
-  const k = clamp(P.downed / SKILL.rescue.down, 0, 1);
+  const k = clamp((P.downRev || 0) / SKILL.rescue.down, 0, 1);
   ctx.save();
   ctx.fillStyle = 'rgba(26,8,14,0.46)';
   ctx.fillRect(0, 0, VW, VH);
@@ -16231,22 +16335,35 @@ function drawDownedOverlay() {
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, VW, VH);
 
+  /* 自救进度（长按 F 累计） */
   const w = 260, h = 7;
   const bx = cx - w / 2, by = cy + 84;
   ctx.fillStyle = 'rgba(0,0,0,0.62)';
   drawRoundRect(bx - 2, by - 2, w + 4, h + 4, 3);
   ctx.fill();
   ctx.fillStyle = 'rgba(120,255,180,0.85)';
-  drawRoundRect(bx, by, Math.max(2, w * (1 - k)), h, 3);
+  drawRoundRect(bx, by, Math.max(2, w * k), h, 3);
+  ctx.fill();
+
+  /* 倒地血条 */
+  const hw = 200, hh = 5;
+  const hx = cx - hw / 2, hy = cy + 64;
+  ctx.fillStyle = 'rgba(0,0,0,0.62)';
+  drawRoundRect(hx - 2, hy - 2, hw + 4, hh + 4, 3);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,90,110,0.9)';
+  drawRoundRect(hx, hy, Math.max(2, hw * clamp((P.downHp || 0) / DOWNED_MAX_HP, 0, 1)), hh, 3);
   ctx.fill();
 
   ctx.textAlign = 'center';
   ctx.fillStyle = '#a8f5c8';
   ctx.font = '800 17px ui-monospace, "Consolas", monospace';
-  ctx.fillText('倒 地', cx, cy + 58);
+  ctx.fillText('倒 地', cx, cy + 40);
   ctx.fillStyle = 'rgba(220,255,235,0.9)';
   ctx.font = '700 12px ui-monospace, "Consolas", monospace';
-  ctx.fillText('自行救援中 · ' + P.downed.toFixed(1) + 's · 现在挨枪就没了', cx, cy + 112);
+  ctx.fillText('倒地血 ' + Math.max(0, Math.ceil(P.downHp || 0)) + ' · 无护甲减伤 · 挨枪就没了', cx, cy + 106);
+  ctx.fillStyle = k > 0 ? 'rgba(141,255,192,0.95)' : 'rgba(200,220,235,0.72)';
+  ctx.fillText('长按 F 自救 · ' + (P.downRev || 0).toFixed(1) + ' / ' + SKILL.rescue.down.toFixed(0) + 's', cx, cy + 126);
   ctx.restore();
 }
 
@@ -18245,11 +18362,28 @@ function renderLoSlot(slot) {
 function renderLoStock() {
   const stockEl = $('loStock');
   stockEl.innerHTML = '';
-  const sect = t => {
+  /* 分类折叠：点分类标题收起 / 展开，物品多的时候不用来回滑 */
+  if (!LO_UI.open) LO_UI.open = {};
+  let curBox = stockEl;
+  const sect = (t, id) => {
     const d = document.createElement('div');
     d.className = 'lo-ttl lo-sect';
-    d.textContent = t;
+    d.title = '点击收起 / 展开';
+    const box = document.createElement('div');
     stockEl.appendChild(d);
+    stockEl.appendChild(box);
+    const apply = () => {
+      const open = LO_UI.open[id] !== false;
+      box.style.display = open ? '' : 'none';
+      d.textContent = (open ? '▾ ' : '▸ ') + t;
+    };
+    d.addEventListener('click', () => {
+      LO_UI.open[id] = (LO_UI.open[id] === false);
+      apply();
+      Sfx.tone(LO_UI.open[id] ? 320 : 480, 0.04, 0.03, 'square');
+    });
+    apply();
+    curBox = box;
   };
   const row = o => {
     const el = document.createElement('div');
@@ -18263,12 +18397,12 @@ function renderLoStock() {
       el.addEventListener('mouseenter', () => { LO_UI.hoverRow = el; });
       el.addEventListener('mouseleave', () => { if (LO_UI.hoverRow === el) LO_UI.hoverRow = null; });
     }
-    stockEl.appendChild(el);
+    curBox.appendChild(el);
   };
 
   /* 武器：长枪 / 手枪 / 近战，点了拿在手上装进左边对应槽。
      已经装在槽里的那把：先从槽里退出来再拿，别搞出「身上一把手上一把」的幻影副本 */
-  sect('武 器');
+  sect('武 器', 'weapon');
   for (const id of WEAPON_ORDER) {
     if (!SAVE.owned[id]) continue;
     const W = WEAPONS[id];
@@ -18303,7 +18437,7 @@ function renderLoStock() {
   /* 护甲：仓库里的实体件，穿上 = 从仓库拿出一件。
      身上穿的那件也在列表里：先脱下来再拿，不然会出现幻影副本。
      数量为 0 且没穿的直接不显示 —— 只看自己有的东西 */
-  sect('护 甲');
+  sect('护 甲', 'armor');
   /* 仓库件：一件一行 —— 每件有自己的耐久，磨了/修了都记在件上 */
   for (let i = SAVE.armorPieces.length - 1; i >= 0; i--) {
     const pc = SAVE.armorPieces[i];
@@ -18321,7 +18455,7 @@ function renderLoStock() {
   /* 身上穿的这件不在仓库列表里 —— 左侧护甲槽右键可脱下（会回到本列表） */
 
   /* 携行装备：弹挂 / 背包，买过就永久拥有，穿了才算数 */
-  sect('携 行');
+  sect('携 行', 'gear');
   let gearAny = false;
   for (const key in GEAR) {
     if (!gearOwnedOf(key)) continue;
@@ -18345,14 +18479,14 @@ function renderLoStock() {
     const el = document.createElement('div');
     el.className = 'lo-row off';
     el.innerHTML = '<span class="nm">没买过携行装备</span><span class="sub">军火库「携行」页有弹挂和背包</span><span class="ct">—</span>';
-    stockEl.appendChild(el);
+    curBox.appendChild(el);
   }
 
   /* 弹药：每个口径每个弹级单独一行（1 级弹和 4 级弹分开放，想拿哪级拿哪级），
      拿取只从对应弹级扣（按选用弹级拿的那行会标「选用」）；
      格上限 = 已有枪里最大弹匣×2，只能放弹挂 / 口袋。
      数量为 0 的弹级不显示 —— 只看自己有的东西 */
-  sect('弹 药');
+  sect('弹 药', 'ammo');
   for (const cal of CAL_ORDER) {
     const C = CALIBERS[cal];
     const hasGun = WEAPON_ORDER.some(w => SAVE.owned[w] && calOfWeapon(w) === cal);
@@ -18371,7 +18505,7 @@ function renderLoStock() {
   }
 
   /* 医疗：数量为 0 的不显示 —— 只看自己有的东西 */
-  sect('医 疗');
+  sect('医 疗', 'med');
   for (const id of MEDKIT_ORDER) {
     const M = MEDKITS[id];
     const have = saveMedCount(id);
