@@ -6169,19 +6169,13 @@ function updatePlayer(dt) {
   }
   mouse.pressed = false;      // 一次按下只算一次扣扳机
 
-  // 地上掉落：只做磁吸聚拢，不再自动入包 —— 靠近后按 F 拾取
+  // 地上掉落：原地放着，靠近后按 F 拾取（磁吸聚拢已删 —— 手动拾取时代物品再粘着人走就是 BUG）
   for (let i = G.pickups.length - 1; i >= 0; i--) {
     const p = G.pickups[i];
     p.life -= dt;
     p.bob += dt * 4;
     if (p.cool > 0) p.cool -= dt;
     if (p.life <= 0) { G.pickups.splice(i, 1); continue; }
-    const d = dist(P.x, P.y, p.x, p.y);
-    if (d < 115 && d > 1 && !(p.cool > 0)) {
-      const pull = (1 - d / 115) * 320;
-      p.x += (P.x - p.x) / d * pull * dt;
-      p.y += (P.y - p.y) / d * pull * dt;
-    }
   }
 }
 
