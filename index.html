@@ -220,16 +220,15 @@
   /* 子分类行：武器类目下的枪种筛选，同款标签缩小一号 */
   .tabs.sub { margin-top:10px; }
   .tabs.sub .tab { font-size:11px; padding:7px 16px; letter-spacing:.18em; }
-  /* 主/子类目条吸顶：长列表滚动时类目固定在最顶部不跟着走 */
-  #shopTabs {
-    position: sticky; top: 0; z-index: 6;
-    padding: 6px 0 8px; margin-top: -6px;
-    background: linear-gradient(180deg, #0a1420 0%, #0a1420 86%, rgba(10,20,32,0) 100%);
+  /* 军火库头部整块吸顶：标题 + 余额 + 主/子类目条一起钉在最上面，长列表滚动不跟着走 */
+  #shopHead {
+    position: sticky; top: 0; z-index: 7;
+    display: flex; flex-direction: column; gap: 14px;
+    padding: 10px 0 10px;
+    background: linear-gradient(180deg, #0a1420 0%, #0a1420 88%, rgba(10,20,32,0) 100%);
   }
-  #shopSubTabs {
-    position: sticky; top: 47px; z-index: 5;
-    background: #0a1420; padding: 2px 0 8px;
-  }
+  #shopHead .topbar { padding-bottom: 0; }
+  #shopSubTabs.hidden { display: none; }             /* 没有子类目的主类目：整行藏掉 */
 
   .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(232px,1fr)); gap:12px; }
 
@@ -862,21 +861,23 @@
 <!-- ══════════ 商店 ══════════ -->
 <div id="shop" class="overlay hidden">
   <div class="frame">
-    <header class="topbar">
-      <div class="logo" style="font-size:22px">军火库</div>
-      <div class="wallet"><i>¥</i><b id="shopCredit">0</b></div>
-      <button id="closeShop" class="btn ghost small">返回大厅</button>
-    </header>
-    <div class="tabs" id="shopTabs">
-      <button class="tab on" data-tab="weapon">武 器</button>
-      <button class="tab" data-tab="melee">近 战</button>
-      <button class="tab" data-tab="armor">护 甲</button>
-      <button class="tab" data-tab="rig">弹 挂</button>
-      <button class="tab" data-tab="pack">背 包</button>
-      <button class="tab" data-tab="ammo">弹 药</button>
-      <button class="tab" data-tab="supply">补 给</button>
+    <div id="shopHead">
+      <header class="topbar">
+        <div class="logo" style="font-size:22px">军火库</div>
+        <div class="wallet"><i>¥</i><b id="shopCredit">0</b></div>
+        <button id="closeShop" class="btn ghost small">返回大厅</button>
+      </header>
+      <div class="tabs" id="shopTabs">
+        <button class="tab on" data-tab="weapon">武 器</button>
+        <button class="tab" data-tab="melee">近 战</button>
+        <button class="tab" data-tab="armor">护 甲</button>
+        <button class="tab" data-tab="rig">弹 挂</button>
+        <button class="tab" data-tab="pack">背 包</button>
+        <button class="tab" data-tab="ammo">弹 药</button>
+        <button class="tab" data-tab="supply">补 给</button>
+      </div>
+      <div class="tabs sub hidden" id="shopSubTabs"></div>
     </div>
-    <div class="tabs sub hidden" id="shopSubTabs"></div>
     <div class="grid" id="shopGrid"></div>
   </div>
 </div>
