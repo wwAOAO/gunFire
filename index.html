@@ -2797,8 +2797,8 @@ const GEAR = {
               blocks: [3, 3, 4, 4, 3, 3, 2],
               desc: '二十二格战术胸挂。快拆扣具加导流肩带，重而不坠，抬枪只慢一丝。' },
   gir:      { name: 'GIR野战胸挂',      kind: 'rig', cap: 20, price: 8800,  q: '金', color: '#ffcc4d',
-              blocks: [4, 4, 4, 4, 4],
-              desc: '二十格野战胸挂，五个四格大舱。五个隔舱整整齐齐，像为搜索弹匣而生的五指。' },
+              blocks: [[4, 2], [4, 2], [3, 1], [3, 1], [3, 1], [3, 1]],
+              desc: '二十格野战胸挂。两个 2x2 杂物舱配四条竖式弹匣舱（1x3），为压满弹匣而生的经典布局。' },
   drc:      { name: 'DRC先进侦察胸挂',  kind: 'rig', cap: 17, price: 6400,  q: '紫', color: '#b782ff',
               blocks: [4, 4, 2, 4, 3],
               desc: '十七格先进侦察胸挂。侦察单位特供，大舱小袋混排，深入敌后也够用。' },
@@ -4983,6 +4983,10 @@ function blkCols(n) {
   for (let c = Math.ceil(Math.sqrt(n)); c <= 10; c++) if (n % c === 0) return c;
   return 10;
 }
+/* 隔舱数显示：只报格数（[3,1] 这种列数写法不进文案） */
+function blkSizesText(blocks) { return blocks.map(b => Array.isArray(b) ? b[0] : b).join('+'); }
+/* 隔舱定义解析：数字 = 自动列数（blkCols），[格数, 列数] = 指定列数（如 [3,1] = 竖 1x3 弹匣条） */
+function blkSpec(b) { return Array.isArray(b) ? [b[0], b[1]] : [b, blkCols(b)]; }
 /* sz 格物品在 C 列舱里的 w×h 形状（与铺设、渲染一一对应） */
 function itemShape(sz, C) {
   if (C <= 1) return [1, Math.max(1, sz)];   // 单列舱（口袋 / 1 格）：竖放
@@ -4994,16 +4998,16 @@ function itemShape(sz, C) {
 }
 /* 某容器（'rig' | 'pocket' | 'pack'）的隔舱 → [[start, end, cols], ...] */
 function zoneBlocks(zone) {
-  if (zone === 'pocket') {                                   // 口袋：默认 1x4 横条；升级后 1 + 2x1 + 2x1 + 1
+  if (zone === 'pocket') {                                   // 口袋：默认四个单格舱；升级后 1 + 2x1 + 2x1 + 1
     const out = []; let s = 0;
-    for (const b of pocketBlocks()) { out.push([s, s + b, b >= 4 ? b : blkCols(b)]); s += b; }
+    for (const b of pocketBlocks()) { const [n, cols] = blkSpec(b); out.push([s, s + n, cols]); s += n; }
     return out;
   }
   const g = wornGear(zone);
   if (!g || !(g.cap > 0)) return [];
   if (!g.blocks) return [[0, g.cap, blkCols(g.cap)]];
   const out = []; let s = 0;
-  for (const b of g.blocks) { out.push([s, s + b, blkCols(b)]); s += b; }
+  for (const b of g.blocks) { const [n, cols] = blkSpec(b); out.push([s, s + n, cols]); s += n; }
   return out;
 }
 function blkAt(blocks, i) { for (const b of blocks) if (i >= b[0] && i < b[1]) return b; return null; }
@@ -11082,7 +11086,7 @@ function makeGearItem(key) {
     kind: 'gear', gear: key, icon: g.kind === 'rig' ? '▤' : '▩',
     name: g.name, val: g.cap + ' 格', color: g.color || '#ffb08a', tier: 'rare',
     note: (g.kind === 'rig' ? '弹挂 · 快捷可用 · ' : '背包 · Tab 倒腾 · ') + g.cap + ' 格' +
-      (g.blocks ? '（隔舱 ' + g.blocks.join('+') + '）' : '') +
+      (g.blocks ? '（隔舱 ' + blkSizesText(g.blocks) + '）' : '') +
       (g.ads ? ' · 瞄准速度 ' + g.ads + '%' : '') + (g.spd ? ' · 移动速度 ' + g.spd + '%' : '') + ' · 拿起直接换穿',
   };
 }
@@ -18057,7 +18061,7 @@ function refreshShop() {
         (gowned ? '<span class="tag own">×' + gcnt + '</span>' : '<span class="tag" style="color:' + s.color + '">' + s.q + ' · ' + kindName(s.kind) + '</span>') + '</div>' +
         '<div class="ds">' + s.desc + '</div>' +
         '<div class="ds" style="color:#6fb0cf">' + kindName(s.kind) + ' · 穿上后 ' + s.cap + ' 格' +
-          (s.blocks ? '（隔舱 ' + s.blocks.join('+') + '）' : '') + ' · 整备界面穿 / 脱</div>' +
+          (s.blocks ? '（隔舱 ' + blkSizesText(s.blocks) + '）' : '') + ' · 整备界面穿 / 脱</div>' +
         ((s.ads || s.spd) ? '<div class="ds" style="color:#ff9c8a">修正：' + (s.ads ? '瞄准速度 ' + s.ads + '%　' : '') + (s.spd ? '移动速度 ' + s.spd + '%' : '') + '</div>' : '') +
         '<div class="bars">' + bar('容量', s.cap / 50) + '</div>' +
         '<div class="buyrow">' +
@@ -19094,7 +19098,7 @@ function renderLoStock() {
     row({
       nm: g.name, color: g.color || '#ffb08a',
       sub: (g.q ? g.q + ' · ' : '') + (g.kind === 'rig' ? '弹挂 · 快捷可用 · ' : '背包 · Tab 倒腾 · ') + g.cap + ' 格' +
-        (g.blocks ? '（' + g.blocks.join('+') + ' 舱）' : '') +
+        (g.blocks ? '（' + blkSizesText(g.blocks) + ' 舱）' : '') +
         (g.ads ? ' · 瞄准速度 ' + g.ads + '%' : '') + (g.spd ? ' · 移动速度 ' + g.spd + '%' : ''),
       ct: '备用 ×' + gspare,
       pick: () => loSetHeld({ t: 'gear', key }),   // 拿备用件，身上穿着的不动
