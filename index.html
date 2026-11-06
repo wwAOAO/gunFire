@@ -1533,19 +1533,27 @@ const PACK_KEY_MIGRATE = { pack_assault: 'pack_sling', pack_large: 'pack_sport',
    那时 WEAPONS / MEDKITS 这些运行期数据表还没初始化。
    没登记的 id 按类型兜底：枪 4 / 手术·修理·近战 2 / 护甲 6 / 其余 1。 */
 const CELLS = {
-  /* 枪：手枪 2（1x2），冲锋枪·步枪·精确射手 4（2x2），霰弹枪·狙击枪 6（3x2） */
+  /* 枪：手枪 2（1x2），冲锋枪 6（3x2），步枪 10（5x2），狙击 5~7（横条），霰弹 8（4x2） */
   g17: 2, '93r': 2, g18: 2,
-  bizon: 4,
-  akm: 4, m4a1: 4, qbz95: 4, ak12: 4, qbz192: 4, qbz191: 4, sr9: 4,
-  m870: 6, r93: 6, awm: 6,
+  bizon: 6,
+  akm: 10, m4a1: 10, qbz95: 10, ak12: 10, qbz192: 10, qbz191: 10, sr9: 10,
+  m870: 8, r93: 5, awm: 7,
   /* 医疗包：注射器 1，软包 2，医疗箱 4 */
   inject_s: 1, inject_m: 1, kit_vehicle: 2, kit_field: 2, box_outdoor: 4, box_battle: 4,
   /* 止血 / 止痛：一律 1 格 */
   bandage: 1, tourniquet: 1, pain_release: 1, pain_antibio: 1, pain_dve: 1,
-  /* 手术包：简易 / 战术快拆 2，DEK 4 */
-  surg_simple: 2, surg_tactical: 2, surg_dek: 4,
+  /* 手术包：简易 1，战术快拆 2，DEK 3 */
+  surg_simple: 1, surg_tactical: 2, surg_dek: 3,
   /* 甲修包：蓝 / 紫 2，金 / 红 4 */
   repair_b: 2, repair_p: 2, repair_g: 4, repair_r: 4,
+};
+/* 显式占格形状 [宽, 高]：宽 = 横排格数，高 = 行数。表里没有的按 cellSize + 舱列数自动取近似方形。
+   舱放不下这个宽度时会自动躺倒（宽高互换）—— 比如 AWM 7x1 进 5 列背包格就竖成 1x7。 */
+const SHAPES = {
+  akm: [5, 2], m4a1: [5, 2], qbz95: [5, 2], ak12: [5, 2], qbz192: [5, 2], qbz191: [5, 2], sr9: [5, 2],
+  bizon: [3, 2],
+  m870: [4, 2], r93: [5, 1], awm: [7, 1],
+  surg_simple: [1, 1], surg_tactical: [2, 1], surg_dek: [3, 1],
 };
 
 
@@ -2814,8 +2822,9 @@ function exoOn() { return !!(P.op && P.op.x && P.op.x.on); }
 const GEAR = {
   /* ── 弹挂（隔舱制：blocks = [格数,列数,(排断点:1=强制换行 2=强制同行)]，总和 = cap = 携带空间，
         排布逐件对照实物图：高度变化自动换行，同排高低舱混排用 2 压住。
-        物品占格查 CELLS 表：弹药 / 止血 / 止痛 / 收集品 / 配件 1 格，手枪 2 格，
-        步枪 4 格，狙击 / 霰弹 6 格，手术包 2~4 格，甲修包 2~4 格，护甲 6 格
+        物品占格查 SHAPES 表（宽×高）：手枪 2、冲锋枪 3x2、步枪 5x2、M870 4x2、狙击 5~7 横条，
+        手术包 1~3 格，甲修包 2~4 格，护甲按等级（3 级 3x2 / 4 级 4x2 / 5·6 级 5x2），
+        弹挂 2x2、背包 2x2（金红 3x2）
         —— 必须整个塞进同一个隔舱的连续空格里。
         ads / spd = 瞄准速度 / 移动速度 修正（负数为惩罚，百分比）── */
   dar:      { name: 'DAR突击手胸挂',   kind: 'rig', cap: 24, price: 16000, q: '红', color: '#ff7a9c', ads: -5, spd: -1,
@@ -2969,6 +2978,20 @@ function wornGear(kind) {
   return (k && GEAR[k] && GEAR[k].kind === kind) ? GEAR[k] : null;
 }
 function gearOwnedOf(key) { return !!(SAVE.gearOwned && SAVE.gearOwned[key]); }
+/* 背包格子里存着的同款装备件数：这些件数已算在 gearOwned 里，但不算「仓库备用」。
+   局内看 P.rig / P.pack（living 数组），大厅看 SAVE.carry（存档数组）—— 两边不同步，不能混着数。 */
+function carriedGearCount(key) {
+  let n = 0;
+  const inRaid = typeof G !== 'undefined' && G && (G.scene === 'playing' || G.scene === 'paused');
+  const zones = inRaid
+    ? allCarryZones()
+    : (SAVE && SAVE.carry ? [SAVE.carry.rig, SAVE.carry.pocket, SAVE.carry.pack] : []);
+  for (const arr of zones) {
+    if (!Array.isArray(arr)) continue;
+    for (const c of arr) if (c && !c.cont && c.t === 'gear' && c.key === key) n++;
+  }
+  return n;
+}
 /* 穿着的弹挂带来的修正：ads = 瞄准速度 %（负 = 抬枪更慢），spd = 移动速度 %（负 = 更慢） */
 function rigWornMods() {
   const g = wornGear('rig');
@@ -3037,6 +3060,12 @@ function cellValid(c) {
     const m = clamp(Math.max(1, Math.round(Number(c.max)) || A.hp), 1, A.hp);
     return { t: 'armor', id: A.id, hp: clamp(Math.round(Number(c.hp)) || 0, 0, m), max: m };
   }
+  /* 弹挂 / 背包格子：key 必须在 GEAR 里；里面装的东西（cells）逐件复核 */
+  if (c.t === 'gear' && GEAR[c.key]) {
+    const o = { t: 'gear', key: c.key };
+    if (Array.isArray(c.cells)) o.cells = c.cells.map(cellValid).filter(Boolean);
+    return o;
+  }
   return null;
 }
 
@@ -3068,7 +3097,8 @@ function mergeCarryOverflow(S, overflow) {
         SAVE.armorPieces.push({ id: A.id, hp: clamp(Math.round(c.hp), 0, c.max || A.hp), max: c.max || A.hp });
       }
     }
-    /* gun：所有权本来就记在 SAVE.owned 里，格子装不下就丢弃，枪还在军火库 */
+    /* gear：件数一直记在 gearOwned 里（穿着 / 包里 / 备用都算），格子腾出来就等于回到备用列表，
+       这里什么都不用做；gun：所有权本来就记在 SAVE.owned 里，格子装不下就丢弃，枪还在军火库 */
   }
 }
 
@@ -5067,18 +5097,35 @@ function usableCellList() {
   carryZones().forEach((arr, zi) => { for (let i = 0; i < arr.length; i++) if (arr[i]) out.push({ zone: zi, i, cell: arr[i] }); });
   return out;
 }
-/* ── 物品占格（隔舱制）：不同物品占不同格数，且必须整个塞进同一个隔舱的连续空格。
-   具体占几格查 CELLS 表（精确到每一件）：手枪 2 / 步枪 4 / 狙击·霰弹 6，
-   注射器 1 · 软包 2 · 医疗箱 4，手术包 2~4，甲修包 2~4，护甲 6，弹药 / 收集品 / 配件 1。
+/* ── 物品占格（隔舱制）：不同物品占不同格数 / 形状，且必须整个塞进同一个隔舱的连续空格。
+   形状优先级：SHAPES（显式宽×高）→ CELLS（只给格数，形状按舱列数自动近似方形）→ 类型兜底。
+   护甲按等级：3 级 3x2、4 级 4x2、5·6 级 5x2；弹挂固定 2x2，背包按品质（紫及以下 2x2、金红 3x2）。
    容器的隔舱 = GEAR[key].blocks（弹挂）；没写 blocks 的（背包 / 口袋）= 一个整舱。
    多格物品只落在首个格子（head），后续格子放 { cont:1, head } 占位标记，
    所有「读物品」的循环都按 c.t 匹配类型，cont 标记天然被跳过。 ── */
+function armorShape(id) {
+  const A = ARMORS[id];
+  const lv = A ? A.lv : 0;
+  if (lv >= 5) return [5, 2];
+  if (lv === 4) return [4, 2];
+  if (lv === 3) return [3, 2];
+  return [2, 2];
+}
+function gearShapeOf(c) {
+  const g = c && GEAR[c.key];
+  if (!g) return [2, 2];
+  if (g.kind === 'rig') return [2, 2];                      // 弹挂：一律 2x2
+  return (g.q === '金' || g.q === '红') ? [3, 2] : [2, 2];  // 背包：紫及以下 2x2，金红 3x2
+}
 function cellSize(c) {
   if (!c || c.cont) return 0;
+  if (c.t === 'armor') { const s = armorShape(c.id); return s[0] * s[1]; }
+  if (c.t === 'gear') { const s = gearShapeOf(c); return s[0] * s[1]; }
+  const s = SHAPES[c.id];
+  if (s) return s[0] * s[1];
   if (c.id && CELLS[c.id] > 0) return CELLS[c.id];
   if (c.t === 'gun') return 4;
   if (c.t === 'melee' || c.t === 'surg' || c.t === 'repair') return 2;
-  if (c.t === 'armor') return 6;                 // 护甲进背包：3x2
   return 1;
 }
 /* ── 隔舱 2D 化：每个舱摆成一个正方格小网格（1x2 / 1x3 竖条、2x2、2x3 …），
@@ -5094,7 +5141,7 @@ function blkCols(n) {
 function blkSizesText(blocks) { return blocks.map(b => Array.isArray(b) ? b[0] : b).join('+'); }
 /* 隔舱定义解析：数字 = 自动列数（blkCols），[格数, 列数] = 指定列数（如 [3,1] = 竖 1x3 弹匣条） */
 function blkSpec(b) { return Array.isArray(b) ? [b[0], b[1], b[2] | 0] : [b, blkCols(b), 0]; }
-/* sz 格物品在 C 列舱里的 w×h 形状（与铺设、渲染一一对应）。
+/* 自动形状：sz 格物品在 C 列舱里的 w×h（只用于 SHAPES 没写的老物品）。
    只用「宽×高刚好等于 sz」的矩形，绝不出现 L 形缺口：把 sz 拆成因数对，
    取最接近正方形的那一对（同样方正时取更宽的，枪横着躺）。 */
 function itemShape(sz, C) {
@@ -5113,6 +5160,18 @@ function itemShape(sz, C) {
   const w = Math.min(sz, C);                 // 质数等怪尺寸：退化成铺满的行优先矩形
   return [w, Math.ceil(sz / w)];
 }
+/* 物品在 C 列舱里的实际占位形状：显式形状优先；舱塞不下这个宽度就躺倒（宽高互换）。
+   只依赖舱列数 C（不看当前空位），保证「判空 / 铺设 / 渲染」三处算出同一形状。 */
+function shapeOf(c, C) {
+  if (!c || c.cont) return [1, 1];
+  let s = null;
+  if (c.t === 'armor') s = armorShape(c.id);
+  else if (c.t === 'gear') s = gearShapeOf(c);
+  else s = SHAPES[c.id] || null;
+  if (!s) return itemShape(cellSize(c), C);
+  if (s[0] > C && s[1] <= C) return [s[1], s[0]];
+  return [s[0], s[1]];
+}
 /* 某容器（'rig' | 'pocket' | 'pack'）的隔舱 → [[start, end, cols], ...] */
 function zoneBlocks(zone) {
   if (zone === 'pocket') {                                   // 口袋：默认四个单格舱；升级后 1 + 2x1 + 2x1 + 1
@@ -5128,11 +5187,11 @@ function zoneBlocks(zone) {
   return out;
 }
 function blkAt(blocks, i) { for (const b of blocks) if (i >= b[0] && i < b[1]) return b; return null; }
-/* 矩形判定：i 在隔舱 [s,e) 内，从 i 铺 sz 格物品是否放得下（全空 + 行内不折行） */
-function rectFitsAt(arr, s, e, C, i, sz) {
+/* 矩形判定：i 在隔舱 [s,e) 内，把 cell 从 i 铺开是否放得下（全空 + 行内不折行） */
+function rectFitsAt(arr, s, e, C, i, cell) {
   if (i < s || i >= e) return false;
-  if (sz <= 1) return !arr[i];
-  const [w, h] = itemShape(sz, C);
+  const [w, h] = shapeOf(cell, C);
+  if (w === 1 && h === 1) return !arr[i];
   if ((i - s) % C + w > C) return false;
   for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) {
     const j = i + dy * C + dx;
@@ -5140,9 +5199,9 @@ function rectFitsAt(arr, s, e, C, i, sz) {
   }
   return true;
 }
-/* 一件 sz 格物品从 i 铺开的全部下标（行优先矩形） */
-function spanIdxs(i, sz, s, e, C) {
-  const [w, h] = itemShape(sz, C);
+/* 一件物品从 i 铺开的全部下标（行优先矩形） */
+function spanIdxs(i, cell, s, e, C) {
+  const [w, h] = shapeOf(cell, C);
   const out = [];
   for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) {
     const j = i + dy * C + dx;
@@ -5150,26 +5209,26 @@ function spanIdxs(i, sz, s, e, C) {
   }
   return out;
 }
-/* 在隔舱里找 sz 格物品的落点：返回起点下标，找不到 -1 */
-function findFitRun(arr, blocks, sz) {
+/* 在隔舱里找物品的落点：返回起点下标，找不到 -1 */
+function findFitRun(arr, blocks, cell) {
   for (const [s, e, C] of blocks) {
-    for (let i = s; i < e; i++) if (rectFitsAt(arr, s, e, C, i, sz)) return i;
+    for (let i = s; i < e; i++) if (rectFitsAt(arr, s, e, C, i, cell)) return i;
   }
   return -1;
 }
-/* 指定下标能否放下 sz 格物品 */
-function fitsAtRun(arr, blocks, i, sz) {
+/* 指定下标能否放下这件物品 */
+function fitsAtRun(arr, blocks, i, cell) {
   const b = blkAt(blocks, i);
-  return b ? rectFitsAt(arr, b[0], b[1], b[2], i, sz) : false;
+  return b ? rectFitsAt(arr, b[0], b[1], b[2], i, cell) : false;
 }
 /* 放置：head 落 i，占位标记按矩形铺（blocks 缺省时退回扁平铺，兼容老调用） */
 function placeAtRun(arr, i, cell, blocks) {
   arr[i] = cell;
-  const sz = cellSize(cell);
-  if (sz <= 1) return;
   const b = blocks ? blkAt(blocks, i) : null;
-  const idxs = b ? spanIdxs(i, sz, b[0], b[1], b[2]) : null;
-  for (let k = 1; k < sz; k++) {
+  const idxs = b ? spanIdxs(i, cell, b[0], b[1], b[2]) : null;
+  const n = idxs ? idxs.length : cellSize(cell);
+  if (n <= 1) return;
+  for (let k = 1; k < n; k++) {
     const j = idxs ? (idxs.length > k ? idxs[k] : -1) : i + k;
     if (j >= 0) arr[j] = { cont: 1, head: i };
   }
@@ -5181,11 +5240,10 @@ function clearSpanAt(arr, i, blocks) {
   const h = c.cont ? c.head : i;
   const head = arr[h];
   if (!head || head.cont) { arr[i] = null; return; }   // 孤儿占位：只清自己
-  const sz = cellSize(head);
-  if (sz <= 1) { arr[h] = null; return; }
   const b = blocks ? blkAt(blocks, h) : null;
-  const idxs = b ? spanIdxs(h, sz, b[0], b[1], b[2]) : null;
-  const n = idxs ? idxs.length : sz;
+  const idxs = b ? spanIdxs(h, head, b[0], b[1], b[2]) : null;
+  const n = idxs ? idxs.length : cellSize(head);
+  if (n <= 1) { arr[h] = null; return; }
   for (let k = 0; k < n; k++) {
     const j = idxs ? idxs[k] : h + k;
     if (j >= 0 && j < arr.length) arr[j] = null;
@@ -5201,11 +5259,9 @@ function sanitizeSpans(arr, blocks) {
     const h = c.head;
     const head = arr[h];
     if (!head || head.cont) { arr[i] = null; continue; }
-    const sz = cellSize(head);
-    if (sz <= 1) { arr[i] = null; continue; }
     const b = blocks ? blkAt(blocks, h) : null;
-    const idxs = b ? spanIdxs(h, sz, b[0], b[1], b[2]) : null;
-    const ok = idxs ? idxs.indexOf(i) > 0 : (i - h > 0 && i - h < sz);
+    const idxs = b ? spanIdxs(h, head, b[0], b[1], b[2]) : null;
+    const ok = idxs ? idxs.indexOf(i) > 0 : (i - h > 0 && i - h < cellSize(head));
     if (!ok) arr[i] = null;
   }
 }
@@ -5213,12 +5269,10 @@ function sanitizeSpans(arr, blocks) {
 function spanOk(arr, i, blocks) {
   const c = arr[i];
   if (!c || c.cont) return true;
-  const sz = cellSize(c);
-  if (sz <= 1) return true;
   const b = blkAt(blocks, i);
-  if (!b) return false;
-  const idxs = spanIdxs(i, sz, b[0], b[1], b[2]);
-  if (idxs.length < sz) return false;
+  if (!b) return true;
+  const idxs = spanIdxs(i, c, b[0], b[1], b[2]);
+  if (idxs.length <= 1) return true;
   for (const j of idxs) {
     if (j === i) continue;
     const d = arr[j];
@@ -5237,7 +5291,7 @@ function reflowZone(arr, blocks) {
   arr.fill(null);
   const overflow = [];
   for (const c of items) {
-    const at = findFitRun(arr, blocks, cellSize(c));
+    const at = findFitRun(arr, blocks, c);
     if (at < 0) overflow.push(c); else placeAtRun(arr, at, c, blocks);
   }
   sanitizeSpans(arr, blocks);
@@ -5245,14 +5299,13 @@ function reflowZone(arr, blocks) {
 }
 const ZONE_NAMES = ['rig', 'pocket', 'pack'];
 /* 找一个能放下的位置：先背包（storage），再弹挂、口袋（快捷）。
-   枪和护甲只进背包。返回 { zone, i } 或 null（不写入）。 */
+   枪 / 护甲 / 弹挂 / 背包只进背包。返回 { zone, i } 或 null（不写入）。 */
 function freeCellFor(cell) {
-  const sz = cellSize(typeof cell === 'string' ? { t: cell } : cell);
   const t = typeof cell === 'string' ? cell : cell.t;
   const zones = allCarryZones();
   for (const pass of [2, 0, 1]) {              // pack → rig → pocket
-    if ((t === 'gun' || t === 'armor') && pass !== 2) continue;   // 枪和护甲只进背包
-    const i = findFitRun(zones[pass], zoneBlocks(ZONE_NAMES[pass]), sz);
+    if ((t === 'gun' || t === 'armor' || t === 'gear') && pass !== 2) continue;   // 这四类只进背包
+    const i = findFitRun(zones[pass], zoneBlocks(ZONE_NAMES[pass]), cell);
     if (i >= 0) return { zone: pass, i };
   }
   return null;
@@ -5260,7 +5313,7 @@ function freeCellFor(cell) {
 /* 把一件合法格子物品塞进随身容器（按类型选区 + 隔舱矩形空位）。成功返回 { zone, i }。 */
 function stowCell(cell) {
   if (!cell) return null;
-  if (cell.t === 'gear') return null;          // 弹挂 / 背包是穿着的装备，不占格子
+  if (cell.t === 'gear') return null;          // 弹挂 / 背包只能手动拖进背包存放，捡到地上的一律直接换穿
   const slot = freeCellFor(cell);
   if (slot) placeAtRun(allCarryZones()[slot.zone], slot.i, cell, zoneBlocks(ZONE_NAMES[slot.zone]));
   return slot;
@@ -19020,7 +19073,8 @@ function loPlaceToSlot(slot) {
     if (h.t !== 'gear') { uiToast('这里放' + (slot.kind === 'rig' ? '弹挂' : '背包'), 'small warn'); return true; }
     const g = GEAR[h.key];
     if (!g || g.kind !== slot.kind) { uiToast('这件装备放不进这个槽', 'small warn'); return true; }
-    if (!gearOwnedOf(h.key)) { uiToast('还没有这件装备 · 先去军火库买', 'small warn'); return true; }
+    /* 从背包格子里拿出来的（fromCarry）：东西本来就在手上带着，件数早就记在账上 */
+    if (!gearOwnedOf(h.key) && !h.fromCarry) { uiToast('还没有这件装备 · 先去军火库买', 'small warn'); return true; }
     slot.set(h.key);
     trimCarryToCap();                        // 容量变小的话，多出来的格子原物回仓
   }
@@ -19112,11 +19166,10 @@ function loQuickStow(c) {
   }
   /* 弹挂 → 背包 → 口袋（zone 编号：0 弹挂 / 1 口袋 / 2 背包）；占格物品找隔舱连空 */
   const cell = heldToCell(c);
-  const sz = cellSize(cell);
   for (const [zi, arr] of [[0, C.rig], [2, C.pack], [1, C.pocket]]) {
     if (!Array.isArray(arr) || !cellAccepts(c, zi)) continue;
     const blocks = zoneBlocks(ZONE_NAMES[zi]);
-    const at = findFitRun(arr, blocks, sz);
+    const at = findFitRun(arr, blocks, cell);
     if (at < 0) continue;
     placeAtRun(arr, at, cell, blocks);
     return true;
@@ -19253,10 +19306,10 @@ function renderLoStock() {
       if (gcnt <= 0) continue;
       gearAny = true;
       const g = g0;
-      /* 身上穿的那件不算库存；剩下的备用件列出来（同款囤几件显示几件） */
+      /* 身上穿的那件不算库存；包里存着的也不算；剩下的备用件列出来（同款囤几件显示几件） */
       const wornThis = !!(SAVE.worn && SAVE.worn[g.kind] === key);
-      const gspare = gcnt - (wornThis ? 1 : 0);
-      if (gspare <= 0) continue;    // 只有身上那件：不显示（左槽右键脱下）
+      const gspare = gcnt - (wornThis ? 1 : 0) - carriedGearCount(key);
+      if (gspare <= 0) continue;    // 只有身上那件 / 全塞包里了：不显示（左槽右键脱下）
       row({
         nm: g.name, color: g.color || '#ffb08a',
         sub: (g.q ? g.q + ' · ' : '') + (g.kind === 'rig' ? '弹挂 · 快捷可用 · ' : '背包 · Tab 倒腾 · ') + g.cap + ' 格' +
@@ -19375,10 +19428,10 @@ function cellAccepts(h, zone) {
   if (!h) return false;
   if (h.t === 'med' || h.t === 'stop' || h.t === 'surg' || h.t === 'ammo' ||
       h.t === 'repair' || h.t === 'relic' || h.t === 'mod') return true;
-  if (h.t === 'gun' || h.t === 'armor') return zone === 2;   // 枪和护甲只进背包
+  if (h.t === 'gun' || h.t === 'armor' || h.t === 'gear') return zone === 2;   // 枪 / 甲 / 弹挂 / 背包只进背包
   return false;
 }
-/* 手上的装备指针 → 格子（护甲塞进背包时把件本身记在格子里） */
+/* 手上的装备指针 → 格子（护甲塞进背包时把件本身记在格子里；弹挂 / 背包只留 key） */
 function heldToCell(h) {
   if (h && h.t === 'armor' && !h.piece && ARMORS[h.id] && ARMORS[h.id].lv > 0) {
     const A = ARMORS[h.id];
@@ -19389,13 +19442,24 @@ function heldToCell(h) {
     const pc = h.piece;
     return { t: 'armor', id: pc.id, hp: pc.hp, max: pc.max };
   }
+  if (h && h.t === 'gear') {                    // 格子里的装备：只存 key（cells 内容原样带上）
+    const o = { t: 'gear', key: h.key };
+    if (Array.isArray(h.cells)) o.cells = h.cells;
+    return o;
+  }
   return h;
+}
+/* 塞不下时的提示：报「宽x高 / 格数」，比只说格数好懂 */
+function iszHint(cell, name) {
+  const sz = cellSize(cell);
+  if (sz <= 1) return '这里放不下';
+  return (name ? '这个隔舱塞不下 ' + name : '这个隔舱放不下') + '（需要 ' + sz + ' 格整块空位）';
 }
 const CELL_REJECT_HINT = {
   gun: '枪只能放进背包（或拖到上方武器槽装上）',
   melee: '近战武器要装进上方近战槽',
   armor: '护甲只能放进背包，或拖到左侧「护甲」槽穿上',
-  gear: '弹挂 / 背包要拖到左侧对应槽穿上',
+  gear: '弹挂 / 背包可拖进背包存放，或拖到左侧对应槽穿上',
 };
 
 /* 同类弹药堆叠合并：把 src 拖到 dst 上 —— dst 补到上限，装不下的留在 src。
@@ -19414,7 +19478,7 @@ function stackInto(src, dst, owner) {
 
 function renderLoadout() {
   if (!SAVE.carry) ensureCarry();          // 直接调进来（比如审计 / 调试）也能画
-  $('loGunNote').textContent = '按住直接拖 · 拖进槽位装备 · 拖出脱下';
+  $('loGunNote').textContent = '按住直接拖 · 拖进槽位装备 · 拖进背包存放';
   for (const slot of LO_SLOTS) renderLoSlot(slot);
 
   /* 三排容器格：弹挂 / 口袋 / 背包（没穿弹挂或背包时整排隐藏） */
@@ -19451,7 +19515,7 @@ function renderLoadout() {
         if (c && c.cont) continue;                   // 多格物品：整块画在 head 上
         const hi = i;
         const rel = i - s;
-        const [w, h] = c ? itemShape(cellSize(c), C) : [1, 1];
+        const [w, h] = c ? shapeOf(c, C) : [1, 1];
         const el = document.createElement('div');
         el.className = 'lo-cell bcell' + (c ? '' : ' empty');
         el.style.gridColumn = (rel % C + 1) + ' / span ' + w;
@@ -19474,11 +19538,10 @@ function renderLoadout() {
             return;
           }
           const cell = heldToCell(LO_UI.held);
-          const isz = cellSize(cell);
           const c2 = arr[hi];
           if (!c2) {                                  // 空位：整个塞进同一隔舱
-            if (!fitsAtRun(arr, blocks, hi, isz)) {
-              uiToast(isz > 1 ? '这个隔舱放不下（需要 ' + isz + ' 格整块空位）' : '这里放不下', 'small warn');
+            if (!fitsAtRun(arr, blocks, hi, cell)) {
+              uiToast(iszHint(cell), 'small warn');
               return;
             }
             placeAtRun(arr, hi, cell, blocks);
@@ -19488,8 +19551,8 @@ function renderLoadout() {
             else loSetHeld(LO_UI.held);
           } else if (!c2.cont) {                      // 交换 / 换位
             clearSpanAt(arr, hi, blocks);
-            const at = fitsAtRun(arr, blocks, hi, isz) ? hi : findFitRun(arr, blocks, isz);
-            if (at < 0) { placeAtRun(arr, hi, c2, blocks); uiToast('这个隔舱塞不下 ' + cellName(cell) + '（需要 ' + isz + ' 格整块）', 'small warn'); return; }
+            const at = fitsAtRun(arr, blocks, hi, cell) ? hi : findFitRun(arr, blocks, cell);
+            if (at < 0) { placeAtRun(arr, hi, c2, blocks); uiToast(iszHint(cell, cellName(cell)), 'small warn'); return; }
             placeAtRun(arr, at, cell, blocks);
             loSetHeld(c2);
           }
@@ -19510,7 +19573,7 @@ function renderLoadout() {
           const t = arr[hi];
           if (!t || t.cont) return null;
           clearSpanAt(arr, hi, blocks);
-          loSetHeld(t);
+          loSetHeld(t.t === 'gear' ? Object.assign({}, t, { fromCarry: 1 }) : t);   // 标记来源：穿戴时不查仓库件数
           Sfx.tone(500, 0.05, 0.04, 'square');
           return () => {                             // revert：原位还空着就放回去
             if (!arr[hi]) { placeAtRun(arr, hi, LO_UI.held, blocks); loSetHeld(null); }
@@ -19576,13 +19639,12 @@ function autoRestock() {
   const zones = [C.rig, C.pocket, C.pack];
   for (const it of fillOrder) {
     for (let k = 0; k < (it.n == null ? 1 : it.n); k++) {
-      const probe = { t: it.kind, id: it.id };       // 只为算占格数（必须带 id：药箱 4 格 / DEK 手术包 4 格）
-      const isz = cellSize(probe);
+      const probe = { t: it.kind, id: it.id };       // 只为算占格形状（必须带 id：药箱 / DEK 手术包尺寸不同）
       let placed = false;
       for (let zi = 0; zi < zones.length && !placed; zi++) {
         const arr = zones[zi];
         const blocks = zoneBlocks(ZONE_NAMES[zi]);
-        const at = findFitRun(arr, blocks, isz);
+        const at = findFitRun(arr, blocks, probe);
         if (at < 0) continue;
         let c = null;
         if (it.kind === 'stop') c = stockTakeCell('stop', it.id);
@@ -19707,7 +19769,12 @@ function wearGearInRaid(key, fromLoot, incoming) {
   for (let i = 0; i < g.cap; i++) arr.push(null);
   const leftover = [];
   for (const c of (incoming || [])) { if (!stowCell(c)) leftover.push(c); }
-  if (prevKey && GEAR[prevKey]) gearDropCell({ t: 'gear', key: prevKey, cells: outgoing });
+  if (prevKey && GEAR[prevKey]) {
+    /* 旧装备连里面的东西掉脚边：件数先 -1（捡回来时 gearLoot 会 +1，进出账对称） */
+    SAVE.gearOwned[prevKey] = (SAVE.gearOwned[prevKey] | 0) - 1;
+    if ((SAVE.gearOwned[prevKey] | 0) <= 0) delete SAVE.gearOwned[prevKey];
+    gearDropCell({ t: 'gear', key: prevKey, cells: outgoing });
+  }
   for (const c of leftover) gearDropCell(c);
   if (fromLoot) P.gearLoot[key] = (P.gearLoot[key] | 0) + 1;
   recountLoot();
@@ -19943,10 +20010,9 @@ function pkPlaceInto(arr, i, zone) {
     return;
   }
   const cell = heldToCell(held);
-  const sz = cellSize(cell);
   const c = arr[hi];
   if (!c) {                                          // 空格：必须整个塞进同一隔舱
-    if (!fitsAtRun(arr, blocks, hi, sz)) { uiToast(sz > 1 ? '这个隔舱放不下（需要 ' + sz + ' 格的整块空位）' : '这里放不下', 'small warn'); return; }
+    if (!fitsAtRun(arr, blocks, hi, cell)) { uiToast(iszHint(cell), 'small warn'); return; }
     placeAtRun(arr, hi, cell, blocks);
     PK_UI.held = null;
   } else if (stackInto(held, c, ownedMapLive())) {   // 同弹药合并（补满为止，剩余留在手上）
@@ -19954,8 +20020,8 @@ function pkPlaceInto(arr, i, zone) {
   } else {                                           // 交换：原来的那件整块换到手上
     if (!c.cont) {
       clearSpanAt(arr, hi, blocks);
-      let at = fitsAtRun(arr, blocks, hi, sz) ? hi : findFitRun(arr, blocks, sz);
-      if (at < 0) { placeAtRun(arr, hi, c, blocks); uiToast('这个隔舱塞不下 ' + cellName(cell) + '（需要 ' + sz + ' 格整块）', 'small warn'); return; }
+      let at = fitsAtRun(arr, blocks, hi, cell) ? hi : findFitRun(arr, blocks, cell);
+      if (at < 0) { placeAtRun(arr, hi, c, blocks); uiToast(iszHint(cell, cellName(cell)), 'small warn'); return; }
       placeAtRun(arr, at, cell, blocks);
       PK_UI.held = c;
     }
@@ -19982,6 +20048,11 @@ function dropHeldToGround() {
       if ((P.gunLoot[h.id] | 0) > 0) P.gunLoot[h.id]--;   // 丢的是缴获副本：台账 -1
       else { delete P.owned[h.id]; delete P.ammo[h.id]; }
     }
+  }
+  /* 丢在脚边的弹挂 / 背包：件数 -1（捡回来时 gearLoot 会 +1，进出账对称） */
+  if (h.t === 'gear' && GEAR[h.key]) {
+    SAVE.gearOwned[h.key] = (SAVE.gearOwned[h.key] | 0) - 1;
+    if ((SAVE.gearOwned[h.key] | 0) <= 0) delete SAVE.gearOwned[h.key];
   }
   recountLoot();
   uiToast('已丢弃 · ' + cellName(h) + (h.t === 'ammo' ? ' ' + (h.n | 0) + ' 发' : ''), 'small');
@@ -20185,7 +20256,7 @@ function renderPackPanel() {
         if (c && c.cont) continue;                   // 多格物品：整块画在 head 上
         const hi = i;
         const rel = i - s;
-        const [w, h] = c ? itemShape(cellSize(c), C) : [1, 1];
+        const [w, h] = c ? shapeOf(c, C) : [1, 1];
         const el = document.createElement('div');
         el.className = 'lo-cell bcell' + (c ? '' : ' empty');
         el.style.gridColumn = (rel % C + 1) + ' / span ' + w;
@@ -20643,6 +20714,15 @@ function endRaid(success) {
       for (const arr of allCarryZones()) for (const c of arr) if (c && c.t === 'ammo') n += c.n | 0;
       return n;
     })();
+    /* 包里存着的弹挂 / 背包也随这次行动一起丢：件数跟着扣 */
+    for (const arr of allCarryZones()) {
+      for (const c of arr) {
+        if (!c || c.cont || c.t !== 'gear' || !GEAR[c.key]) continue;
+        SAVE.gearOwned[c.key] = (SAVE.gearOwned[c.key] | 0) - 1;
+        if ((SAVE.gearOwned[c.key] | 0) <= 0) delete SAVE.gearOwned[c.key];
+        lostGear.push(GEAR[c.key].name);
+      }
+    }
     SAVE.carry = emptyCarry();
 
     rows.push(['丢失收集品', lostN + ' 件 · 价值 ¥' + fmtMoney(G.lootValue), 'neg']);
