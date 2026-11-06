@@ -469,6 +469,23 @@
   .lo-cell .sub { font-size:9px; color:#5e87a0; line-height:1.2; }
   .lo-cell.empty { opacity:.45; }
   .lo-cell.dragover { border-color:#ffd08a; background:rgba(60,40,16,.5); }
+  /* 搜刮容器：右栏是容器自己的格子（按物品真实占格拼），左栏是随身容器 */
+  #loot .lo-main { overflow-y:auto; }
+  .lo-lootside { width:auto; min-width:330px; max-width:430px; }
+  .loot-box {
+    --bcell:46px;
+    flex:1; min-height:0;
+    display:grid; grid-template-columns:repeat(5, var(--bcell));
+    grid-auto-rows:var(--bcell); gap:2px; align-content:start; overflow-y:auto;
+    padding:8px; border:1px solid rgba(80,140,185,.16); border-radius:4px;
+    background:rgba(8,15,23,.55); min-height:120px;
+  }
+  .loot-box .lo-cell.bcell { cursor:pointer; }
+  .loot-box .lo-cell.bcell.ready { cursor:grab; }
+  .loot-box .lo-cell.bcell.sel { border-color:#ffd08a; box-shadow:0 0 12px rgba(255,208,138,.28); }
+  .loot-pend { margin-top:10px; font-size:11px; font-weight:700; color:#4f7f9f; letter-spacing:.06em; line-height:1.5; }
+  .loot-pend b { color:#8fd0ff; }
+  .loot-box .lo-cell.bcell.empty::after { content:''; width:5px; height:5px; border-radius:50%; background:rgba(80,140,185,.2); }
   .lo-row.dragover { border-color:#ffd08a; background:rgba(60,40,16,.5); }
   /* 局内背包：右侧丢弃区（拖到这里 = 扔在地上） */
   #pkDropZone {
@@ -755,7 +772,7 @@
       <section class="card">
         <h4>行动简报</h4>
         <ul class="brief">
-          <li>进入封锁区，靠近物资容器按 F 开箱，东西会一件件翻出来</li>
+          <li>进入封锁区，靠近物资容器按 F 开箱：左边是你的背包、右边是容器，把翻出来的东西直接拖进背包</li>
           <li>容器有六种：弹药箱最快、医疗箱全是药、武器箱必出枪、保险柜最慢最肥</li>
           <li>品质越高翻得越慢：普通货一秒，神话货（红）要蹲着翻近五秒</li>
           <li>容器里会翻出枪和枪的配件，撤出去才能在改装台上装</li>
@@ -910,6 +927,33 @@
       <div class="lo-grid" id="modWinSlots"></div>
       <div class="lo-ttl">身 上 的 配 件 · 拖到槽位装上</div>
       <div class="lo-grid" id="modWinBag"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ 搜刮容器（左边背包 · 右边容器，鼠标拖拽搬运） ══════════ -->
+<div id="loot" class="overlay hidden">
+  <div class="frame">
+    <header class="topbar">
+      <div class="logo" style="font-size:22px" id="lootName">容 器</div>
+      <div class="wallet" style="font-size:12px;color:#5e87a0" id="lootStatus">翻 找 中…</div>
+      <button id="closeLoot" class="btn ghost small">关 闭 [Esc]</button>
+    </header>
+    <div class="lo-wrap">
+      <section class="lo-main">
+        <div class="lo-ttl" id="lootPackNote">背 包</div>
+        <div class="lo-grid" id="lootPack"></div>
+        <div class="lo-ttl" id="lootRigNote">弹 挂 · 快捷可用</div>
+        <div class="lo-grid" id="lootRig"></div>
+        <div class="lo-ttl" id="lootPocketNote">口 袋 · 快捷可用</div>
+        <div class="lo-grid" id="lootPocket"></div>
+        <div class="lo-foot"><span class="lo-hint">按住右边的物品拖到左边格子松手放入 · 松在别处 = 取消（东西还留在容器里）· 按 F 收下选中的那件 · 走动会立刻收面板（时间不暂停）</span></div>
+      </section>
+      <aside class="lo-panel lo-lootside">
+        <div class="lo-ttl" id="lootBoxNote">容 器</div>
+        <div class="loot-box" id="lootBox"></div>
+        <div class="loot-pend" id="lootPend"></div>
+      </aside>
     </div>
   </div>
 </div>
@@ -11853,6 +11897,13 @@ function updateLootPanel(dt) {
 
   // 走开就收手：没拿的留在箱子里，回来还能接着翻
   if (dist(P.x, P.y, L.crate.x, L.crate.y) > 160) closeLootPanel();
+  if (!G.lootPanel) return;                        // 上面可能已经收面板了
+
+  /* 界面：第一次进来就亮出来；翻出进度 / 拿走 / 选中变了才重排，不然每帧重绘太费 */
+  const ui = $('loot');
+  if (ui && ui.classList.contains('hidden')) { ui.classList.remove('hidden'); L.__sig = null; }
+  const sig = L.items.length + '|' + L.taken + '|' + L.shown + '|' + L.sel;
+  if (sig !== L.__sig) { L.__sig = sig; lootRender(); }
 }
 
 /* 滚轮 / 拿完自动跳用：把选中项挪到下一件「已翻出且还没收走」的东西上 */
@@ -11897,7 +11948,11 @@ function lootPickSelected() {
     lootSelMove(1);
     return true;
   }
-  if (applyLootItem(it, L.crate) === false) { Sfx.tone(200, 0.09, 0.05, 'square'); return false; }
+  if (applyLootItem(it, L.crate) === false) {
+    Sfx.tone(200, 0.09, 0.05, 'square');
+    uiToast(it.blocked || (it.name + ' 带不走'), 'small warn');
+    return false;
+  }
   it.taken = true;
   L.taken++;
   pickOk();
@@ -11922,9 +11977,178 @@ function closeLootPanel() {
     sanitizeSpans(cells);
   }
   G.lootPanel = null;
+  const lui = $('loot');
+  if (lui) lui.classList.add('hidden');
+  if (PK_DRAG.active) pkFinishDrag(null);          // 拖着东西时面板被关：先把手上的放回去
+  const chip = $('pkHeldChip');
+  if (chip) chip.classList.add('hidden');
   if (crate) {
     const left = crateLeft(crate);
     if (left > 0) uiToast('箱里还剩 ' + left + ' 件 · 回来按 F 接着翻', 'small');
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
+   搜刮容器界面（HTML · 左边随身容器 · 右边容器格子）
+   ──────────────────────────────────────────────────────────
+   还没翻出来的东西不画形状、也拿不走（只报「还有 N 件」）；
+   翻出来的按真实占格摆进容器格子。按住拖到左边格子松手入包，
+   松在右边 = 取消，东西还留在容器里。按 F 收下选中的那件。
+   ══════════════════════════════════════════════════════════ */
+const LOOT_BOX_COLS = 5;
+
+/* 容器里一件东西的实体格子（没有实体形状的堆叠品返回 null） */
+function lootItemCell(it) {
+  if (!it) return null;
+  if (it.__cell) return it.__cell;
+  if (it.kind === 'relic' && RELICS[it.id]) return { t: 'relic', id: it.id };
+  if (it.kind === 'armor') return { t: 'armor', id: it.id, hp: it.hp, max: it.max };
+  if (it.kind === 'weapon') return { t: 'gun', id: it.weapon };
+  if (it.kind === 'mod' && MODS[it.mod]) return { t: 'mod', id: it.mod };
+  if (it.kind === 'bullet') return { t: 'ammo', cal: it.cal, lv: it.lv | 0 || 1, n: Math.max(1, it.n | 0) };
+  if (it.kind === 'surg' && it.surg) return { t: 'surg', id: it.surg, uses: it.uses };
+  if (it.kind === 'repair' && it.repair) return { t: 'repair', id: it.repair, left: it.left };
+  if (it.kind === 'med' && it.med && it.left !== undefined) return { t: 'med', id: it.med, left: it.left };
+  return null;                    // 纯数量堆叠品（绷带 / 散装弹 / 药）：没有实体形状，按 1×1 摆
+}
+
+/* 容器装箱：只排「已经翻出来」的东西，没翻出的不占格、不露尺寸 */
+function lootBoxLayout(L) {
+  const cols = LOOT_BOX_COLS;
+  const list = [];
+  let pend = 0;
+  for (const it of L.items) {
+    if (it.taken) continue;
+    if (L.t < it.ready) { pend++; continue; }
+    const cell = lootItemCell(it);
+    const sh = cell ? shapeOf(cell, cols) : [1, 1];
+    list.push({ it, cell, w: sh[0], h: sh[1] });
+  }
+  const occ = new Array(cols * 24).fill(0);
+  let maxRow = 0;
+  for (const e of list) {
+    let put = -1;
+    for (let i = 0; i < occ.length && put < 0; i++) {
+      if (i % cols + e.w > cols) continue;
+      let ok = true;
+      for (let dy = 0; dy < e.h && ok; dy++) {
+        for (let dx = 0; dx < e.w; dx++) if (occ[i + dy * cols + dx]) { ok = false; break; }
+      }
+      if (ok) put = i;
+    }
+    if (put < 0) put = 0;                            // 极端兜底：叠在第一格（不会发生，容器最多几件）
+    for (let dy = 0; dy < e.h; dy++) {
+      for (let dx = 0; dx < e.w; dx++) {
+        const j = put + dy * cols + dx;
+        if (j < occ.length) occ[j] = 1;
+      }
+    }
+    e.col = put % cols;
+    e.row = put / cols | 0;
+    maxRow = Math.max(maxRow, e.row + e.h);
+  }
+  return { list, pend, rows: Math.max(3, maxRow) };
+}
+
+/* 从容器里拿起一件：拖到左边格子才算收下，松在别处原样回箱子 */
+function lootBoxPick(it) {
+  const L = G.lootPanel;
+  if (!L || !it || it.taken) return null;
+  if (L.t < it.ready) { uiToast('还没翻出来', 'small warn'); return null; }
+  if (L.pile) {                                    // 地面物资：底下压着实体，只能走 collectPickup，不能直接塞格
+    L.sel = L.items.indexOf(it);
+    lootPickSelected();
+    return null;
+  }
+  const cell = lootItemCell(it);
+  if (!cell) {
+    L.sel = L.items.indexOf(it);
+    uiToast(it.name + ' · 按 F 收下（这类东西没有实体格子，拖不动）', 'small warn');
+    lootRender();
+    return null;
+  }
+  it.taken = true;
+  L.taken++;
+  PK_UI.held = cell;
+  PK_UI.fromLoot = it;                             // 标记：这件是从容器里拿的（不许顶掉格子里的东西）
+  Sfx.tone(500, 0.05, 0.04, 'square');
+  lootRender();
+  return () => {                                   // 没放出去：回容器原样待着
+    if (it.taken) { it.taken = false; L.taken--; }
+    PK_UI.held = null;
+    PK_UI.fromLoot = null;
+    lootRender();
+  };
+}
+
+function lootRender() {
+  const L = G.lootPanel;
+  const ui = $('loot');
+  if (!L || !ui || ui.classList.contains('hidden')) return;
+
+  const left = L.items.filter(it => !it.taken).length;
+  const lay = lootBoxLayout(L);
+  const nm = $('lootName');
+  if (nm) nm.textContent = (L.col ? L.col.name : '容 器');
+  const st = $('lootStatus');
+  if (st) {
+    st.textContent = left
+      ? ('翻出 ' + lay.list.length + ' / ' + left + ' 件 · 已拿 ' + L.taken + (lay.pend ? ' · 还在翻…' : ''))
+      : '已 全 部 收 下';
+  }
+
+  /* 左栏：背包 / 弹挂 / 口袋 —— 拖到这里的格子就放进对应容器 */
+  const zones = [
+    ['lootPack', P.pack, 2, '背 包'],
+    ['lootRig', P.rig, 0, '弹 挂 · 快捷可用'],
+    ['lootPocket', P.pocket, 1, '口 袋 · 快捷可用'],
+  ];
+  for (const [gid, arr, zone, label] of zones) {
+    const g = $(gid);
+    if (!g) continue;
+    const note = $(gid + 'Note');
+    if (note) note.textContent = label + ' · ' + arr.filter(c => c && !c.cont).length + ' 件 / ' + arr.length + ' 格';
+    renderCarryZoneGrid(g, arr, zone);
+  }
+
+  /* 右栏：容器格子（按真实占格拼） */
+  const box = $('lootBox');
+  box.innerHTML = '';
+  if (!lay.list.length) {
+    for (let i = 0; i < LOOT_BOX_COLS * 3; i++) {
+      const d = document.createElement('div');
+      d.className = 'lo-cell bcell empty';
+      box.appendChild(d);
+    }
+  }
+  for (const e of lay.list) {
+    const el = document.createElement('div');
+    const sel = L.items[L.sel] === e.it;
+    el.className = 'lo-cell bcell ready' + (sel ? ' sel' : '');
+    el.style.gridColumn = (e.col + 1) + ' / span ' + e.w;
+    el.style.gridRow = (e.row + 1) + ' / span ' + e.h;
+    if (e.w > 1) el.style.width = 'calc(' + e.w + ' * var(--bcell) + ' + ((e.w - 1) * 2) + 'px)';
+    if (e.h > 1) el.style.height = 'calc(' + e.h + ' * var(--bcell) + ' + ((e.h - 1) * 2) + 'px)';
+    const shp = e.cell ? shapeOf(e.cell, LOOT_BOX_COLS) : [1, 1];
+    el.title = e.it.name + (e.it.val ? ' · ' + e.it.val : '') + ' · 占 ' + shp[0] + '×' + shp[1];
+    let html = '<span class="ic" style="color:' + (e.it.color || '#cfe8f5') + '">' + (e.it.icon || '?') + '</span>';
+    if (e.w > 1 || e.h > 1) html += '<span class="nm">' + e.it.name + '</span>';
+    el.innerHTML = html;
+    el.__pkPlace = null;                           // 容器格不是放置目标：松在这儿 = 放回箱子（取消）
+    el.addEventListener('pointerdown', () => {      // 点一下就选中它（F 收的就是这件）
+      L.sel = L.items.indexOf(e.it);
+      box.querySelectorAll('.lo-cell.sel').forEach(x => x.classList.remove('sel'));
+      el.classList.add('sel');
+    }, true);
+    pkPressable(el, () => lootBoxPick(e.it), () => {});
+    box.appendChild(el);
+  }
+
+  const pd = $('lootPend');
+  if (pd) {
+    pd.innerHTML = lay.pend
+      ? ('还有 <b>' + lay.pend + '</b> 件没翻出来 · 继续翻找…')
+      : (left ? '拖到左边入包 · 按 F 收下选中的那件' : '箱子已清空');
   }
 }
 
@@ -16042,8 +16266,7 @@ function drawHUD() {
     ctx.textAlign = 'left';
   }
 
-  // ── 战利品面板：一件一件翻出来 ──
-  drawLootPanel(mono);
+  // ── 战利品面板：改成 HTML 的左右分栏网格（见 lootRender），canvas 这边不再画 ──
 
   // ── 长按 5 的选药盘 ──
   drawMedSelect(mono);
@@ -16254,279 +16477,6 @@ function drawSkillBar(mono) {
 
   ctx.restore();
   ctx.textAlign = 'left';
-}
-
-/* 战利品面板：一行一行从「打码」翻成真物品，翻到哪件才拿到哪件 */
-function drawLootPanel(mono) {
-  const L = G.lootPanel;
-  if (!L) return;
-  const C = L.col || containerOf('crate');
-  const dim = C.dim;
-
-  const n = L.items.length;
-  const w = 302, rowH = 33, headH = 46, footH = 34;
-  const h = headH + n * rowH + footH;
-  const x = Math.round(VW / 2 - w / 2);
-  const openK = clamp(L.t / 0.09, 0, 1);
-  const y = Math.round(VH - h - 78 + (1 - openK) * 16);   // 贴底弹出，不挡准星
-
-  ctx.save();
-  ctx.globalAlpha = openK;
-
-  // 背板
-  ctx.shadowColor = 'rgba(0,0,0,0.6)';
-  ctx.shadowBlur = 26;
-  ctx.shadowOffsetY = 10;
-  ctx.fillStyle = 'rgba(9,17,25,0.94)';
-  drawRoundRect(x, y, w, h, 4);
-  ctx.fill();
-  ctx.shadowColor = 'transparent';
-  ctx.shadowBlur = 0;
-  ctx.shadowOffsetY = 0;
-
-  ctx.strokeStyle = dim + '0.5)';
-  ctx.lineWidth = 1;
-  drawRoundRect(x, y, w, h, 4);
-  ctx.stroke();
-
-  // 四角括号
-  const cnr = 10;
-  ctx.strokeStyle = dim + '0.85)';
-  ctx.lineWidth = 1.6;
-  ctx.beginPath();
-  ctx.moveTo(x, y + cnr); ctx.lineTo(x, y); ctx.lineTo(x + cnr, y);
-  ctx.moveTo(x + w - cnr, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y + cnr);
-  ctx.moveTo(x + w, y + h - cnr); ctx.lineTo(x + w, y + h); ctx.lineTo(x + w - cnr, y + h);
-  ctx.moveTo(x + cnr, y + h); ctx.lineTo(x, y + h); ctx.lineTo(x, y + h - cnr);
-  ctx.stroke();
-
-  // 顶沿一道透光
-  const gl = ctx.createLinearGradient(x + 8, y, x + w - 8, y);
-  gl.addColorStop(0, dim + '0)');
-  gl.addColorStop(0.5, dim + '0.9)');
-  gl.addColorStop(1, dim + '0)');
-  ctx.fillStyle = gl;
-  ctx.fillRect(x + 8, y, w - 16, 1);
-
-  // 标题
-  ctx.textAlign = 'left';
-  ctx.font = '800 12px ' + mono;
-  ctx.fillStyle = C.color;
-  ctx.fillText(C.name.split('').join(' '), x + 16, y + 23);
-  ctx.font = '600 9px ' + mono;
-  ctx.fillStyle = dim + '0.45)';
-  ctx.fillText(C.en, x + 16, y + 36);
-
-  ctx.textAlign = 'right';
-  ctx.font = '800 11px ' + mono;
-  ctx.fillStyle = 'rgba(140,190,215,0.75)';
-  ctx.fillText(L.taken + '/' + n, x + w - 16, y + 26);
-
-  ctx.strokeStyle = dim + '0.14)';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(x + 12, y + headH - 5);
-  ctx.lineTo(x + w - 12, y + headH - 5);
-  ctx.stroke();
-
-  // 逐行翻牌：每件按自己的时间轴走，品质越高翻得越慢
-  for (let i = 0; i < n; i++) {
-    const it = L.items[i];
-    const local = L.t - it.at;
-    const ry = y + headH + i * rowH + rowH / 2;
-
-    // 还没轮到的行：留一个空槽，让面板结构不塌
-    if (local < 0) {
-      ctx.save();
-      ctx.globalAlpha = openK * 0.8;
-      ctx.strokeStyle = 'rgba(120,160,190,0.34)';
-      ctx.lineWidth = 1;
-      ctx.setLineDash([3, 3]);
-      drawRoundRect(x + 10, ry - 13, w - 20, 26, 3);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.textAlign = 'center';
-      ctx.font = '700 10px ' + mono;
-      ctx.fillStyle = 'rgba(110,145,170,0.45)';
-      ctx.fillText('·  ·  ·', x + w / 2, ry + 4);
-      ctx.restore();
-      continue;
-    }
-
-    const flipping = local < it.hold;
-    const holdK = flipping ? clamp(local / it.hold, 0, 1) : 1;
-    const fk = flipping ? 0 : clamp((local - it.hold) / it.flip, 0, 1);
-    const isSel = i === L.sel && !it.taken && !flipping && L.t >= it.ready;
-    const takenK = it.taken ? 0.42 : 1;              // 已收下的行整体压暗
-
-    /* ── 1. 背板 + 进度条：完全不参与形变，条是匀速往前推的 ── */
-    ctx.save();
-    ctx.globalAlpha = openK;
-    ctx.fillStyle = flipping
-      ? 'rgba(120,155,180,' + (0.10 + holdK * 0.07).toFixed(3) + ')'
-      : dim + '0.085)';
-    drawRoundRect(x + 10, ry - 13, w - 20, 26, 3);
-    ctx.fill();
-
-    if (flipping) {
-      // 轨道
-      ctx.fillStyle = 'rgba(130,165,190,0.18)';
-      drawRoundRect(x + 10, ry + 11, w - 20, 2, 1);
-      ctx.fill();
-      // 进度：稳定推进，不来回晃
-      const barW = (w - 20) * holdK;
-      ctx.globalAlpha = openK * (0.40 + holdK * 0.60);
-      ctx.fillStyle = it.color;
-      drawRoundRect(x + 10, ry + 11, Math.max(1, barW), 2, 1);
-      ctx.fill();
-      // 前端一点柔光
-      if (barW > 5) {
-        ctx.globalAlpha = openK * (0.20 + holdK * 0.30);
-        ctx.fillStyle = '#ffffff';
-        drawRoundRect(x + 10 + barW - 3, ry + 11, 3, 2, 1);
-        ctx.fill();
-      }
-      ctx.globalAlpha = openK;
-    }
-
-    // 神话货：整行一圈红色呼吸，一眼看出这箱有大家伙
-    if (it.tier === 'myth') {
-      const gp = 0.35 + Math.sin(L.t * 5) * 0.25;
-      ctx.globalAlpha = openK * (flipping ? gp : 0.75);
-      ctx.strokeStyle = 'rgba(255,61,90,' + (flipping ? 0.5 : 0.85) + ')';
-      ctx.lineWidth = 1;
-      drawRoundRect(x + 10, ry - 13, w - 20, 26, 3);
-      ctx.stroke();
-      ctx.globalAlpha = openK;
-    }
-    ctx.restore();
-
-    // 选中行：一圈呼吸描边 —— 滚轮选的就是 F 要拿的
-    if (isSel) {
-      ctx.save();
-      ctx.globalAlpha = openK * (0.6 + Math.sin(G.time * 6) * 0.35);
-      ctx.strokeStyle = it.color;
-      ctx.lineWidth = 1.6;
-      drawRoundRect(x + 9, ry - 14, w - 18, 28, 4);
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    /* ── 2. 行内容：单调压缩 + 极轻微横移，不再来回弹 ── */
-    ctx.save();
-    ctx.globalAlpha = takenK;
-    ctx.translate(x + w / 2, ry);
-    if (flipping) {
-      ctx.scale(1, 0.94 - holdK * 0.06);              // 单向压扁，不回弹
-      // 只有快翻出来时才有一丁点横向微颤，幅度不到 1px
-      const jx = holdK > 0.55 ? Math.sin(local * 34) * (holdK - 0.55) * 0.8 * it.qWeight : 0;
-      ctx.translate(jx, 0);
-    } else {
-      const e = 1 - Math.pow(1 - fk, 3);
-      let sy = 0.24 + 0.76 * e;
-      if (fk > 0.80) sy += Math.sin((fk - 0.80) / 0.20 * Math.PI) * 0.10;   // 落定回弹
-      ctx.scale(1, sy);
-    }
-    ctx.translate(-(x + w / 2), -ry);
-
-    ctx.fillStyle = flipping ? 'rgba(120,155,180,0.22)' : 'rgba(0,0,0,0.4)';
-    drawRoundRect(x + 15, ry - 10, 20, 20, 2);
-    ctx.fill();
-    ctx.textAlign = 'center';
-    ctx.font = '800 11px ' + mono;
-    ctx.fillStyle = flipping
-      ? 'rgba(190,215,235,' + (0.55 + holdK * 0.35).toFixed(2) + ')'
-      : it.color;
-    ctx.fillText(flipping ? '?' : it.icon, x + 25, ry + 4);
-
-    ctx.textAlign = 'left';
-    ctx.font = '700 12px ' + mono;
-    if (flipping) {
-      // 打码格：随进度一格一格点亮，不再乱跳
-      const seg = 6;
-      const filled = Math.max(1, Math.ceil(holdK * seg));
-      const chW = ctx.measureText('\u25a0').width + 2;
-      let sx = x + 44;
-      for (let g = 0; g < seg; g++) {
-        ctx.fillStyle = g < filled
-          ? 'rgba(175,205,225,' + (0.38 + holdK * 0.42).toFixed(2) + ')'
-          : 'rgba(130,160,185,0.15)';
-        ctx.fillText('\u25a0', sx, ry + 4);
-        sx += chW;
-      }
-    } else {
-      // 名字太长就截断，别和右边的数值撞上
-      let nm = it.name;
-      const maxW = w - 44 - 78;
-      while (nm.length > 2 && ctx.measureText(nm).width > maxW) nm = nm.slice(0, -1);
-      if (nm !== it.name) nm = nm.slice(0, -1) + '\u2026';
-      ctx.fillStyle = it.color;
-      ctx.fillText(nm, x + 44, ry + 4);
-    }
-
-    ctx.textAlign = 'right';
-    ctx.font = '800 12px ' + mono;
-    if (flipping) {
-      ctx.fillStyle = 'rgba(170,200,220,' + (0.35 + holdK * 0.30).toFixed(2) + ')';
-      ctx.fillText('\u00b7\u00b7\u00b7', x + w - 18, ry + 4);
-    } else if (it.taken) {
-      ctx.fillStyle = 'rgba(140,190,215,0.62)';
-      ctx.fillText('✓ 已收', x + w - 18, ry + 4);
-    } else if (it.blocked) {
-      ctx.fillStyle = '#ff6b8a';
-      ctx.fillText('带不走', x + w - 18, ry + 4);
-    } else {
-      ctx.fillStyle = it.color;
-      ctx.fillText(it.val, x + w - 18, ry + 4);
-    }
-
-    // 翻开瞬间高光扫一下，品质越高越亮
-    if (!flipping && fk < 0.55) {
-      ctx.globalAlpha = openK * (1 - fk / 0.55) * (0.32 + it.qWeight * 0.28);
-      ctx.fillStyle = it.tier === 'myth' ? '#ffffff' : (it.tier === 'legend' ? '#fff2c8' : '#fff8e0');
-      drawRoundRect(x + 10, ry - 13, w - 20, 26, 3);
-      ctx.fill();
-    }
-    ctx.restore();
-  }
-
-  // 底部分隔线
-  ctx.strokeStyle = dim + '0.14)';
-  ctx.beginPath();
-  ctx.moveTo(x + 12, y + h - footH + 4);
-  ctx.lineTo(x + w - 12, y + h - footH + 4);
-  ctx.stroke();
-
-  // 底部状态：有得拿就提示滚轮/F，还在翻就显示进度
-  const selIt = L.items[L.sel];
-  const canPick = selIt && !selIt.taken && L.t >= selIt.ready;
-  ctx.textAlign = 'center';
-  ctx.font = '700 10px ' + mono;
-  if (canPick) {
-    const pulse = 0.6 + Math.sin(G.time * 7) * 0.4;
-    ctx.fillStyle = dim + (0.45 + pulse * 0.55).toFixed(2) + ')';
-    let nm = selIt.name;
-    while (nm.length > 10 && ctx.measureText(nm).width > 150) nm = nm.slice(0, -1);
-    ctx.fillText('[滚轮] 选择 · [F] 拾取「' + nm + '」' + (selIt.blocked ? ' · 带不走' : ''), x + w / 2, y + h - 12);
-  } else if (L.taken >= L.items.length) {
-    ctx.fillStyle = dim + '0.75)';
-    ctx.fillText('已 全 部 收 下', x + w / 2, y + h - 12);
-  } else {
-    // 显示当前正在翻的这一档，让「翻得慢」有解释
-    let cur = null;
-    for (const it of L.items) if (L.t >= it.at && L.t < it.ready) { cur = it; break; }
-    const dots = '···'.slice(0, 1 + (Math.floor(L.t * 5) % 3));
-    if (cur && cur.tier !== 'supply') {
-      const Q = QUALITY[cur.tier];
-      ctx.fillStyle = Q.dim + '0.85)';
-      ctx.fillText('翻 找 · ' + Q.name + dots, x + w / 2, y + h - 12);
-    } else {
-      ctx.fillStyle = 'rgba(140,180,205,0.65)';
-      ctx.fillText('翻 找' + dots + ' · 滚轮选择 / F 拾取', x + w / 2, y + h - 12);
-    }
-  }
-
-  ctx.restore();
 }
 
 function drawCrosshair(mono) {
@@ -19874,6 +19824,7 @@ function togglePackPanel() {
 }
 function openPackPanel() {
   if (G.scene !== 'playing' || !P.alive || isDowned()) return;
+  if (G.lootPanel) closeLootPanel();                  // 搜刮面板和背包面板不叠在一起
   if (P.medOn) endCareBack('已收手');                 // 收拾背包前先把手上的药收了
   G.packOpen = true;
   PK_UI.held = null;
@@ -20067,6 +20018,10 @@ function pkPlaceInto(arr, i, zone) {
   } else if (stackInto(held, c, ownedMapLive())) {   // 同弹药合并（补满为止，剩余留在手上）
     if ((held.n | 0) <= 0) PK_UI.held = null;
   } else {                                           // 交换：原来的那件整块换到手上
+    if (PK_UI.fromLoot) {                            // 从容器里刚拿起来的：不许把格子里的东西顶到手上
+      uiToast('这个格子有东西了 · 换个空格放', 'small warn');
+      return;
+    }
     if (!c.cont) {
       clearSpanAt(arr, hi, blocks);
       let at = fitsAtRun(arr, blocks, hi, cell) ? hi : findFitRun(arr, blocks, cell);
@@ -20281,76 +20236,83 @@ function renderPackPanel() {
     const arr = getArr();
     const heads = arr.filter(c => c && !c.cont).length;
     if (noteEl) noteEl.textContent = noteTxt + ' · ' + heads + ' 件 / ' + arr.length + ' 格';
-    const grid = $(gridId);
-    grid.innerHTML = '';
-    const blocks = zoneBlocks(ZONE_NAMES[zone]);
-    let lastBlkH = -1;
-    for (const [s, e, C, brk] of blocks) {
-      const bh = (e - s) / C;                        // 舱高（格）
-      // brk=2 → 强制不换行（同排高低舱混排，照实物图）；brk=1 → 强制换行；其余高度变化自动换行
-      if (lastBlkH >= 0 && brk !== 2 && (bh !== lastBlkH || brk === 1)) {
-        const br = document.createElement('div');
-        br.className = 'blk-break';
-        grid.appendChild(br);
-      }
-      lastBlkH = bh;
-      const blk = document.createElement('div');
-      blk.className = 'pk-blk';
-      blk.dataset.cap = '隔舱 ' + (e - s) + ' 格';
-      const bgrid = document.createElement('div');
-      bgrid.className = 'blk-grid';
-      bgrid.style.gridTemplateColumns = 'repeat(' + C + ', var(--bcell))';
-      for (let i = s; i < e; i++) {
-        const c = arr[i];
-        if (c && c.cont) continue;                   // 多格物品：整块画在 head 上
-        const hi = i;
-        const rel = i - s;
-        const [w, h] = c ? shapeOf(c, C) : [1, 1];
-        const el = document.createElement('div');
-        el.className = 'lo-cell bcell' + (c ? '' : ' empty');
-        el.style.gridColumn = (rel % C + 1) + ' / span ' + w;
-        el.style.gridRow = ((rel / C | 0) + 1) + ' / span ' + h;
-        if (w > 1) el.style.width = 'calc(' + w + ' * var(--bcell) + ' + ((w - 1) * 2) + 'px)';    // 跨格：撑出实际宽
-        if (h > 1) el.style.height = 'calc(' + h + ' * var(--bcell) + ' + ((h - 1) * 2) + 'px)';  // 跨格：撑出实际高
-        if (c) {
-          el.title = cellName(c) + (c.t === 'ammo' ? ' ×' + (c.n | 0) : '') + ' · ' + cellSub(c);
-          let html = '<span class="ic" style="color:' + cellColor(c) + '">' + cellIcon(c) + '</span>';
-          if (w > 1 || h > 1) html += '<span class="nm">' + cellName(c) + (c.t === 'ammo' ? ' ' + (c.n | 0) : '') + '</span>' +
-            '<span class="sub">' + cellSub(c) + '</span>';
-          else if (c.t === 'ammo') html += '<span class="ct">' + (c.n | 0) + '</span>';
-          el.innerHTML = html;
-        }
+    renderCarryZoneGrid($(gridId), arr, zone);
+  }
+}
 
-        const pickCell = () => {                    // 拿起（多格物品整块一起）
-          if (!arr[hi]) return null;
-          const picked = arr[hi];
-          clearSpanAt(arr, hi, blocks);
-          PK_UI.held = picked;
-          Sfx.tone(500, 0.05, 0.04, 'square');
-          return () => {                            // 取消：原位还空着就放回去
-            if (!arr[hi]) { placeAtRun(arr, hi, PK_UI.held, blocks); PK_UI.held = null; }
-          };
-        };
-        const placeCell = () => pkPlaceInto(arr, hi, zone);   // 放置 / 交换 / 合并
-        el.__pkPlace = placeCell;                   // 拖拽落在哪格就用哪格的回调
-        if (c && c.t === 'armor') {
-          el.oncontextmenu = e => {                 // 右键护甲 = 直接穿上（身上那件换回这个格子）
-            e.preventDefault(); e.stopPropagation();
-            const prev = currentArmorPiece();
-            if (!wearArmorPiece(c)) { uiToast('这件护甲有问题，穿不上', 'small warn'); return; }
-            clearSpanAt(arr, hi, blocks);
-            if (prev) placeAtRun(arr, hi, { t: 'armor', id: prev.id, hp: prev.hp, max: prev.max }, blocks);
-            uiToast('已穿上 ' + ARMORS[P.armorId].name + (prev ? ' · 换下的在格子里' : ''), 'small');
-            Sfx.tone(620, 0.05, 0.04, 'square');
-            renderPackPanel();
-          };
-        }
-        pkPressable(el, pickCell, placeCell);
-        bgrid.appendChild(el);
-      }
-      blk.appendChild(bgrid);
-      grid.appendChild(blk);
+/* 把一个随身容器（0 弹挂 / 1 口袋 / 2 背包）画成隔舱格拼图 ——
+   局内 Tab 面板和搜刮容器面板共用同一套渲染 / 拖拽。 */
+function renderCarryZoneGrid(grid, arr, zone, opts) {
+  if (!grid) return;
+  const after = (opts && opts.onChange) || renderPackPanel;
+  grid.innerHTML = '';
+  const blocks = zoneBlocks(ZONE_NAMES[zone]);
+  let lastBlkH = -1;
+  for (const [s, e, C, brk] of blocks) {
+    const bh = (e - s) / C;                        // 舱高（格）
+    // brk=2 → 强制不换行（同排高低舱混排，照实物图）；brk=1 → 强制换行；其余高度变化自动换行
+    if (lastBlkH >= 0 && brk !== 2 && (bh !== lastBlkH || brk === 1)) {
+      const br = document.createElement('div');
+      br.className = 'blk-break';
+      grid.appendChild(br);
     }
+    lastBlkH = bh;
+    const blk = document.createElement('div');
+    blk.className = 'pk-blk';
+    blk.dataset.cap = '隔舱 ' + (e - s) + ' 格';
+    const bgrid = document.createElement('div');
+    bgrid.className = 'blk-grid';
+    bgrid.style.gridTemplateColumns = 'repeat(' + C + ', var(--bcell))';
+    for (let i = s; i < e; i++) {
+      const c = arr[i];
+      if (c && c.cont) continue;                   // 多格物品：整块画在 head 上
+      const hi = i;
+      const rel = i - s;
+      const [w, h] = c ? shapeOf(c, C) : [1, 1];
+      const el = document.createElement('div');
+      el.className = 'lo-cell bcell' + (c ? '' : ' empty');
+      el.style.gridColumn = (rel % C + 1) + ' / span ' + w;
+      el.style.gridRow = ((rel / C | 0) + 1) + ' / span ' + h;
+      if (w > 1) el.style.width = 'calc(' + w + ' * var(--bcell) + ' + ((w - 1) * 2) + 'px)';    // 跨格：撑出实际宽
+      if (h > 1) el.style.height = 'calc(' + h + ' * var(--bcell) + ' + ((h - 1) * 2) + 'px)';  // 跨格：撑出实际高
+      if (c) {
+        el.title = cellName(c) + (c.t === 'ammo' ? ' ×' + (c.n | 0) : '') + ' · ' + cellSub(c);
+        let html = '<span class="ic" style="color:' + cellColor(c) + '">' + cellIcon(c) + '</span>';
+        if (w > 1 || h > 1) html += '<span class="nm">' + cellName(c) + (c.t === 'ammo' ? ' ' + (c.n | 0) : '') + '</span>' +
+          '<span class="sub">' + cellSub(c) + '</span>';
+        else if (c.t === 'ammo') html += '<span class="ct">' + (c.n | 0) + '</span>';
+        el.innerHTML = html;
+      }
+
+      const pickCell = () => {                    // 拿起（多格物品整块一起）
+        if (!arr[hi]) return null;
+        const picked = arr[hi];
+        clearSpanAt(arr, hi, blocks);
+        PK_UI.held = picked;
+        Sfx.tone(500, 0.05, 0.04, 'square');
+        return () => {                            // 取消：原位还空着就放回去
+          if (!arr[hi]) { placeAtRun(arr, hi, PK_UI.held, blocks); PK_UI.held = null; }
+        };
+      };
+      const placeCell = () => pkPlaceInto(arr, hi, zone);   // 放置 / 交换 / 合并
+      el.__pkPlace = placeCell;                   // 拖拽落在哪格就用哪格的回调
+      if (c && c.t === 'armor') {
+        el.oncontextmenu = e => {                 // 右键护甲 = 直接穿上（身上那件换回这个格子）
+          e.preventDefault(); e.stopPropagation();
+          const prev = currentArmorPiece();
+          if (!wearArmorPiece(c)) { uiToast('这件护甲有问题，穿不上', 'small warn'); return; }
+          clearSpanAt(arr, hi, blocks);
+          if (prev) placeAtRun(arr, hi, { t: 'armor', id: prev.id, hp: prev.hp, max: prev.max }, blocks);
+          uiToast('已穿上 ' + ARMORS[P.armorId].name + (prev ? ' · 换下的在格子里' : ''), 'small');
+          Sfx.tone(620, 0.05, 0.04, 'square');
+          after();
+        };
+      }
+      pkPressable(el, pickCell, placeCell);
+      bgrid.appendChild(el);
+    }
+    blk.appendChild(bgrid);
+    grid.appendChild(blk);
   }
 }
 
@@ -20407,12 +20369,16 @@ function pkDropTargetAt(x, y) {
   if (!el) return { kind: null, el: null };
   if (el.id === 'pkDropZone' || el.closest('#pkDropZone')) return { kind: 'drop', el: null };
   const cell = el.closest('.lo-cell');
-  if (cell && $('pack').contains(cell)) return { kind: 'cell', el: cell };
+  if (cell) {
+    const inPack = $('pack') && $('pack').contains(cell);
+    const inLoot = $('loot') && $('loot').contains(cell);
+    if (inPack || inLoot) return { kind: 'cell', el: cell };
+  }
   return { kind: null, el: null };
 }
 
 function pkHighlight(target) {
-  const prev = document.querySelector('#pack .dragover');
+  const prev = document.querySelector('.lo-cell.dragover');
   if (prev) prev.classList.remove('dragover');
   if (target && target.el) target.el.classList.add('dragover');
   const dz = $('pkDropZone');
@@ -20452,8 +20418,10 @@ function pkFinishDrag(target) {
     PK_DRAG.pending = null;
     PK_DRAG.revert = null;
     PK_DRAG.place = null;
+    PK_UI.fromLoot = null;
     pkEndVisuals();
     renderPackPanel();
+    if (G.lootPanel) lootRender();                 // 搜刮面板开着：左栏格子和容器格一起刷新
     if (G.modWin) renderModWin();                  // 拖拽可能动了配件：改装窗跟着刷
   }
 }
@@ -20859,6 +20827,7 @@ $('closeLoadout').addEventListener('click', closeLoadout);
 $('loAutoBtn').addEventListener('click', autoRestock);
 $('loClearBtn').addEventListener('click', clearCarryAll);
 $('closePack').addEventListener('click', closePackPanel);
+$('closeLoot').addEventListener('click', closeLootPanel);
 $('loadout').addEventListener('mousemove', e => {
   if (LO_UI.held) loMoveChip(e.clientX, e.clientY);
 });
