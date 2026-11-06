@@ -424,7 +424,7 @@
   .lo-row .sub { font-size:10px; color:#5e87a0; }
   .lo-row .ct { font-size:12px; font-weight:800; color:#ffd08a; font-variant-numeric:tabular-nums; }
   .lo-grid { display:grid; grid-template-columns:repeat(auto-fill, 86px); gap:8px; }
-  /* 隔舱（弹挂的 blocks）：方块拼图 —— 每舱一个紧贴的正方格网格，1x2/1x3 竖条、2x2、2x3 一眼可辨 */
+  /* 隔舱（弹挂的 blocks）：方块拼图 —— 每舱一个紧贴的正方格网格，1x2/1x3 横排、2x2、2x3 一眼可辨 */
   .pk-blk {
     grid-column: 1 / -1; display:flex; flex-wrap:wrap; gap:12px; align-items:flex-start;
     border:1px dashed rgba(80,140,185,.35); border-radius:6px; padding:12px 8px 8px;
@@ -435,7 +435,7 @@
     font-size:9px; font-weight:800; color:#4f7f9f; letter-spacing:.15em;
     background:#0b1420; padding:0 6px; border-radius:4px;
   }
-  .blk-grid { --bcell:46px; display:grid; gap:2px; }
+  .blk-grid { --bcell:46px; --bgap:2px; display:grid; gap:2px; }
   .lo-cell.bcell {
     width:var(--bcell); height:var(--bcell); min-height:var(--bcell);
     padding:2px; gap:1px; border-radius:3px;
@@ -4956,15 +4956,16 @@ function cellSize(c) {
 }
 /* ── 隔舱 2D 化：每个舱摆成一个正方格小网格（1x2 / 1x3 竖条、2x2、2x3 …），
       存储仍是行优先的一维数组 + head/cont 占位，但铺设与渲染都按矩形来 ── */
-/* 舱的列数：1x2 / 1x3 = 1 列竖条；4 = 2x2；6 = 3x2；大背包尽量接近方形 */
+/* 舱的列数：1 = 1 格；1x2 / 1x3 = 横排；4 = 2x2；6 = 3x2；大背包尽量接近方形 */
 function blkCols(n) {
-  if (n <= 3) return 1;
+  if (n <= 1) return 1;
+  if (n <= 3) return n;                                  // 2 / 3 格：横排
   for (let c = Math.ceil(Math.sqrt(n)); c <= 10; c++) if (n % c === 0) return c;
   return 10;
 }
 /* sz 格物品在 C 列舱里的 w×h 形状（与铺设、渲染一一对应） */
 function itemShape(sz, C) {
-  if (C <= 1) return [1, Math.max(1, sz)];   // 竖条舱：一律竖放（1x2 的来源）
+  if (C <= 1) return [1, Math.max(1, sz)];   // 单列舱（口袋 / 1 格）：竖放
   if (sz <= 1) return [1, 1];
   if (sz === 2) return [2, 1];               // 多列舱：横放 Domino
   if (sz === 4) return [2, 2];               // 枪：2x2
@@ -19220,6 +19221,8 @@ function renderLoadout() {
         el.className = 'lo-cell bcell' + (c ? '' : ' empty');
         el.style.gridColumn = (rel % C + 1) + ' / span ' + w;
         el.style.gridRow = ((rel / C | 0) + 1) + ' / span ' + h;
+        if (w > 1) el.style.width = 'calc(' + w + ' * var(--bcell) + ' + ((w - 1) * 2) + 'px)';    // 跨格：撑出实际宽
+        if (h > 1) el.style.height = 'calc(' + h + ' * var(--bcell) + ' + ((h - 1) * 2) + 'px)';  // 跨格：撑出实际高
         if (c) {
           el.title = cellName(c) + ' · ' + cellSub(c);
           let html = '<span class="ic" style="color:' + cellColor(c) + '">' + cellIcon(c) + '</span>';
@@ -19943,6 +19946,8 @@ function renderPackPanel() {
         el.className = 'lo-cell bcell' + (c ? '' : ' empty');
         el.style.gridColumn = (rel % C + 1) + ' / span ' + w;
         el.style.gridRow = ((rel / C | 0) + 1) + ' / span ' + h;
+        if (w > 1) el.style.width = 'calc(' + w + ' * var(--bcell) + ' + ((w - 1) * 2) + 'px)';    // 跨格：撑出实际宽
+        if (h > 1) el.style.height = 'calc(' + h + ' * var(--bcell) + ' + ((h - 1) * 2) + 'px)';  // 跨格：撑出实际高
         if (c) {
           el.title = cellName(c) + (c.t === 'ammo' ? ' ×' + (c.n | 0) : '') + ' · ' + cellSub(c);
           let html = '<span class="ic" style="color:' + cellColor(c) + '">' + cellIcon(c) + '</span>';
