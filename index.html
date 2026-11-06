@@ -1784,7 +1784,6 @@ const DEFAULT_SAVE = () => ({
      背包要自己买 —— 都在大厅整备界面从仓库穿上。 */
   gearOwned: { d01: 1 },
   worn: { rig: null, pack: null },   // 当前穿着的弹挂 / 背包（null = 没穿）
-  pocketUp: false,            // 口袋扩展板：false = 默认 1x4，true = 1 + 2x1 + 2x1 + 1（商店买）
   carry: null,                // 随身容器：{ rig:[弹挂], pocket:[口袋], pack:[背包] } —— 懒初始化，见 ensureCarry()
   pistolAmmo: 0,              // 已废弃：老档的「手枪弹盒」，迁移时折算成 9×19 白弹
   stash: {},          // 仓库里的收集品：{ 收集品id: 数量 }
@@ -1916,7 +1915,6 @@ function loadSave() {
       ammoPick: cleanAmmoPick(d.ammoPick),
       gearOwned: gear,
       worn: cleanWorn(d.worn, gear),
-      pocketUp: !!d.pocketUp,
       carry: rawCarry(d.carry),
       pistolAmmo: 0,
       stash: cleanStash(d.stash),
@@ -2817,7 +2815,7 @@ function exoOn() { return !!(P.op && P.op.x && P.op.x.on); }
 
 /* 携行装备：弹挂 / 背包是仓库里的实体物品 —— 买一次永久拥有（SAVE.gearOwned 记账），
    但要在大厅整备界面「穿上」才生效（SAVE.worn 记当前穿的是哪件）。穿上之前：
-   没有弹挂 = 弹挂 0 格（备弹没地方放），没有背包 = 背包 0 格。口袋是衣服自带的，永远 4 格。
+   没有弹挂 = 弹挂 0 格（备弹没地方放），没有背包 = 背包 0 格。口袋是衣服自带的，永远 5 格（五个单格舱）。
    品质：白(基础) → 绿 → 蓝 → 紫 → 金 → 红，颜色沿用弹药档位色板。 */
 const GEAR = {
   /* ── 弹挂（隔舱制：blocks = [格数,列数,(排断点:1=强制换行 2=强制同行)]，总和 = cap = 携带空间，
@@ -2967,12 +2965,10 @@ const GEAR = {
 
 /* ── 随身容器 ──
    弹挂 rig（快捷可用：按 5 打药、R 换弹都从这儿读）—— 格数 = 穿着的弹挂
-   口袋 pocket（快捷可用）—— 默认四个单格舱，商店买「口袋扩展板」升级成 1 + 2x1 + 2x1 + 1（6 格四舱）
+   口袋 pocket（快捷可用）—— 固定五个独立单格舱，只能装 1 格的小件（绷带 / 针 / 弹药）
    背包 pack（仓库格：Tab 打开倒腾，里面的东西不能直接用）—— 格数 = 穿着的背包
    格子 = null 或 { t:'med'|'stop'|'surg'|'ammo', ... }，一格一件（弹药格按口径装）。 */
-const POCKET_BLOCKS_DEF = [1, 1, 1, 1];   // 默认：四个独立单格舱，只能装 1 格的东西
-const POCKET_BLOCKS_UP  = [1, 2, 2, 1];   // 升级：1 格 + 2x1 + 2x1 + 1 格（四舱共 6 格）
-const POCKET_UP_PRICE = 6000;
+const POCKET_BLOCKS = [1, 1, 1, 1, 1];    // 口袋固定：五个独立单格舱（不可升级）
 function wornGear(kind) {
   const k = SAVE.worn && SAVE.worn[kind];
   return (k && GEAR[k] && GEAR[k].kind === kind) ? GEAR[k] : null;
@@ -3000,7 +2996,7 @@ function rigWornMods() {
 function rigCap() { const g = wornGear('rig'); return g ? g.cap : 0; }
 function packCap() { const g = wornGear('pack'); return g ? g.cap : 0; }
 /* 口袋隔舱布局（只在运行期调：loadSave 不经过这里，无 TDZ 风险） */
-function pocketBlocks() { return SAVE && SAVE.pocketUp ? POCKET_BLOCKS_UP : POCKET_BLOCKS_DEF; }
+function pocketBlocks() { return POCKET_BLOCKS; }
 function pocketCap() { const b = pocketBlocks(); let n = 0; for (const x of b) n += x; return n; }
 
 /* 存档读取点：必须放在它依赖的最后一张数据表（GEAR / REPAIRS）之后，
@@ -3247,8 +3243,8 @@ function ensureCarry() {
     if (ov) for (const c of ov) overflow.push(c);
     for (let i = cap; i < valid.length; i++) if (valid[i] && !valid[i].cont) overflow.push(valid[i]);
     }
-    /* 老档默认口袋是四个独立单格舱：双格大件（手术包 / 修理包 / 近战）塞不下，原物退回仓库 */
-    if (!SAVE.pocketUp) {
+    /* 口袋一律是五个单格舱：老档（含买过扩展板的 6 格档）里多格大件（手术包 / 修理包 / 近战）塞不下，原物退回仓库 */
+    {
       const pk = SAVE.carry.pocket;
       for (let i = 0; i < pk.length; i++) {
         const c = pk[i];
@@ -5174,7 +5170,7 @@ function shapeOf(c, C) {
 }
 /* 某容器（'rig' | 'pocket' | 'pack'）的隔舱 → [[start, end, cols], ...] */
 function zoneBlocks(zone) {
-  if (zone === 'pocket') {                                   // 口袋：默认四个单格舱；升级后 1 + 2x1 + 2x1 + 1
+  if (zone === 'pocket') {                                   // 口袋：五个独立单格舱
     const out = []; let s = 0;
     for (const b of pocketBlocks()) { const [n, cols, brk] = blkSpec(b); out.push([s, s + n, cols, brk]); s += n; }
     return out;
@@ -18238,28 +18234,9 @@ function refreshShop() {
     return;
   }
 
-  /* 携行装备拆两页：弹挂（含口袋扩展板）/ 背包 —— 品质从白到红，格数越高越贵 */
+  /* 携行装备拆两页：弹挂 / 背包 —— 品质从白到红，格数越高越贵 */
   if (shopTab === 'rig' || shopTab === 'pack') {
     const kindName = k => k === 'rig' ? '弹挂' : '背包';
-    /* 口袋扩展板：一次性升级，默认 1x4 → 1 + 2x1 + 2x1 + 1（四舱共 6 格）—— 归在弹挂页 */
-    if (shopTab === 'rig') {
-      const owned = !!SAVE.pocketUp;
-      const canAfford = SAVE.credits >= POCKET_UP_PRICE;
-      const el = document.createElement('div');
-      el.className = 'item' + (owned ? ' owned' : '');
-      el.innerHTML =
-        '<div class="top"><span class="nm" style="color:#4fa8ff">口袋扩展板</span>' +
-        (owned ? '<span class="tag own">已安装</span>' : '<span class="tag" style="color:#4fa8ff">蓝 · 口袋改装</span>') + '</div>' +
-        '<div class="ds">往战术腰封上加装两组快取弹匣套。口袋从四个单格舱升级成 1 + 2x1 + 2x1 + 1 四舱（共 6 格），手术包这类双格大件也能横着塞。</div>' +
-        '<div class="ds" style="color:#6fb0cf">口袋 4 格（4×1 格舱）→ 6 格（隔舱 1+2+2+1）· 一次性升级，永久生效</div>' +
-        '<div class="buyrow">' +
-          '<span class="price"><i>¥</i>' + fmtMoney(POCKET_UP_PRICE) + '</span>' +
-          '<button class="buybtn"' + (!owned && !canAfford ? ' disabled' : '') + '>' +
-          (owned ? '已 安 装' : (canAfford ? '购 买' : '资金不足')) + '</button>' +
-        '</div>';
-      el.querySelector('.buybtn').addEventListener('click', buyPocketUp);
-      grid.appendChild(el);
-    }
     for (const key in GEAR) {
       const s = GEAR[key];
       if (s.kind !== shopTab) continue;                  // 只在对应页显示弹挂 / 背包
@@ -18605,20 +18582,6 @@ function buyGear(key) {
   Sfx.init(); Sfx.resume(); Sfx.pickup();
   refreshShop();
   uiToast('已购入 ' + s.name + ' · 去整备界面穿上', 'small');
-}
-
-/* 口袋扩展板：一次性升级（1x4 → 1+2+2+1 六格四舱），买了立刻生效并撑大口袋数组 */
-function buyPocketUp() {
-  if (SAVE.pocketUp) return;
-  if (SAVE.credits < POCKET_UP_PRICE) return;
-  SAVE.credits -= POCKET_UP_PRICE;
-  SAVE.pocketUp = true;
-  trimCarryToCap();            // 口袋 4 → 6 格：补两个空格（老格子原位不动）
-  saveGame();
-  Sfx.init(); Sfx.resume(); Sfx.pickup();
-  refreshShop();
-  renderLoadout();
-  uiToast('口袋扩展板已安装 · 口袋升级到 6 格（1+2+2+1 四舱）', 'small');
 }
 
 /* ══════════════════════════════════════════════════════════
