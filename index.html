@@ -425,8 +425,13 @@
   .lo-row .ct { font-size:12px; font-weight:800; color:#ffd08a; font-variant-numeric:tabular-nums; }
   .lo-grid { display:grid; grid-template-columns:repeat(auto-fill, 86px); gap:8px; }
   /* 隔舱（弹挂的 blocks）：方块拼图 —— 每舱一个紧贴的正方格网格，1x2/1x3 横排、2x2、2x3 一眼可辨 */
+  /* 容器格里的隔舱框按内容宽度横着并排，不占一整排 */
+  #loRig, #loPocket, #loPack, #pkRig, #pkPocket, #pkPack {
+    display:flex; flex-wrap:wrap; gap:10px; align-items:flex-start;
+  }
   .pk-blk {
-    grid-column: 1 / -1; display:flex; flex-wrap:wrap; gap:12px; align-items:flex-start;
+    flex: 0 0 auto;
+    display:flex; flex-wrap:wrap; gap:12px; align-items:flex-start;
     border:1px dashed rgba(80,140,185,.35); border-radius:6px; padding:12px 8px 8px;
     background:rgba(16,28,40,.28); position:relative;
   }
