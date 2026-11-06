@@ -426,7 +426,7 @@
   .lo-grid { display:grid; grid-template-columns:repeat(auto-fill, 86px); gap:8px; }
   /* 隔舱（弹挂的 blocks）：方块拼图 —— 每舱一个紧贴的正方格网格，1x2/1x3 横排、2x2、2x3 一眼可辨 */
   /* 容器格里的隔舱框按内容宽度横着并排，不占一整排 */
-  #loRig, #loPocket, #loPack, #pkRig, #pkPocket, #pkPack {
+  #loRig, #loPocket, #loPack, #pkRig, #pkPocket, #pkPack, #lootPack, #lootRig, #lootPocket {
     display:flex; flex-wrap:wrap; gap:10px; align-items:flex-start;
   }
   .pk-blk {
@@ -442,7 +442,7 @@
     font-size:9px; font-weight:800; color:#4f7f9f; letter-spacing:.15em;
     background:#0b1420; padding:0 6px; border-radius:4px;
   }
-  .blk-grid { --bcell:46px; --bgap:2px; display:grid; gap:2px; }
+  .blk-grid { --bcell:46px; --bgap:2px; display:grid; grid-auto-rows:var(--bcell); gap:2px; }
   .lo-cell.bcell {
     width:var(--bcell); height:var(--bcell); min-height:var(--bcell);
     padding:2px; gap:1px; border-radius:3px;
@@ -486,6 +486,33 @@
   .loot-pend { margin-top:10px; font-size:11px; font-weight:700; color:#4f7f9f; letter-spacing:.06em; line-height:1.5; }
   .loot-pend b { color:#8fd0ff; }
   .loot-box .lo-cell.bcell.empty::after { content:''; width:5px; height:5px; border-radius:50%; background:rgba(80,140,185,.2); }
+  /* 剪影：还没翻出来的东西 —— 真实占格的虚线幽灵格，? + 几×几 */
+  .loot-box .lo-cell.bcell.ghost {
+    border:1px dashed rgba(120,180,220,.42); border-radius:4px;
+    background:rgba(14,26,40,.32); cursor:help;
+  }
+  .loot-box .lo-cell.bcell.ghost .ic {
+    font-size:20px; font-weight:800; color:rgba(143,208,255,.55); line-height:1;
+  }
+  .loot-box .lo-cell.bcell.ghost .sz {
+    font-size:10px; font-weight:800; letter-spacing:.08em;
+    color:rgba(143,208,255,.7); font-variant-numeric:tabular-nums;
+  }
+  .loot-box .lo-cell.bcell.ghost.scan {
+    animation:ghostPulse 1.1s ease-in-out infinite;
+    overflow:hidden;
+  }
+  .loot-box .lo-cell.bcell.ghost.scan::before {
+    content:''; position:absolute; inset:0; pointer-events:none;
+    background:linear-gradient(105deg, rgba(143,208,255,0) 30%, rgba(143,208,255,.14) 50%, rgba(143,208,255,0) 70%);
+    background-size:220% 100%;
+    animation:ghostSweep 1.3s linear infinite;
+  }
+  @keyframes ghostSweep { from { background-position:120% 0; } to { background-position:-120% 0; } }
+  @keyframes ghostPulse {
+    0%, 100% { border-color:rgba(120,180,220,.42); }
+    50% { border-color:rgba(143,208,255,.85); box-shadow:0 0 8px rgba(143,208,255,.18) inset; }
+  }
   .lo-row.dragover { border-color:#ffd08a; background:rgba(60,40,16,.5); }
   /* 局内背包：右侧丢弃区（拖到这里 = 扔在地上） */
   #pkDropZone {
@@ -11883,8 +11910,9 @@ function updateLootPanel(dt) {
   L.t += dt;
 
   // 逐件翻牌只负责「看清是什么」：翻出来的不会自动进包 —— 滚轮选中、按 F 自己拿
-  let shown = 0;
+  let shown = 0, started = 0;
   for (const it of L.items) {
+    if (L.t >= it.at) started++;                        // 剪影进入扫描态也要重绘
     if (L.t >= it.ready) { shown++; it.seen = true; }   // 翻出来 = 看过了：下次搜这箱它秒开
   }
   L.shown = shown;
@@ -11902,7 +11930,7 @@ function updateLootPanel(dt) {
   /* 界面：第一次进来就亮出来；翻出进度 / 拿走 / 选中变了才重排，不然每帧重绘太费 */
   const ui = $('loot');
   if (ui && ui.classList.contains('hidden')) { ui.classList.remove('hidden'); L.__sig = null; }
-  const sig = L.items.length + '|' + L.taken + '|' + L.shown + '|' + L.sel;
+  const sig = L.items.length + '|' + L.taken + '|' + L.shown + '|' + L.sel + '|' + started;
   if (sig !== L.__sig) { L.__sig = sig; lootRender(); }
 }
 
@@ -12012,16 +12040,16 @@ function lootItemCell(it) {
   return null;                    // 纯数量堆叠品（绷带 / 散装弹 / 药）：没有实体形状，按 1×1 摆
 }
 
-/* 容器装箱：只排「已经翻出来」的东西，没翻出的不占格、不露尺寸 */
+/* 容器装箱：翻出来的摆实物；没翻出的摆剪影（真实占格 + ? + 尺寸提示，不给名字） */
 function lootBoxLayout(L) {
   const cols = LOOT_BOX_COLS;
   const list = [];
   let pend = 0;
   for (const it of L.items) {
     if (it.taken) continue;
-    if (L.t < it.ready) { pend++; continue; }
     const cell = lootItemCell(it);
     const sh = cell ? shapeOf(cell, cols) : [1, 1];
+    if (L.t < it.ready) { pend++; list.push({ it, cell, w: sh[0], h: sh[1], pending: true }); continue; }
     list.push({ it, cell, w: sh[0], h: sh[1] });
   }
   const occ = new Array(cols * 24).fill(0);
@@ -12093,7 +12121,7 @@ function lootRender() {
   const st = $('lootStatus');
   if (st) {
     st.textContent = left
-      ? ('翻出 ' + lay.list.length + ' / ' + left + ' 件 · 已拿 ' + L.taken + (lay.pend ? ' · 还在翻…' : ''))
+      ? ('翻出 ' + (lay.list.length - lay.pend) + ' / ' + left + ' 件 · 已拿 ' + L.taken + (lay.pend ? ' · 还在翻…' : ''))
       : '已 全 部 收 下';
   }
 
@@ -12123,6 +12151,24 @@ function lootRender() {
   }
   for (const e of lay.list) {
     const el = document.createElement('div');
+    if (e.pending) {
+      /* 剪影：还没翻出来的东西按真实占格画虚线幽灵格 —— ? + 几×几，翻出哪件哪件变实物 */
+      const scanning = L.t >= e.it.at;             // 已经开始翻这件：给扫描动画
+      el.className = 'lo-cell bcell ghost' + (scanning ? ' scan' : '');
+      el.style.gridColumn = (e.col + 1) + ' / span ' + e.w;
+      el.style.gridRow = (e.row + 1) + ' / span ' + e.h;
+      if (e.w > 1) el.style.width = 'calc(' + e.w + ' * var(--bcell) + ' + ((e.w - 1) * 2) + 'px)';
+      if (e.h > 1) el.style.height = 'calc(' + e.h + ' * var(--bcell) + ' + ((e.h - 1) * 2) + 'px)';
+      el.title = '？？？ · 占 ' + e.w + '×' + e.h + (scanning ? ' · 正在翻找…' : ' · 排队中');
+      el.innerHTML = '<span class="ic">?</span><span class="sz">' + e.w + '×' + e.h + '</span>';
+      el.addEventListener('pointerdown', ev => {   // 点剪影：提示还在翻，别白点
+        ev.stopPropagation();
+        uiToast('还没翻出来 · 占 ' + e.w + '×' + e.h + ' · 继续翻找…', 'small warn');
+        Sfx.tone(220, 0.06, 0.04, 'square');
+      });
+      box.appendChild(el);
+      continue;
+    }
     const sel = L.items[L.sel] === e.it;
     el.className = 'lo-cell bcell ready' + (sel ? ' sel' : '');
     el.style.gridColumn = (e.col + 1) + ' / span ' + e.w;
@@ -12147,7 +12193,7 @@ function lootRender() {
   const pd = $('lootPend');
   if (pd) {
     pd.innerHTML = lay.pend
-      ? ('还有 <b>' + lay.pend + '</b> 件没翻出来 · 继续翻找…')
+      ? ('还有 <b>' + lay.pend + '</b> 件没翻出来 · 虚线剪影是它们的轮廓，翻到哪件哪件现形')
       : (left ? '拖到左边入包 · 按 F 收下选中的那件' : '箱子已清空');
   }
 }
