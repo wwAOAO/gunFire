@@ -2914,11 +2914,11 @@ const GEAR = {
                  blocks: [[3, 1], [6, 2], [3, 1], [16, 4]],
                  desc: '二十八格 HLS-2 重型包。顶袋 1x3 / 2x3 / 1x3 错落排布，下接 4x4 主仓。' },
   pack_als:    { name: 'ALS背负系统',      kind: 'pack', cap: 28, price: 8000,  q: '紫', color: '#b782ff',
-                 blocks: [[20, 4], [2, 2], [2, 2], [2, 2], [2, 2]],
-                 desc: '二十八格 ALS 背负系统。模块化装载理念：4x5 主仓外挂四个 2x1 附包。' },
+                 blocks: [[20, 4], [2, 2], [2, 2], [2, 2, 1], [2, 2]],
+                 desc: '二十八格 ALS 背负系统。模块化装载理念：4x5 主仓外挂四个 2x1 附包（分两排）。' },
   pack_surv:   { name: '生存战术背包',     kind: 'pack', cap: 28, price: 8000,  q: '紫', color: '#b782ff',
-                 blocks: [[6, 2], [6, 2], [4, 2], [4, 2], [4, 2], [4, 2]],
-                 desc: '二十八格生存背包。六个 2 宽分舱把物资分类码放，末日生存派最爱。' },
+                 blocks: [[6, 2], [6, 2], [4, 2, 1], [4, 2], [4, 2, 1], [4, 2]],
+                 desc: '二十八格生存背包。六个 2 宽分舱三排码放，物资分类一目了然，末日生存派最爱。' },
   pack_gt5:    { name: 'GT5野战背包',      kind: 'pack', cap: 30, price: 10500, q: '金', color: '#ffcc4d',
                  blocks: [[30, 5]],
                  desc: '三十格 GT5 野战背包。五列六行的整仓巨胃，一次出击的极限容量。' },
@@ -5058,7 +5058,7 @@ function blkCols(n) {
 /* 隔舱数显示：只报格数（[3,1] 这种列数写法不进文案） */
 function blkSizesText(blocks) { return blocks.map(b => Array.isArray(b) ? b[0] : b).join('+'); }
 /* 隔舱定义解析：数字 = 自动列数（blkCols），[格数, 列数] = 指定列数（如 [3,1] = 竖 1x3 弹匣条） */
-function blkSpec(b) { return Array.isArray(b) ? [b[0], b[1]] : [b, blkCols(b)]; }
+function blkSpec(b) { return Array.isArray(b) ? [b[0], b[1], b[2] | 0] : [b, blkCols(b), 0]; }
 /* sz 格物品在 C 列舱里的 w×h 形状（与铺设、渲染一一对应） */
 function itemShape(sz, C) {
   if (C <= 1) return [1, Math.max(1, sz)];   // 单列舱（口袋 / 1 格）：竖放
@@ -5072,14 +5072,14 @@ function itemShape(sz, C) {
 function zoneBlocks(zone) {
   if (zone === 'pocket') {                                   // 口袋：默认四个单格舱；升级后 1 + 2x1 + 2x1 + 1
     const out = []; let s = 0;
-    for (const b of pocketBlocks()) { const [n, cols] = blkSpec(b); out.push([s, s + n, cols]); s += n; }
+    for (const b of pocketBlocks()) { const [n, cols, brk] = blkSpec(b); out.push([s, s + n, cols, brk]); s += n; }
     return out;
   }
   const g = wornGear(zone);
   if (!g || !(g.cap > 0)) return [];
-  if (!g.blocks) return [[0, g.cap, blkCols(g.cap)]];
+  if (!g.blocks) return [[0, g.cap, blkCols(g.cap), 0]];
   const out = []; let s = 0;
-  for (const b of g.blocks) { const [n, cols] = blkSpec(b); out.push([s, s + n, cols]); s += n; }
+  for (const b of g.blocks) { const [n, cols, brk] = blkSpec(b); out.push([s, s + n, cols, brk]); s += n; }
   return out;
 }
 function blkAt(blocks, i) { for (const b of blocks) if (i >= b[0] && i < b[1]) return b; return null; }
@@ -19338,9 +19338,9 @@ function renderLoadout() {
     const zone = gridId === 'loRig' ? 0 : (gridId === 'loPocket' ? 1 : 2);
     const blocks = zoneBlocks(ZONE_NAMES[zone]);
     let lastBlkH = -1;
-    for (const [s, e, C] of blocks) {
+    for (const [s, e, C, brk] of blocks) {
       const bh = (e - s) / C;                        // 舱高（格）
-      if (lastBlkH >= 0 && bh !== lastBlkH) {        // 与上一排高度不同 → 另起一排（照胸挂实物图对齐）
+      if (lastBlkH >= 0 && (bh !== lastBlkH || brk)) {  // 高度不同或定义了排断点 → 另起一排（照实物图对齐）
         const br = document.createElement('div');
         br.className = 'blk-break';
         grid.appendChild(br);
@@ -20071,9 +20071,9 @@ function renderPackPanel() {
     grid.innerHTML = '';
     const blocks = zoneBlocks(ZONE_NAMES[zone]);
     let lastBlkH = -1;
-    for (const [s, e, C] of blocks) {
+    for (const [s, e, C, brk] of blocks) {
       const bh = (e - s) / C;                        // 舱高（格）
-      if (lastBlkH >= 0 && bh !== lastBlkH) {        // 与上一排高度不同 → 另起一排（照胸挂实物图对齐）
+      if (lastBlkH >= 0 && (bh !== lastBlkH || brk)) {  // 高度不同或定义了排断点 → 另起一排（照实物图对齐）
         const br = document.createElement('div');
         br.className = 'blk-break';
         grid.appendChild(br);
