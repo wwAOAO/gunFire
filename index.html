@@ -4974,7 +4974,7 @@ function itemShape(sz, C) {
 }
 /* 某容器（'rig' | 'pocket' | 'pack'）的隔舱 → [[start, end, cols], ...] */
 function zoneBlocks(zone) {
-  if (zone === 'pocket') return [[0, pocketCap(), 1]];       // 口袋：1 列竖条
+  if (zone === 'pocket') return [[0, pocketCap(), blkCols(pocketCap())]];   // 口袋：与其他舱同款横排
   const g = wornGear(zone);
   if (!g || !(g.cap > 0)) return [];
   if (!g.blocks) return [[0, g.cap, blkCols(g.cap)]];
