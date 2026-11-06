@@ -3387,6 +3387,14 @@ function ensureCarry() {
     arr.length = cap;
     for (let i = 0; i < cap; i++) arr[i] = valid[i] || null;
     const blocks = zoneBlocks(z);
+    /* 坏档清洗：弹挂 / 口袋里不该有装备格；背包里不该再套「穿着中的这只背包」自己（自己装自己会坏档，东西凭空消失）。
+       背包里存弹挂 / 另一只背包是合法的，保留。 */
+    for (let i = 0; i < cap; i++) {
+      const c = arr[i];
+      if (c && !c.cont && c.t === 'gear' && (z !== 'pack' || c.key === SAVE.worn.pack)) {
+        overflow.push(c); clearSpanAt(arr, i, blocks);
+      }
+    }
     sanitizeSpans(arr, blocks);
     /* 占格规则改过（枪 4→2/6、药箱 1→4、DEK 2→4…）：老档里对不上的矩形整舱重排，摆不下的回仓 */
     const ov = reflowZone(arr, blocks);
@@ -19470,7 +19478,12 @@ function cellAccepts(h, zone) {
   if (!h) return false;
   if (h.t === 'med' || h.t === 'stop' || h.t === 'surg' || h.t === 'ammo' ||
       h.t === 'repair' || h.t === 'relic' || h.t === 'mod') return true;
-  if (h.t === 'gun' || h.t === 'armor' || h.t === 'gear') return zone === 2;   // 枪 / 甲 / 弹挂 / 背包只进背包
+  if (h.t === 'gear') {
+    /* 背包不能装回自己里面：zone 2 的格子属于穿着的那只背包，同 key = 自己套自己（数据递归，东西会凭空消失） */
+    if (zone === 2 && SAVE.worn && SAVE.worn.pack === h.key) return false;
+    return zone === 2;                                         // 枪 / 甲 / 弹挂 / 背包只进背包
+  }
+  if (h.t === 'gun' || h.t === 'armor') return zone === 2;
   return false;
 }
 /* 手上的装备指针 → 格子（护甲塞进背包时把件本身记在格子里；弹挂 / 背包只留 key） */
@@ -19576,6 +19589,10 @@ function renderLoadout() {
 
         const placeHere = () => {
           if (!LO_UI.held) return;
+          if (LO_UI.held.t === 'gear' && ZONE_NAMES[zone] !== 'pocket' && SAVE.worn[ZONE_NAMES[zone]] === LO_UI.held.key) {
+            uiToast(ZONE_NAMES[zone] === 'pack' ? '背包不能装回自己里面' : '弹挂不能装回自己里面', 'small warn');
+            return;
+          }
           if (!cellAccepts(LO_UI.held, zone)) {       // 枪 / 甲 / 弹挂 / 背包不进容器格（枪只进背包）
             uiToast(CELL_REJECT_HINT[LO_UI.held.t] || '这件放不进格子', 'small warn');
             return;
@@ -20049,6 +20066,11 @@ function pkPlaceInto(arr, i, zone) {
   const blocks = zoneBlocks(ZONE_NAMES[zone]);
   const c0 = arr[i];
   const hi = c0 && c0.cont ? c0.head : i;           // 落在延续格 = 落在那件物品头上
+  /* 自己装自己：手上这件装备就是渲染这片格子的容器（同 key 穿着中）——塞进去 = 递归套娃，东西会凭空消失 */
+  if (held.t === 'gear' && ZONE_NAMES[zone] !== 'pocket' && SAVE.worn[ZONE_NAMES[zone]] === held.key) {
+    uiToast(ZONE_NAMES[zone] === 'pack' ? '背包不能装回自己里面' : '弹挂不能装回自己里面', 'small warn');
+    return;
+  }
   if (!cellAccepts(held, zone)) {
     uiToast(CELL_REJECT_HINT[held.t] || '这件放不进格子', 'small warn');
     return;
@@ -20202,6 +20224,10 @@ function renderPackPanel() {
         if (!ng || ng.kind !== kind) { uiToast('这是' + (GEAR[nk] && GEAR[nk].kind === 'rig' ? '弹挂' : '背包') + '，拖到对应的槽', 'small warn'); return; }
         const incoming = PK_UI.held.cells || [];
         const prevKey = SAVE.worn[kind];
+        if (prevKey === nk) {                              // 同款已经在身上：手上这份是另一份实体，换穿会造出双指针幽灵
+          uiToast('这件已经穿在身上 · 手上这份拖进背包存放', 'small warn');
+          return;
+        }
         const outgoing = (arr || []).filter(c => c && !c.cont);
         PK_UI.held = prevKey && GEAR[prevKey] ? { t: 'gear', key: prevKey, cells: outgoing } : null;
         SAVE.worn[kind] = nk;
