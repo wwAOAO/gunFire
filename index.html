@@ -220,6 +220,16 @@
   /* 子分类行：武器类目下的枪种筛选，同款标签缩小一号 */
   .tabs.sub { margin-top:10px; }
   .tabs.sub .tab { font-size:11px; padding:7px 16px; letter-spacing:.18em; }
+  /* 主/子类目条吸顶：长列表滚动时类目固定在最顶部不跟着走 */
+  #shopTabs {
+    position: sticky; top: 0; z-index: 6;
+    padding: 6px 0 8px; margin-top: -6px;
+    background: linear-gradient(180deg, #0a1420 0%, #0a1420 86%, rgba(10,20,32,0) 100%);
+  }
+  #shopSubTabs {
+    position: sticky; top: 47px; z-index: 5;
+    background: #0a1420; padding: 2px 0 8px;
+  }
 
   .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(232px,1fr)); gap:12px; }
 
@@ -1139,6 +1149,9 @@ const QUALITY = {
   myth:   { name: '神话', color: '#ff3d5a', dim: 'rgba(255,61,90,' },
 };
 const QUALITY_ORDER = ['myth', 'legend', 'epic', 'rare', 'common'];
+/* 白绿蓝紫金红的品质字 → 颜色（补给品 grade / 装备 q 共用） */
+const GRADE_COLORS = { '白': '#dfe9f2', '绿': '#63d68a', '蓝': '#4fa8ff', '紫': '#b782ff', '金': '#ffcc4d', '红': '#ff7a9c' };
+const gradeColor = g => GRADE_COLORS[g] || '#cfe6f2';
 
 /* ── 物资容器 ──
    地图上的搜刮点不再只有一种补给箱。六种容器外观、体积、
@@ -1752,37 +1765,37 @@ const STARTER_MELEE = 'knife_tactical';
 const MEDKITS = {
   inject_s: {
     name: '简易注射器', short: '简易针', code: 'SIMPLE INJECTOR',
-    dur: 30, hps: 5, wind: 3.5, price: 50, color: '#7fe3a8', size: 0.55,
+    grade: '白', dur: 30, hps: 5, wind: 3.5, price: 50, color: '#7fe3a8', size: 0.55,
     desc: '30 点耐久，5 血/秒，启动 3.5s。读条按缺口补时（缺 30 血要读 3.5+6=9.5s）。便宜、随身，扎一针先止血。',
     perk: '',
   },
   inject_m: {
     name: '强效注射器', short: '强效针', code: 'COMBAT INJECTOR',
-    dur: 60, hps: 12, wind: 3, price: 100, color: '#46e08a', size: 0.62,
+    grade: '绿', dur: 60, hps: 12, wind: 3, price: 100, color: '#46e08a', size: 0.62,
     desc: '60 点耐久，12 血/秒，启动 3s。缺 60 血读 3+5=8s，打架首选：单段读条最短。',
     perk: '',
   },
   kit_vehicle: {
     name: '车载急救包', short: '车载包', code: 'VEHICLE FIRST AID',
-    dur: 90, hps: 6, wind: 5, price: 20, color: '#58c4d8', size: 0.82,
+    grade: '白', dur: 90, hps: 6, wind: 5, price: 20, color: '#58c4d8', size: 0.82,
     desc: '90 点耐久，6 血/秒，启动 5s。回血最慢（缺 90 血要读 5+15=20s），但挂水时走路不减速——被追着撤的时候唯一能边走边灌的一支。',
     perk: 'move',
   },
   kit_field: {
     name: '野战急救包', short: '野战包', code: 'FIELD TRAUMA KIT',
-    dur: 220, hps: 20, wind: 6, price: 300, color: '#9ef2c8', size: 1.02,
+    grade: '蓝', dur: 220, hps: 20, wind: 6, price: 300, color: '#9ef2c8', size: 1.02,
     desc: '220 点耐久，20 血/秒，启动 6s（最长的启动）。缺 100 血读 6+5=11s，一支顶好几条命，配着掩体用。',
     perk: '',
   },
   box_outdoor: {
     name: '户外医疗箱', short: '户外箱', code: 'OUTDOOR MED BOX',
-    dur: 350, hps: 20, wind: 4, price: 500, color: '#7fd4ff', size: 1.32,
+    grade: '紫', dur: 350, hps: 20, wind: 4, price: 500, color: '#7fd4ff', size: 1.32,
     desc: '350 点耐久，20 血/秒，启动 4s。缺 100 血读 4+5=9s；开箱即处理伤口、注射止痛剂（30 秒减伤 10%），还带止血敷料：起效时一把压住全部流血层，每压 1 层额外烧 12 点耐久。',
     perk: 'cure', pain: 30,
   },
   box_battle: {
     name: '战地医疗箱', short: '战地箱', code: 'BATTLEFIELD MED CRATE',
-    dur: 800, hps: 30, wind: 3.5, price: 800, color: '#ffd66b', size: 1.66,
+    grade: '金', dur: 800, hps: 30, wind: 3.5, price: 800, color: '#ffd66b', size: 1.66,
     desc: '800 点耐久，30 血/秒，启动 3.5s。缺 80 血读 3.5+3=6.5s、缺 100 血读 3.5+4=7.5s；治伤口 + 60 秒止痛，还带战地止血钳：起效时一把压住全部流血层，每压 1 层额外烧 12 点耐久。一支撑满一个据点。',
     perk: 'cure', pain: 60,
   },
@@ -2983,7 +2996,7 @@ const GEAR = {
         弹挂 2x2、背包 2x2（金红 3x2）
         —— 必须整个塞进同一个隔舱的连续空格里。
         ads / spd = 瞄准速度 / 移动速度 修正（负数为惩罚，百分比）── */
-  dar:      { name: 'DAR突击手胸挂',   kind: 'rig', cap: 24, price: 16000, q: '红', color: '#ff7a9c', ads: -5, spd: -1,
+  dar:      { name: 'DAR突击手胸挂',   kind: 'rig', cap: 24, price: 16000, q: '金', color: '#ffcc4d', ads: -5, spd: -1,
               blocks: [[2, 2], [2, 2], [4, 2], [4, 2], [3, 1], [3, 1], [6, 2]],
               desc: '二十四格突击手胸挂。两条双格弹匣袋、两个 2x2 大舱、两条竖弹匣舱加一个 2x3 弹链舱。' },
   heijiang: { name: '黑僵野战胸挂',     kind: 'rig', cap: 22, price: 12200, q: '金', color: '#ffcc4d', ads: -3, spd: -1,
@@ -2992,7 +3005,7 @@ const GEAR = {
   jufeng:   { name: '飓风战术胸挂',     kind: 'rig', cap: 22, price: 10800, q: '金', color: '#ffcc4d', ads: -2,
               blocks: [[3, 1], [4, 2, 2], [3, 1, 2], [2, 1], [3, 1, 2], [3, 1], [2, 1, 2], [1, 1, 1], [1, 1]],
               desc: '二十二格战术胸挂。上层两侧三格竖舱夹中央 2x2，中层两条竖双格袋夹两条三格竖舱，底下两个零钱袋。' },
-  gir:      { name: 'GIR野战胸挂',      kind: 'rig', cap: 20, price: 8800,  q: '金', color: '#ffcc4d',
+  gir:      { name: 'GIR野战胸挂',      kind: 'rig', cap: 20, price: 8800,  q: '紫', color: '#b782ff',
               blocks: [[4, 2], [4, 2], [3, 1], [3, 1], [3, 1], [3, 1]],
               desc: '二十格野战胸挂。两个 2x2 杂物舱配四条竖式弹匣舱（1x3），为压满弹匣而生的经典布局。' },
   drc:      { name: 'DRC先进侦察胸挂',  kind: 'rig', cap: 17, price: 6400,  q: '紫', color: '#b782ff',
@@ -3013,7 +3026,7 @@ const GEAR = {
   hd3:      { name: 'HD3战术胸挂',      kind: 'rig', cap: 12, price: 2600,  q: '蓝', color: '#4fa8ff',
               blocks: [[3, 1], [2, 1, 2], [2, 1, 2], [3, 1, 2], [2, 2, 2, -222, 114]],
               desc: '十二格战术胸挂。两条三格竖弹匣舱夹两条竖双格袋，底行中缝一条横快取袋。' },
-  jyd:      { name: '简易携行弹挂',     kind: 'rig', cap: 10, price: 1700,  q: '绿', color: '#63d68a',
+  jyd:      { name: '简易携行弹挂',     kind: 'rig', cap: 10, price: 1700,  q: '蓝', color: '#4fa8ff',
               blocks: [[1, 1], [1, 1, 2, -74, 66], [2, 1, 2], [2, 1, 2], [1, 1, 2], [1, 1, 2, -74, 66], [2, 2, 2, -222, 114]],
               desc: '十格简易弹挂。民兵训练款，中缝两条竖双格袋夹两列零钱小袋，底下一条横快取袋。' },
   ty:       { name: '通用战术胸挂',     kind: 'rig', cap: 9,  price: 1300,  q: '绿', color: '#63d68a',
@@ -3098,10 +3111,10 @@ const GEAR = {
   pack_d3:     { name: 'D3战术登山包',     kind: 'pack', cap: 28, price: 8000,  q: '紫', color: '#b782ff',
                  blocks: [[28, 4]],
                  desc: '二十八格 D3 登山包。四列七行深仓，垂直补给单位的重载选择。' },
-  pack_hls:    { name: 'HLS-2重型背包',    kind: 'pack', cap: 28, price: 8000,  q: '紫', color: '#b782ff',
+  pack_hls:    { name: 'HLS-2重型背包',    kind: 'pack', cap: 28, price: 8000,  q: '金', color: '#ffcc4d',
                  blocks: [[3, 1], [6, 2], [3, 1], [16, 4]],
                  desc: '二十八格 HLS-2 重型包。顶袋 1x3 / 2x3 / 1x3 错落排布，下接 4x4 主仓。' },
-  pack_als:    { name: 'ALS背负系统',      kind: 'pack', cap: 28, price: 8000,  q: '紫', color: '#b782ff',
+  pack_als:    { name: 'ALS背负系统',      kind: 'pack', cap: 28, price: 8000,  q: '金', color: '#ffcc4d',
                  blocks: [[20, 4], [2, 2], [2, 2], [2, 2, 1], [2, 2]],
                  desc: '二十八格 ALS 背负系统。模块化装载理念：4x5 主仓外挂四个 2x1 附包（分两排）。' },
   pack_surv:   { name: '生存战术背包',     kind: 'pack', cap: 28, price: 8000,  q: '紫', color: '#b782ff',
@@ -17616,7 +17629,13 @@ function refreshLobby() {
 }
 
 let shopTab = 'weapon';
-let shopSub = 'all';             // 武器类目下的枪种子分类（'all' | WEAPON_CATS.id）
+let shopSub = 'all';             // 当前类目的子分类（'all' | 各类目自己的子项 id）
+/* 各类目的子分类定义（武器=枪种 / 弹药=弹级 / 补给=用途分组）——以后新物品优先归进补给对应分组 */
+const SHOP_SUB_DEFS = {
+  weapon: [['all', '全 部'], ...WEAPON_CATS.map(c => [c.id, c.cn])],
+  ammo:   [['all', '全 部'], ...AMMO_TIERS.map(T => ['lv' + T.lv, T.grade])],
+  supply: [['all', '全 部'], ['surg', '手 术'], ['treat', '治 疗'], ['pain', '止 疼'], ['repair', '甲 修'], ['inj', '针 剂']],
+};
 
 function openShop(tab) {
   if (tab) shopTab = tab;
@@ -18281,20 +18300,21 @@ function refreshShop() {
     b.classList.toggle('on', b.dataset.tab === shopTab);
   });
 
-  /* 武器类目下显示枪种子分类行（同款标签），其他类目隐藏 */
+  /* 子分类行：武器=枪种 / 弹药=弹级 / 补给=用途分组，其他类目隐藏 */
   const subBar = $('shopSubTabs');
-  if (shopTab !== 'weapon') {
+  const defs = SHOP_SUB_DEFS[shopTab];
+  if (!defs) {
     subBar.classList.add('hidden');
   } else {
-    if (!subBar.children.length) {
-      const mk = (id, cn) => {
+    if (subBar.dataset.tab !== shopTab) {          // 换类目：重建子标签
+      subBar.innerHTML = '';
+      for (const [id, cn] of defs) {
         const b = document.createElement('button');
         b.className = 'tab'; b.dataset.sub = id; b.textContent = cn;
         b.addEventListener('click', () => { shopSub = id; refreshShop(); });
-        return b;
-      };
-      subBar.appendChild(mk('all', '全 部'));
-      for (const c of WEAPON_CATS) subBar.appendChild(mk(c.id, c.cn));
+        subBar.appendChild(b);
+      }
+      subBar.dataset.tab = shopTab;
     }
     subBar.classList.remove('hidden');
     subBar.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.sub === shopSub));
@@ -18385,10 +18405,12 @@ function refreshShop() {
       const CC = CALIBERS[cal];
       const guns = WEAPON_ORDER.filter(id => SAVE.owned[id] && calOfWeapon(id) === cal).map(id => WEAPONS[id].short);
       const pick = ammoPickOf(cal);
-      const onSale = AMMO_TIERS.filter(T => calHasTier(cal, T.lv));
-      const rangeTxt = onSale.length > 1
-        ? ('上架 ' + onSale[0].grade + ' ~ ' + onSale[onSale.length - 1].grade)
-        : ('仅 ' + onSale[0].grade);
+      const allSale = AMMO_TIERS.filter(T => calHasTier(cal, T.lv));
+      const onSale = allSale.filter(T => shopSub === 'all' || shopSub === 'lv' + T.lv);
+      if (!onSale.length) continue;                    // 这个口径没有当前弹级：整组不显示
+      const rangeTxt = allSale.length > 1              // 上架范围按口径真实在售弹级，不随筛选变
+        ? ('上架 ' + allSale[0].grade + ' ~ ' + allSale[allSale.length - 1].grade)
+        : ('仅 ' + allSale[0].grade);
 
       const sec = document.createElement('div');
       sec.className = 'wsec';
@@ -18543,8 +18565,9 @@ function refreshShop() {
       grid.appendChild(el);
     }
   } else {
-    /* 医疗包：六种各有自己的耐久 / 回血速度 / 启动读条 */
+    /* 医疗包：六种各有自己的耐久 / 回血速度 / 启动读条（针剂=注射器，治疗=包和箱子） */
     for (const id of MEDKIT_ORDER) {
+      if (shopSub !== 'all' && shopSub !== (id === 'inject_s' || id === 'inject_m' ? 'inj' : 'treat')) continue;
       const M = MEDKITS[id];
       const held = (SAVE.meds && SAVE.meds[id] && SAVE.meds[id].n) | 0;
       const canAfford = SAVE.credits >= M.price;
@@ -18555,7 +18578,7 @@ function refreshShop() {
       el.className = 'item';
       el.innerHTML =
         '<div class="top"><span class="nm">' + M.name + '</span>' +
-        '<span class="tag">持有 ×' + held + '</span></div>' +
+        '<span class="tag" style="color:' + gradeColor(M.grade) + '">' + M.grade + ' · 持有 ×' + held + '</span></div>' +
         '<div class="ds">' + M.desc + '</div>' +
         '<div class="ds" style="color:#6fb0cf">耐久 ' + M.dur + ' · ' + M.hps + ' 血/秒 · 启动 ' + M.wind + 's' + perkTxt + '</div>' +
         '<div class="bars">' + bar('容量', M.dur / 800) + '</div>' +
@@ -18569,8 +18592,9 @@ function refreshShop() {
       grid.appendChild(el);
     }
 
-    /* 急救 / 止痛：按份数囤，三片一瓶的止痛片一次进 3 份 */
+    /* 急救 / 止痛：按份数囤，三片一瓶的止痛片一次进 3 份（止疼=止痛药，治疗=绷带止血带） */
     for (const id of STOP_ORDER) {
+      if (shopSub !== 'all' && shopSub !== (STOP_PAINS.includes(id) ? 'pain' : 'treat')) continue;
       const S = STOPS[id];
       const held = (SAVE.stops && SAVE.stops[id]) | 0;
       const canAfford = SAVE.credits >= S.price;
@@ -18581,7 +18605,7 @@ function refreshShop() {
       el.innerHTML =
         '<div class="top"><span class="nm">' + S.name + '</span>' +
         '<span class="tag">持有 ×' + held + '</span></div>' +
-        '<div class="code">' + S.code + ' · ' + S.grade + '</div>' +
+        '<div class="code">' + S.code + ' · <b style="color:' + gradeColor(S.grade) + '">' + S.grade + '</b></div>' +
         '<div class="ds">' + S.desc + '</div>' +
         '<div class="ds" style="color:#6fb0cf">' +
           (S.pain ? ('单次止痛 ' + S.pain + 's · ' + (pack > 1 ? '一份 ' + pack + ' 次' : '一次性'))
@@ -18599,6 +18623,7 @@ function refreshShop() {
 
     /* 手术包：按"剩几次刀"算，买一次补满一整包 */
     for (const id of SURG_ORDER) {
+      if (shopSub !== 'all' && shopSub !== 'surg') continue;
       const S = SURGERIES[id];
       const uses = (SAVE.surgs && SAVE.surgs[id] && SAVE.surgs[id].uses) | 0;
       const full = uses >= S.uses;
@@ -18609,7 +18634,7 @@ function refreshShop() {
       el.innerHTML =
         '<div class="top"><span class="nm">' + S.name + '</span>' +
         '<span class="tag' + (full ? ' own' : '') + '">' + (uses > 0 ? '剩 ' + uses + '/' + S.uses + ' 次' : '未持有') + '</span></div>' +
-        '<div class="code">' + S.code + ' · ' + S.grade + '</div>' +
+        '<div class="code">' + S.code + ' · <b style="color:' + gradeColor(S.grade) + '">' + S.grade + '</b></div>' +
         '<div class="ds">' + S.desc + '</div>' +
         '<div class="ds" style="color:#6fb0cf">' + S.uses + ' 次 · 单次读条 ' + S.sec + 's · 治贯穿伤 / 骨折 / 骨裂</div>' +
         '<div class="bars">' + bar('剩余次数', uses / S.uses) + '</div>' +
@@ -18625,6 +18650,7 @@ function refreshShop() {
 
     /* 甲修包：跟医疗包一样的耐久消耗品 —— 蓝修 1-3 级 / 紫 1-4 / 金 1-5 / 红全甲 */
     for (const id of REPAIR_ORDER) {
+      if (shopSub !== 'all' && shopSub !== 'repair') continue;
       const R = REPAIRS[id];
       const s = (SAVE.repairs && SAVE.repairs[id]) || { n: 0, left: 0 };
       const held = (s.n | 0) + ((Number(s.left) || 0) > 0.01 ? 1 : 0);
@@ -21191,6 +21217,7 @@ $('resetBtn').addEventListener('click', () => {
 document.querySelectorAll('#shopTabs .tab').forEach(btn => {
   btn.addEventListener('click', () => {
     shopTab = btn.dataset.tab;
+    shopSub = 'all';                               // 换类目：子分类重置为全部
     refreshShop();
   });
 });
