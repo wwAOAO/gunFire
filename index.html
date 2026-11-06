@@ -5259,7 +5259,7 @@ function drainReserve(cal, n, preferLv) {
    三种东西共用一个「医疗槽 + 长按 5 选择盘」：
      med  医疗包  —— 耐久池，读条后持续回血（见下面的 startMedHeal）
      stop 止血件  —— 一次性，止住流血层
-     surg 手术包  —— 有次数，读条后处理一项贯穿伤 / 骨折 / 骨裂
+     surg 手术包  —— 有次数，读条后处理一项贯穿伤 / 骨折 / 骨裂 / 流血
    key 统一写成 'med:inject_s' 这种形式，短按 5 直接用 carePick。
    ══════════════════════════════════════════════════════════ */
 
@@ -5675,7 +5675,7 @@ function careAutoPick() {
     for (const id of STOP_PAINS) if (stopCount(id) > 0) return careKeyMake('stop', id);
   }
 
-  /* ③ 手术：贯穿伤 / 骨折 / 骨裂，按价钱从低到高挑一个还带着的 */
+  /* ③ 手术：贯穿伤 / 骨折 / 骨裂 / 流血（没绷带止血带时的兜底），按价钱从低到高挑一个还带着的 */
   if (surgTarget()) {
     for (const id of SURG_ORDER) if (surgUses(id) > 0) return careKeyMake('surg', id);
   }
@@ -5947,8 +5947,9 @@ function updateDebuff(dt) {
   }
 }
 
-/* 手术包这次该处理哪一项：贯穿伤优先，其次腿、手臂，最后骨裂。
-   同一部位要好几次才能缝完，所以一次只减一层。 */
+/* 手术包这次该处理哪一项：贯穿伤优先，其次腿、手臂、骨裂，最后流血。
+   同一部位要好几次才能缝完，所以一次只减一层。
+   手术包都能止血（外科清创）：一刀压住全部流血层。 */
 function surgTarget() {
   const d = P.deb;
   const parts = [
@@ -5963,6 +5964,7 @@ function surgTarget() {
   if (d.leg > 0) return { kind: 'leg', label: '腿部骨折' };
   if (d.arm > 0) return { kind: 'arm', label: '手臂骨折' };
   if (d.fissure > 0) return { kind: 'fissure', label: '骨裂 ×' + d.fissure };
+  if (d.bleed > 0) return { kind: 'bleed', label: '清创止血 ×' + (d.bleed | 0) };
   return null;
 }
 
@@ -5970,7 +5972,8 @@ function applySurgery() {
   const t = surgTarget();
   if (!t) return false;
   const d = P.deb;
-  if (t.kind === 'leg' || t.kind === 'arm') d[t.kind] = 0;
+  if (t.kind === 'bleed') stopBleeding(d.bleed | 0);
+  else if (t.kind === 'leg' || t.kind === 'arm') d[t.kind] = 0;
   else if (t.kind === 'fissure') d.fissure = Math.max(0, d.fissure - 1);
   else d[t.kind] = Math.max(0, d[t.kind] - 1);
   recalcMaxHp();
@@ -17633,7 +17636,7 @@ let shopSub = 'all';             // 当前类目的子分类（'all' | 各类目
 const SHOP_SUB_DEFS = {
   weapon: [['all', '全 部'], ...WEAPON_CATS.map(c => [c.id, c.cn])],
   ammo:   [['all', '全 部'], ...AMMO_TIERS.map(T => ['lv' + T.lv, T.grade])],
-  supply: [['all', '全 部'], ['surg', '手 术'], ['treat', '治 疗'], ['pain', '止 疼'], ['repair', '甲 修'], ['inj', '针 剂']],
+  supply: [['all', '全 部'], ['surg', '手 术'], ['treat', '治 疗'], ['pain', '止 疼'], ['repair', '甲 修']],
 };
 
 function openShop(tab) {
@@ -18564,9 +18567,9 @@ function refreshShop() {
       grid.appendChild(el);
     }
   } else {
-    /* 医疗包：六种各有自己的耐久 / 回血速度 / 启动读条（针剂=注射器，治疗=包和箱子） */
+    /* 医疗包：六种各有自己的耐久 / 回血速度 / 启动读条（注射器也归「治疗」） */
     for (const id of MEDKIT_ORDER) {
-      if (shopSub !== 'all' && shopSub !== (id === 'inject_s' || id === 'inject_m' ? 'inj' : 'treat')) continue;
+      if (shopSub !== 'all' && shopSub !== 'treat') continue;
       const M = MEDKITS[id];
       const held = (SAVE.meds && SAVE.meds[id] && SAVE.meds[id].n) | 0;
       const canAfford = SAVE.credits >= M.price;
@@ -18591,9 +18594,9 @@ function refreshShop() {
       grid.appendChild(el);
     }
 
-    /* 急救 / 止痛：按份数囤，三片一瓶的止痛片一次进 3 份（止疼=止痛药，治疗=绷带止血带） */
+    /* 急救 / 止痛：按份数囤，三片一瓶的止痛片一次进 3 份（绷带止血带归「手术」——所有手术包都能止血） */
     for (const id of STOP_ORDER) {
-      if (shopSub !== 'all' && shopSub !== (STOP_PAINS.includes(id) ? 'pain' : 'treat')) continue;
+      if (shopSub !== 'all' && shopSub !== (STOP_PAINS.includes(id) ? 'pain' : 'surg')) continue;
       const S = STOPS[id];
       const held = (SAVE.stops && SAVE.stops[id]) | 0;
       const canAfford = SAVE.credits >= S.price;
@@ -18635,7 +18638,7 @@ function refreshShop() {
         '<span class="tag' + (full ? ' own' : '') + '">' + (uses > 0 ? '剩 ' + uses + '/' + S.uses + ' 次' : '未持有') + '</span></div>' +
         '<div class="code">' + S.code + ' · <b style="color:' + gradeColor(S.grade) + '">' + S.grade + '</b></div>' +
         '<div class="ds">' + S.desc + '</div>' +
-        '<div class="ds" style="color:#6fb0cf">' + S.uses + ' 次 · 单次读条 ' + S.sec + 's · 治贯穿伤 / 骨折 / 骨裂</div>' +
+        '<div class="ds" style="color:#6fb0cf">' + S.uses + ' 次 · 单次读条 ' + S.sec + 's · 治贯穿伤 / 骨折 / 骨裂 · 止血</div>' +
         '<div class="bars">' + bar('剩余次数', uses / S.uses) + '</div>' +
         '<div class="buyrow">' +
           '<span class="price"><i>¥</i>' + fmtMoney(S.price) + '</span>' +
