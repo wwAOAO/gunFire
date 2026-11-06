@@ -217,6 +217,9 @@
   }
   .tab:hover { color:#a8d4ea; border-color:rgba(67,217,245,.45); }
   .tab.on { color:#03121a; background:#43d9f5; border-color:#43d9f5; font-weight:800; box-shadow:0 0 24px rgba(67,217,245,.4); }
+  /* 子分类行：武器类目下的枪种筛选，同款标签缩小一号 */
+  .tabs.sub { margin-top:10px; }
+  .tabs.sub .tab { font-size:11px; padding:7px 16px; letter-spacing:.18em; }
 
   .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(232px,1fr)); gap:12px; }
 
@@ -863,6 +866,7 @@
       <button class="tab" data-tab="ammo">弹 药</button>
       <button class="tab" data-tab="supply">补 给</button>
     </div>
+    <div class="tabs sub hidden" id="shopSubTabs"></div>
     <div class="grid" id="shopGrid"></div>
   </div>
 </div>
@@ -1906,7 +1910,7 @@ function normCareKey(v) {
 }
 
 const DEFAULT_SAVE = () => ({
-  credits: 10000,
+  credits: 50000,
   /* 出战干员：决定局内能按 V / X / G / C 放什么（技能表在 OPERATORS 里） */
   operator: 'redwolf',
   /* 新档一把枪都没有：G17 也要去军火库买，只有匕首是白送的 */
@@ -17606,6 +17610,7 @@ function refreshLobby() {
 }
 
 let shopTab = 'weapon';
+let shopSub = 'all';             // 武器类目下的枪种子分类（'all' | WEAPON_CATS.id）
 
 function openShop(tab) {
   if (tab) shopTab = tab;
@@ -18270,12 +18275,32 @@ function refreshShop() {
     b.classList.toggle('on', b.dataset.tab === shopTab);
   });
 
+  /* 武器类目下显示枪种子分类行（同款标签），其他类目隐藏 */
+  const subBar = $('shopSubTabs');
+  if (shopTab !== 'weapon') {
+    subBar.classList.add('hidden');
+  } else {
+    if (!subBar.children.length) {
+      const mk = (id, cn) => {
+        const b = document.createElement('button');
+        b.className = 'tab'; b.dataset.sub = id; b.textContent = cn;
+        b.addEventListener('click', () => { shopSub = id; refreshShop(); });
+        return b;
+      };
+      subBar.appendChild(mk('all', '全 部'));
+      for (const c of WEAPON_CATS) subBar.appendChild(mk(c.id, c.cn));
+    }
+    subBar.classList.remove('hidden');
+    subBar.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.sub === shopSub));
+  }
+
   const grid = $('shopGrid');
   grid.innerHTML = '';
 
   if (shopTab === 'weapon') {
     grid.classList.add('stack');
     for (const cat of WEAPON_CATS) {
+      if (shopSub !== 'all' && shopSub !== cat.id) continue;
       const guns = WEAPON_ORDER.filter(id => WEAPONS[id].cat === cat.id);
       if (!guns.length) continue;
 
