@@ -2866,10 +2866,10 @@ const GEAR = {
 
 /* ── 随身容器 ──
    弹挂 rig（快捷可用：按 5 打药、R 换弹都从这儿读）—— 格数 = 穿着的弹挂
-   口袋 pocket（快捷可用）—— 默认 1x4，商店买「口袋扩展板」升级成 1 + 2x1 + 2x1 + 1（6 格四舱）
+   口袋 pocket（快捷可用）—— 默认四个单格舱，商店买「口袋扩展板」升级成 1 + 2x1 + 2x1 + 1（6 格四舱）
    背包 pack（仓库格：Tab 打开倒腾，里面的东西不能直接用）—— 格数 = 穿着的背包
    格子 = null 或 { t:'med'|'stop'|'surg'|'ammo', ... }，一格一件（弹药格按口径装）。 */
-const POCKET_BLOCKS_DEF = [4];            // 默认：1x4 一整条
+const POCKET_BLOCKS_DEF = [1, 1, 1, 1];   // 默认：四个独立单格舱，只能装 1 格的东西
 const POCKET_BLOCKS_UP  = [1, 2, 2, 1];   // 升级：1 格 + 2x1 + 2x1 + 1 格（四舱共 6 格）
 const POCKET_UP_PRICE = 6000;
 function wornGear(kind) {
@@ -3110,6 +3110,15 @@ function ensureCarry() {
     for (let i = 0; i < cap; i++) arr[i] = valid[i] || null;
     sanitizeSpans(arr);
     for (let i = cap; i < valid.length; i++) if (valid[i] && !valid[i].cont) overflow.push(valid[i]);
+    }
+    /* 老档默认口袋是四个独立单格舱：双格大件（手术包 / 修理包 / 近战）塞不下，原物退回仓库 */
+    if (!SAVE.pocketUp) {
+      const pk = SAVE.carry.pocket;
+      for (let i = 0; i < pk.length; i++) {
+        const c = pk[i];
+        if (c && !c.cont && cellSize(c) > 1) { overflow.push(c); clearSpanAt(pk, i, zoneBlocks('pocket')); }
+      }
+      sanitizeSpans(pk);
     }
     mergeCarryOverflow(SAVE, overflow);
     if (overflow.length) saveGame();
@@ -18020,8 +18029,8 @@ function refreshShop() {
       el.innerHTML =
         '<div class="top"><span class="nm" style="color:#4fa8ff">口袋扩展板</span>' +
         (owned ? '<span class="tag own">已安装</span>' : '<span class="tag" style="color:#4fa8ff">蓝 · 口袋改装</span>') + '</div>' +
-        '<div class="ds">往战术腰封上加装两组快取弹匣套。口袋从 1x4 整条升级成 1 + 2x1 + 2x1 + 1 四舱（共 6 格），手术包这类双格大件也能横着塞。</div>' +
-        '<div class="ds" style="color:#6fb0cf">口袋 4 格 → 6 格（隔舱 1+2+2+1）· 一次性升级，永久生效</div>' +
+        '<div class="ds">往战术腰封上加装两组快取弹匣套。口袋从四个单格舱升级成 1 + 2x1 + 2x1 + 1 四舱（共 6 格），手术包这类双格大件也能横着塞。</div>' +
+        '<div class="ds" style="color:#6fb0cf">口袋 4 格（4×1 格舱）→ 6 格（隔舱 1+2+2+1）· 一次性升级，永久生效</div>' +
         '<div class="buyrow">' +
           '<span class="price"><i>¥</i>' + fmtMoney(POCKET_UP_PRICE) + '</span>' +
           '<button class="buybtn"' + (!owned && !canAfford ? ' disabled' : '') + '>' +
