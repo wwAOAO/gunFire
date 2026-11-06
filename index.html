@@ -1329,6 +1329,81 @@ for (const [id, q, icon, name, price, desc] of RELIC_EXT) {
   RELICS[id] = { q, z: id[0] === 'd' ? 'dam' : 'space', icon, name, price, desc };
 }
 const RELIC_IDS = Object.keys(RELICS);
+/* ── 收集品占格：按体积感逐件写死成 [宽, 高]，共八档 ——
+      1x1 卡片/印章/小零件   2x1 饭盒/水壶/工具   2x2 方箱/仪器
+      3x2 大件（发电机、泵、卫星部件）  3x3 特大（水雷、座舱、主控机柜）
+      3x4 巨型（返回舱、整台发动机）   1x3 竖条（枪管、水管、弹链）
+      1x4 细长（氧气瓶、天线、燃料棒）
+      舱列宽不够时 shapeOf 自动躺倒（3x2 进 2 列舱 → 2x3）；3x4 只有大背包塞得进。 ── */
+const RELIC_GRID = {
+  /* 1x1 · 卡片 / 印章 / 小零件 */
+  badge: [1, 1], masterkey: [1, 1], nameplate: [1, 1], access: [1, 1], radchip: [1, 1],
+  d_screw: [1, 1], d_biscuit: [1, 1], d_spoon: [1, 1], d_compass: [1, 1], d_nail: [1, 1],
+  d_cup: [1, 1], d_tape: [1, 1], d_watch: [1, 1],
+  s_oring: [1, 1], s_rivet: [1, 1], s_tape: [1, 1], s_marker: [1, 1], s_bolts: [1, 1],
+  s_leak: [1, 1], s_badge: [1, 1], s_conn: [1, 1], s_gauge: [1, 1], s_patch: [1, 1],
+  s_starchart: [1, 1], s_clamp: [1, 1], s_bulb: [1, 1], s_plug: [1, 1],
+  d_collar: [1, 1], d_epaulet: [1, 1], d_seal: [1, 1], d_manifest: [1, 1],
+  s_tibolt: [1, 1], s_datacard: [1, 1], s_escape: [1, 1], s_fuse: [1, 1],
+  d_chip: [1, 1], d_token: [1, 1],
+  d_vaultkey: [1, 1], d_seal2: [1, 1], s_satkey: [1, 1], s_fuelkey: [1, 1],
+
+  /* 2x1 · 横向中型件 */
+  shell: [2, 1], ration: [2, 1], canteen: [2, 1], hdd: [2, 1], ration_s: [2, 1],
+  d_mess: [2, 1], d_cement: [2, 1], d_torch: [2, 1], d_glove: [2, 1], d_walkie: [2, 1],
+  d_boot: [2, 1], d_camera: [2, 1], d_valve: [2, 1], d_map: [2, 1],
+  s_pcbfrag: [2, 1], s_oxvalve: [2, 1], s_glass: [2, 1], s_spool: [2, 1], s_esd: [2, 1],
+  s_tray: [2, 1], s_filter: [2, 1], s_hourglass: [2, 1],
+  d_secure: [2, 1], d_scope: [2, 1], d_relay: [2, 1], d_ledger: [2, 1], d_evidence: [2, 1],
+  s_hinge: [2, 1], s_rcs: [2, 1], s_fuelcell: [2, 1], s_lrf: [2, 1], s_astro: [2, 1],
+  d_gangle: [2, 1], d_gold: [2, 1], d_blastmap: [2, 1], s_flightdata: [2, 1],
+  d_notes: [2, 1], d_satphone: [2, 1], d_auction: [2, 1], d_vaultbook: [2, 1],
+  s_strikecoord: [2, 1], s_havkList: [2, 1], d_arsenal: [2, 1],
+
+  /* 2x2 · 方箱 / 仪器 */
+  scrap: [2, 2], gasmask: [2, 2], core: [2, 2], blackbox: [2, 2], pcb: [2, 2],
+  nozzle: [2, 2], gyro: [2, 2],
+  d_helmet: [2, 2], d_cable: [2, 2], d_shellbag: [2, 2], d_waterbag: [2, 2], d_net: [2, 2],
+  d_battery: [2, 2], d_paper: [2, 2], d_buoy: [2, 2], d_copper: [2, 2],
+  s_insul: [2, 2], s_blanket: [2, 2], s_earmuff: [2, 2],
+  d_cell: [2, 2], d_nvlens: [2, 2], d_valveset: [2, 2], d_oil: [2, 2], d_survey: [2, 2],
+  d_jammer: [2, 2], d_plate: [2, 2], d_balloon: [2, 2], d_spare: [2, 2], d_sounder: [2, 2],
+  s_star: [2, 2], s_gymotor: [2, 2], s_telemetry: [2, 2], s_suitglove: [2, 2], s_disk: [2, 2],
+  s_tvc: [2, 2], s_coolpump: [2, 2], s_tile: [2, 2], s_imu: [2, 2], s_lis: [2, 2], s_obc: [2, 2],
+  d_crypto: [2, 2], d_stress: [2, 2], d_nvg: [2, 2], d_mercury: [2, 2],
+  s_rcs2: [2, 2], s_lifepack: [2, 2], s_bladder: [2, 2], s_satprop: [2, 2], s_emerg: [2, 2],
+  s_atomic: [2, 2], s_quantum: [2, 2], s_blackbox2: [2, 2],
+
+  /* 3x2 · 大件（机柜 / 泵 / 卫星部件） */
+  drone: [3, 2], terminal: [3, 2], solar: [3, 2], satnav: [3, 2],
+  d_sandbag: [3, 2],
+  d_ammobox: [3, 2], d_telegraph: [3, 2], d_gatectrl: [3, 2], d_toolbox: [3, 2], d_radio: [3, 2],
+  s_vacuumpump: [3, 2], s_dock: [3, 2], s_mmod: [3, 2],
+  d_pump: [3, 2], d_subpart: [3, 2], d_encradio: [3, 2],
+  s_turbo: [3, 2], s_radar: [3, 2], s_camera: [3, 2], s_carbon: [3, 2],
+
+  /* 3x3 · 特大 */
+  reactor: [3, 3],
+  d_gen: [3, 3], d_mine: [3, 3],
+  s_guidance: [3, 3], s_deepspace: [3, 3], s_siloTerm: [3, 3],
+  d_mainterm: [3, 3], d_engine: [3, 3], s_turbopump: [3, 3], s_siloCore: [3, 3],
+  d_sunken: [3, 3], s_asat: [3, 3],
+
+  /* 3x4 · 巨型 */
+  engine: [3, 4], s_spysat: [3, 4], s_capsule: [3, 4],
+  s_return: [3, 4], s_orbitcore: [3, 4], s_reusable: [3, 4],
+
+  /* 1x3 · 竖条（枪管 / 水管 / 弹链 / 探针） */
+  scope: [1, 3], belt: [1, 3], fuelbar: [1, 3],
+  d_wrench: [1, 3], d_shovel: [1, 3], s_coolant: [1, 3], s_rod: [1, 3], s_probe: [1, 3],
+  s_cablight: [1, 3], d_core: [1, 3],
+
+  /* 1x4 · 细长（氧气瓶 / 天线 / 燃料棒 / 刀） */
+  d_pipe: [1, 4], s_alu: [1, 4], s_rope: [1, 4],
+  d_prop: [1, 4], d_oxygen: [1, 4], s_seal: [1, 4], s_iridium: [1, 4],
+  d_barrel: [1, 4], d_fuelrod: [1, 4], d_sword: [1, 4],
+};
+function relicShape(id) { return RELIC_GRID[id] || [1, 1]; }
 
 /* 当前战利品产地：拉闸图（航天基地）出太空货，其余出坝区货 */
 function lootZone() { return G.extMode === 'switch' ? 'space' : 'dam'; }
@@ -5117,6 +5192,7 @@ function cellSize(c) {
   if (!c || c.cont) return 0;
   if (c.t === 'armor') { const s = armorShape(c.id); return s[0] * s[1]; }
   if (c.t === 'gear') { const s = gearShapeOf(c); return s[0] * s[1]; }
+  if (c.t === 'relic') { const s = relicShape(c.id); return s[0] * s[1]; }
   const s = SHAPES[c.id];
   if (s) return s[0] * s[1];
   if (c.id && CELLS[c.id] > 0) return CELLS[c.id];
@@ -5163,6 +5239,7 @@ function shapeOf(c, C) {
   let s = null;
   if (c.t === 'armor') s = armorShape(c.id);
   else if (c.t === 'gear') s = gearShapeOf(c);
+  else if (c.t === 'relic') s = relicShape(c.id);
   else s = SHAPES[c.id] || null;
   if (!s) return itemShape(cellSize(c), C);
   if (s[0] > C && s[1] <= C) return [s[1], s[0]];
@@ -11505,7 +11582,7 @@ function applyLootItem(it, c) {
   let ok = true;
   if (it.kind === 'relic') {
     if (stowCell({ t: 'relic', id: it.id })) recountLoot();
-    else { ok = false; it.blocked = '身上没有空位'; }
+    else { const s = relicShape(it.id); ok = false; it.blocked = '占 ' + s[0] + '×' + s[1] + ' · 身上塞不下'; }
   }
   else if (it.kind === 'med') {
     let placed = 0;
@@ -17812,7 +17889,7 @@ function refreshStash() {
       '<div class="rhead">' +
         '<span class="rico">' + row.r.icon + '</span>' +
         '<span class="rnm">' + row.r.name + '</span>' +
-        '<span class="rq">' + Q.name + '</span>' +
+        '<span class="rq">' + Q.name + ' · ' + relicShape(row.id)[0] + '×' + relicShape(row.id)[1] + '</span>' +
       '</div>' +
       '<div class="rfoot">' +
         '<span class="rprice"><i>¥</i>' + fmtMoney(row.r.price) + '</span>' +
