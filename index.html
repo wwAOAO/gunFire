@@ -1331,9 +1331,9 @@ for (const [id, q, icon, name, price, desc] of RELIC_EXT) {
 const RELIC_IDS = Object.keys(RELICS);
 /* ── 收集品占格：按体积感逐件写死成 [宽, 高]，共八档 ——
       1x1 卡片/印章/小零件   2x1 饭盒/水壶/工具   2x2 方箱/仪器
-      3x2 大件（发电机、泵、卫星部件）  3x3 特大（水雷、座舱、主控机柜）
-      3x4 巨型（返回舱、整台发动机）   1x3 竖条（枪管、水管、弹链）
-      1x4 细长（氧气瓶、天线、燃料棒）
+      3x2 大件（发电机、泵、卫星部件 —— 史诗 / 传说的上限）
+      3x3 特大 / 3x4 巨型 —— 只给红色（神话）品质，白蓝紫金一律不超过 3x2
+      1x3 竖条（枪管、水管、弹链）   1x4 细长（氧气瓶、天线、燃料棒）
       舱列宽不够时 shapeOf 自动躺倒（3x2 进 2 列舱 → 2x3）；3x4 只有大背包塞得进。 ── */
 const RELIC_GRID = {
   /* 1x1 · 卡片 / 印章 / 小零件 */
@@ -1374,23 +1374,24 @@ const RELIC_GRID = {
   s_rcs2: [2, 2], s_lifepack: [2, 2], s_bladder: [2, 2], s_satprop: [2, 2], s_emerg: [2, 2],
   s_atomic: [2, 2], s_quantum: [2, 2], s_blackbox2: [2, 2],
 
-  /* 3x2 · 大件（机柜 / 泵 / 卫星部件） */
+  /* 3x2 · 大件（机柜 / 泵 / 卫星部件）—— 史诗 / 传说的东西最大就到这里 */
   drone: [3, 2], terminal: [3, 2], solar: [3, 2], satnav: [3, 2],
   d_sandbag: [3, 2],
   d_ammobox: [3, 2], d_telegraph: [3, 2], d_gatectrl: [3, 2], d_toolbox: [3, 2], d_radio: [3, 2],
   s_vacuumpump: [3, 2], s_dock: [3, 2], s_mmod: [3, 2],
   d_pump: [3, 2], d_subpart: [3, 2], d_encradio: [3, 2],
   s_turbo: [3, 2], s_radar: [3, 2], s_camera: [3, 2], s_carbon: [3, 2],
+  d_gen: [3, 2], d_mine: [3, 2],
+  s_guidance: [3, 2], s_deepspace: [3, 2], s_siloTerm: [3, 2],
+  d_mainterm: [3, 2], d_engine: [3, 2], s_turbopump: [3, 2], s_siloCore: [3, 2],
+  s_spysat: [3, 2], s_capsule: [3, 2],
 
-  /* 3x3 · 特大 */
+  /* 3x3 · 特大 —— 只有红色（神话）品质才给这么大 */
   reactor: [3, 3],
-  d_gen: [3, 3], d_mine: [3, 3],
-  s_guidance: [3, 3], s_deepspace: [3, 3], s_siloTerm: [3, 3],
-  d_mainterm: [3, 3], d_engine: [3, 3], s_turbopump: [3, 3], s_siloCore: [3, 3],
   d_sunken: [3, 3], s_asat: [3, 3],
 
-  /* 3x4 · 巨型 */
-  engine: [3, 4], s_spysat: [3, 4], s_capsule: [3, 4],
+  /* 3x4 · 巨型 —— 同样只有红色（神话）品质 */
+  engine: [3, 4],
   s_return: [3, 4], s_orbitcore: [3, 4], s_reusable: [3, 4],
 
   /* 1x3 · 竖条（枪管 / 水管 / 弹链 / 探针） */
@@ -1403,7 +1404,15 @@ const RELIC_GRID = {
   d_prop: [1, 4], d_oxygen: [1, 4], s_seal: [1, 4], s_iridium: [1, 4],
   d_barrel: [1, 4], d_fuelrod: [1, 4], d_sword: [1, 4],
 };
-function relicShape(id) { return RELIC_GRID[id] || [1, 1]; }
+function relicShape(id) {
+  const s = RELIC_GRID[id] || [1, 1];
+  /* 3x3 / 3x4 只属于红色（神话）：万一以后有人给别的品质写大了，这里兜底压回 3x2 */
+  if (s[0] === 3 && s[1] >= 3) {
+    const r = RELICS[id];
+    if (!r || r.q !== 'myth') return [3, 2];
+  }
+  return s;
+}
 
 /* 当前战利品产地：拉闸图（航天基地）出太空货，其余出坝区货 */
 function lootZone() { return G.extMode === 'switch' ? 'space' : 'dam'; }
