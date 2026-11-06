@@ -11281,8 +11281,7 @@ function layoutLootResumed(items, speed) {
 function updateSearch(dt) {
   let best = null, bestD = 1e9;
   for (const c of G.crates) {
-    /* 翻过但没拿干净的箱子仍然算目标：能回来接着翻 */
-    if (c.opened && !crateLeft(c)) continue;
+    /* 翻空了的箱子也还是目标：可以再打开，把身上的东西存进去 */
     const d = dist(P.x, P.y, c.x, c.y);
     if (d < 76 && d < bestD) { best = c; bestD = d; }
   }
@@ -11727,7 +11726,7 @@ function applyLootItem(it, c) {
         P.owned[w] = true;
         P.ammo[w] = { mag: WS.mag, tier: ammoPickOf(cal), cal };
       }
-      P.gunLoot[w] = (P.gunLoot[w] | 0) + 1;   // 箱里的都是缴获：撤离按实例入库
+      if (!it.own) P.gunLoot[w] = (P.gunLoot[w] | 0) + 1;   // 箱里的都是缴获：撤离按实例入库（自己存的枪取回不算）
       if (freeSlot) {
         P.slots[freeSlot] = w;
         const sd = SLOT_DEFS.find(d => d.id === freeSlot);
@@ -11735,11 +11734,12 @@ function applyLootItem(it, c) {
       } else {
         uiToast('拾取 ' + WS.short + ' · 收进背包', 'small');
       }
-      /* 缴获的枪自带两个弹匣的子弹（能装多少装多少） */
-      addReserve(cal, WS.mag * 2, P.ammo[w].tier);
+      /* 缴获的枪自带两个弹匣的子弹（能装多少装多少）；自己存的枪不给白送弹药 */
+      if (!it.own) addReserve(cal, WS.mag * 2, P.ammo[w].tier);
     }
   } else if (it.kind === 'gear') {
-    if (!wearGearInRaid(it.gear, true)) { ok = false; it.blocked = '这件装备穿不上'; }
+    const incoming = it.__cell && it.__cell.cells ? it.__cell.cells : undefined;
+    if (!wearGearInRaid(it.gear, !it.own, incoming)) { ok = false; it.blocked = '这件装备穿不上'; }
   } else if (it.kind === 'mod') {
     if (stowCell({ t: 'mod', id: it.mod })) recountLoot();
     else { ok = false; it.blocked = '身上没有空位'; }
@@ -11801,6 +11801,12 @@ function cellToLootItem(c) {
   else if (c.t === 'armor') it = makeArmorItem(c.id, c.hp, c.max);
   else if (c.t === 'relic') it = makeRelicItem(c.id);
   else if (c.t === 'mod') it = makeModItem(c.id);
+  else if (c.t === 'gear' && GEAR[c.key]) {
+    const g = GEAR[c.key];
+    it = { kind: 'gear', gear: c.key, name: g.name, icon: g.kind === 'rig' ? '弹' : '背',
+           color: g.color || '#ffb08a', tier: 'common',
+           val: g.kind === 'rig' ? '弹挂' : '背包' };
+  }
   if (it) it.__cell = c;
   return it;
 }
@@ -11886,18 +11892,27 @@ function startLoot(c) {
   if (!c || G.lootPanel) return false;
   const C = containerOf(c.kind);
   const left = crateItems(c).filter(it => !it.taken);
-  if (!left.length) { uiToast(C.name + ' · 已经搜空了', 'small'); return false; }
-
-  const again = !!c.opened;              // 第二次翻：不再重掷、不再吵到敌人
+  const wasOpened = !!c.opened;
   c.opened = true;
   c.hover = 1;
+  /* 已搜空的容器：当储物箱再打开 —— 面板左栏照常，右栏空格可以收身上的东西 */
+  if (!left.length) {
+    G.lootPanel = { items: [], t: 0, shown: 0, taken: 0, closeT: 0, crate: c, total: 0, col: C, again: true, sel: 0, store: true };
+    popup(c.x, c.y - 40, C.name + ' · 已搜空', C.color, 12);
+    uiToast('已搜空 · 把身上的东西拖进右边格子存放', 'small');
+    Sfx.loot();
+    return true;
+  }
+
+  const again = wasOpened;               // 第二次翻：不再重掷、不再吵到敌人
   for (const it of left) it.blocked = '';
   const total = layoutLootResumed(left, C.speed);   // 翻出来过的秒开，没翻过的照常等
   G.lootPanel = { items: left, t: 0, shown: 0, taken: 0, closeT: 0, crate: c, total, col: C, again, sel: Math.max(0, left.findIndex(it => !it.taken)) };
   Sfx.loot();
 
   if (again) {
-    popup(c.x, c.y - 40, '接着翻 · 还剩 ' + left.length + ' 件', C.color, 12);
+    const allOwn = left.every(it => it.own);
+    popup(c.x, c.y - 40, allOwn ? '存着 ' + left.length + ' 件 · 取回或继续存放' : '接着翻 · 还剩 ' + left.length + ' 件', C.color, 12);
     return true;
   }
   burst(c.x, c.y, 18, { color: [C.color, '#ffffff', C.color], life: 0.6, r: 4, spdMin: 40, spdMax: 240, glow: true });
@@ -11926,8 +11941,8 @@ function updateLootPanel(dt) {
   }
   L.shown = shown;
 
-  // 全拿光 → 稍停收面板
-  if (L.taken >= L.items.length) {
+  // 全拿光 → 稍停收面板（存过东西的箱子不自动收：还要留着存放 / 取回）
+  if (L.items.length && !L.deposited && L.taken >= L.items.length) {
     L.closeT += dt;
     if (L.closeT > 0.7) closeLootPanel();
   }
@@ -12021,7 +12036,7 @@ function closeLootPanel() {
   if (chip) chip.classList.add('hidden');
   if (crate) {
     const left = crateLeft(crate);
-    if (left > 0) uiToast('箱里还剩 ' + left + ' 件 · 回来按 F 接着翻', 'small');
+    if (left > 0) uiToast(L.deposited ? '箱里存着 ' + left + ' 件 · 回来按 F 打开取回' : '箱里还剩 ' + left + ' 件 · 回来按 F 接着翻', 'small');
   }
 }
 
@@ -12033,6 +12048,73 @@ function closeLootPanel() {
    松在右边 = 取消，东西还留在容器里。按 F 收下选中的那件。
    ══════════════════════════════════════════════════════════ */
 const LOOT_BOX_COLS = 5;
+const LOOT_BOX_ROWS = 8;                 // 存放容量：右栏 5×8 格，塞不下就拒绝
+
+/* 手上这件能不能塞进箱子（按 lootBoxLayout 同款 first-fit 模拟一遍占位） */
+function lootBoxFits(cell) {
+  const L = G.lootPanel;
+  if (!L || !cell) return false;
+  const cols = LOOT_BOX_COLS;
+  const occ = new Array(cols * LOOT_BOX_ROWS).fill(0);
+  const tryPlace = (w, h) => {
+    for (let i = 0; i < occ.length; i++) {
+      if (i % cols + w > cols) continue;
+      let ok = true;
+      for (let dy = 0; dy < h && ok; dy++)
+        for (let dx = 0; dx < w; dx++) if (occ[i + dy * cols + dx]) { ok = false; break; }
+      if (ok) {
+        for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) {
+          const j = i + dy * cols + dx;
+          if (j < occ.length) occ[j] = 1;
+        }
+        return true;
+      }
+    }
+    return false;
+  };
+  for (const it of L.items) {
+    if (it.taken) continue;
+    const c2 = lootItemCell(it);
+    const s = c2 ? shapeOf(c2, cols) : [1, 1];
+    if (!tryPlace(s[0], s[1])) return false;
+  }
+  const sh = shapeOf(cell, cols);
+  return tryPlace(sh[0], sh[1]);
+}
+
+/* 右栏容器格的放置回调：手上的东西松手 = 存进箱子。
+   自己存的东西记 own 标记 —— 取回时不计缴获台账、不给白送弹药。 */
+function lootDepositPlace() {
+  const L = G.lootPanel;
+  if (!L || !PK_UI.held) return;
+  const c = L.crate, held = PK_UI.held;
+  const C = containerOf(c.kind);
+  const it = cellToLootItem(held);
+  if (!it) { uiToast('这件东西存不进箱子', 'small warn'); return; }
+  if (!lootBoxFits(held)) {
+    uiToast(C.name + ' 放不下了 · 先取回一些再存', 'small warn');
+    Sfx.tone(200, 0.09, 0.05, 'square');
+    return;
+  }
+  it.taken = false;
+  it.blocked = '';
+  it.seen = true;                                // 自己放的：不用翻，直接可见可取
+  it.at = 0; it.ready = 0;
+  it.own = true;
+  it.__cell = held;                              // 原格子对象带着（装备内容 / 耐久都在里面）
+  c.items.push(it);
+  L.items.push(it);
+  L.deposited = true;
+  L.sel = L.items.length - 1;
+  PK_UI.held = null;
+  popup(c.x, c.y - 26, '存入 ' + cellName(held), '#8ef2b0', 14);
+  Sfx.tone(520, 0.05, 0.05, 'square');
+  if (!L.storeWarned) {
+    L.storeWarned = true;
+    uiToast('箱子只是临时仓库 · 撤离时里面的东西不会带走', 'small warn');
+  }
+  lootRender();
+}
 
 /* 容器里一件东西的实体格子（没有实体形状的堆叠品返回 null） */
 function lootItemCell(it) {
@@ -12131,12 +12213,13 @@ function lootPlaceGear(kind) {
     if (PK_UI.held.t !== 'gear') { uiToast(kind === 'rig' ? '弹挂槽只能穿弹挂' : '背包槽只能穿背包', 'small warn'); return; }
     const nk = PK_UI.held.key, ng = GEAR[nk];
     if (!ng || ng.kind !== kind) { uiToast('这是' + (GEAR[nk] && GEAR[nk].kind === 'rig' ? '弹挂' : '背包') + '，拖到对应的槽', 'small warn'); return; }
-    if (SAVE.worn[kind] === nk && !PK_UI.fromLoot) {    // 自己的备用件：别在这儿消耗掉，回背包存着
+    const isLoot = !!PK_UI.fromLoot && !PK_UI.fromLoot.own;   // 自己存进箱的取回不算缴获
+    if (SAVE.worn[kind] === nk && !isLoot) {    // 自己的备用件：别在这儿消耗掉，回背包存着
       uiToast('这件已经穿在身上 · 手上这份拖进背包存放', 'small warn');
       return;
     }
     const incoming = PK_UI.held.cells || [];
-    if (!wearGearInRaid(nk, !!PK_UI.fromLoot, incoming)) { uiToast('这件装备穿不上', 'small warn'); return; }
+    if (!wearGearInRaid(nk, isLoot, incoming)) { uiToast('这件装备穿不上', 'small warn'); return; }
     PK_UI.held = null;
     PK_UI.fromLoot = null;
   };
@@ -12163,13 +12246,14 @@ function lootRender() {
 
   const left = L.items.filter(it => !it.taken).length;
   const lay = lootBoxLayout(L);
+  const canStore = !!(L.crate && !L.pile && !L.gear);   // 只有真容器（箱子）能存放；地面堆 / 搜装备不收
   const nm = $('lootName');
   if (nm) nm.textContent = (L.col ? L.col.name : '容 器');
   const st = $('lootStatus');
   if (st) {
     st.textContent = left
       ? ('翻出 ' + (lay.list.length - lay.pend) + ' / ' + left + ' 件 · 已拿 ' + L.taken + (lay.pend ? ' · 还在翻…' : ''))
-      : '已 全 部 收 下';
+      : (L.store || L.deposited ? '空 箱 · 可 存 放 物 品' : '已 全 部 收 下 · 可 存 放 物 品');
   }
 
   /* 左栏：武器 / 护甲 / 弹挂 / 背包槽 —— 箱里翻出的装备拖上来直接穿 */
@@ -12196,6 +12280,7 @@ function lootRender() {
     for (let i = 0; i < LOOT_BOX_COLS * 3; i++) {
       const d = document.createElement('div');
       d.className = 'lo-cell bcell empty';
+      d.__pkPlace = canStore ? lootDepositPlace : null;   // 空箱也是存放目标：拖进来松手就存
       box.appendChild(d);
     }
   }
@@ -12211,6 +12296,7 @@ function lootRender() {
       if (e.h > 1) el.style.height = 'calc(' + e.h + ' * var(--bcell) + ' + ((e.h - 1) * 2) + 'px)';
       el.title = '？？？ · 占 ' + e.w + '×' + e.h + (scanning ? ' · 正在翻找…' : ' · 排队中');
       el.innerHTML = '<span class="ic">?</span><span class="sz">' + e.w + '×' + e.h + '</span>';
+      el.__pkPlace = canStore ? lootDepositPlace : null;   // 拖东西松在剪影上也算存进箱子
       el.addEventListener('pointerdown', ev => {   // 点剪影：提示还在翻，别白点
         ev.stopPropagation();
         uiToast('还没翻出来 · 占 ' + e.w + '×' + e.h + ' · 继续翻找…', 'small warn');
@@ -12230,7 +12316,7 @@ function lootRender() {
     let html = '<span class="ic" style="color:' + (e.it.color || '#cfe8f5') + '">' + (e.it.icon || '?') + '</span>';
     if (e.w > 1 || e.h > 1) html += '<span class="nm">' + e.it.name + '</span>';
     el.innerHTML = html;
-    el.__pkPlace = null;                           // 容器格不是放置目标：松在这儿 = 放回箱子（取消）
+    el.__pkPlace = canStore ? lootDepositPlace : null;   // 拖东西松在容器格上 = 存进箱子
     el.addEventListener('pointerdown', () => {      // 点一下就选中它（F 收的就是这件）
       L.sel = L.items.indexOf(e.it);
       box.querySelectorAll('.lo-cell.sel').forEach(x => x.classList.remove('sel'));
@@ -12244,7 +12330,7 @@ function lootRender() {
   if (pd) {
     pd.innerHTML = lay.pend
       ? ('还有 <b>' + lay.pend + '</b> 件没翻出来 · 虚线剪影是它们的轮廓，翻到哪件哪件现形')
-      : (left ? '拖到左边入包 · 按 F 收下选中的那件' : '箱子已清空');
+      : (left ? '拖到左边入包 · 按 F 收下选中的那件 · 身上的东西也能拖进这里存放' : '箱子已清空 · 把身上的东西拖进来存放（撤离不带走）');
   }
 }
 
@@ -16349,15 +16435,18 @@ function drawHUD() {
     const CC = containerOf(c.kind);
     const left = crateLeft(c);
     const again = c.opened && left > 0;
+    const store = c.opened && left === 0;
     const sx = (c.x - G.cam.x) * ZOOM, sy = (c.y - G.cam.y) * ZOOM;
     ctx.save();
     ctx.textAlign = 'center';
     ctx.font = '700 12px ' + mono;
-    ctx.fillStyle = again ? 'rgba(255,206,138,0.95)' : CC.dim + '0.95)';
-    ctx.fillText(again ? ('[F] 接着翻 · 还剩 ' + left + ' 件') : ('[F] 搜刮' + CC.name), sx, sy + 46);
+    ctx.fillStyle = again ? 'rgba(255,206,138,0.95)' : store ? 'rgba(140,220,160,0.95)' : CC.dim + '0.95)';
+    ctx.fillText(again ? ((() => { const l = crateItems(c).filter(x => !x.taken); return l.length && l.every(x => x.own) ? ('[F] 打开 · 存着 ' + left + ' 件') : ('[F] 接着翻 · 还剩 ' + left + ' 件'); })())
+      : store ? ('[F] 打开 ' + CC.name + ' · 可存放物品')
+      : ('[F] 搜刮' + CC.name), sx, sy + 46);
     ctx.font = '600 9px ' + mono;
     ctx.fillStyle = 'rgba(150,185,210,0.55)';
-    ctx.fillText(again ? '上次没拿完' : CC.hint, sx, sy + 60);
+    ctx.fillText(again ? '上次没拿完' : store ? '已搜空 · 拖身上的东西进来存放' : CC.hint, sx, sy + 60);
     ctx.restore();
     ctx.textAlign = 'left';
   }
