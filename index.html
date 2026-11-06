@@ -819,7 +819,8 @@
       <button class="tab on" data-tab="weapon">武 器</button>
       <button class="tab" data-tab="melee">近 战</button>
       <button class="tab" data-tab="armor">护 甲</button>
-      <button class="tab" data-tab="gear">携 行</button>
+      <button class="tab" data-tab="rig">弹 挂</button>
+      <button class="tab" data-tab="pack">背 包</button>
       <button class="tab" data-tab="ammo">弹 药</button>
       <button class="tab" data-tab="supply">补 给</button>
     </div>
@@ -844,7 +845,7 @@
           <div class="lo-slot" id="loSlotPistol"></div>
           <div class="lo-slot" id="loSlotMelee"></div>
         </div>
-        <div class="lo-ttl">防 具 · 携 行</div>
+        <div class="lo-ttl">防 具 · 弹 挂 · 背 包</div>
         <div class="lo-slots">
           <div class="lo-slot" id="loSlotArmor"></div>
           <div class="lo-slot" id="loSlotRig"></div>
@@ -17230,7 +17231,7 @@ function refreshLobby() {
     } else if (!SAVE.loadout.primary) {
       risk.textContent = '主武器槽是空的 · 只能带手枪和刀出击，去整备界面装一把长枪';
     } else if (!SAVE.worn.rig) {
-      risk.textContent = '没穿弹挂 · 备弹装不进去，去整备界面右侧仓库「携行」里穿一件';
+      risk.textContent = '没穿弹挂 · 备弹装不进去，去整备界面右侧仓库「弹挂」里穿一件';
     } else if (dryGuns.length) {
       risk.textContent = '没子弹：' + dryGuns.map(id => WEAPONS[id].short).join(' / ') +
         ' · 去整备界面从仓库拿点备弹，不然进图就是烧火棍';
@@ -18098,11 +18099,11 @@ function refreshShop() {
     return;
   }
 
-  /* 携行装备：弹挂 / 背包单独一页 —— 品质从白到红，格数越高越贵 */
-  if (shopTab === 'gear') {
+  /* 携行装备拆两页：弹挂（含口袋扩展板）/ 背包 —— 品质从白到红，格数越高越贵 */
+  if (shopTab === 'rig' || shopTab === 'pack') {
     const kindName = k => k === 'rig' ? '弹挂' : '背包';
-    /* 口袋扩展板：一次性升级，默认 1x4 → 1 + 2x1 + 2x1 + 1（四舱共 6 格） */
-    {
+    /* 口袋扩展板：一次性升级，默认 1x4 → 1 + 2x1 + 2x1 + 1（四舱共 6 格）—— 归在弹挂页 */
+    if (shopTab === 'rig') {
       const owned = !!SAVE.pocketUp;
       const canAfford = SAVE.credits >= POCKET_UP_PRICE;
       const el = document.createElement('div');
@@ -18122,6 +18123,7 @@ function refreshShop() {
     }
     for (const key in GEAR) {
       const s = GEAR[key];
+      if (s.kind !== shopTab) continue;                  // 只在对应页显示弹挂 / 背包
       const gcnt = (SAVE.gearOwned && SAVE.gearOwned[key]) | 0;
       const gowned = gcnt > 0;
       const canAfford = SAVE.credits >= s.price;
@@ -19154,39 +19156,44 @@ function renderLoStock() {
   }
   /* 身上穿的这件不在仓库列表里 —— 左侧护甲槽右键可脱下（会回到本列表） */
 
-  /* 携行装备：弹挂 / 背包，买过就永久拥有，穿了才算数 */
-  sect('携 行', 'gear');
-  let gearAny = false;
-  for (const key in GEAR) {
-    const g0 = GEAR[key];
-    const gcnt = (SAVE.gearOwned && SAVE.gearOwned[key]) | 0;
-    if (gcnt <= 0) continue;
-    gearAny = true;
-    const g = g0;
-    /* 身上穿的那件不算库存；剩下的备用件列出来（同款囤几件显示几件） */
-    const wornThis = !!(SAVE.worn && SAVE.worn[g.kind] === key);
-    const gspare = gcnt - (wornThis ? 1 : 0);
-    if (gspare <= 0) continue;    // 只有身上那件：不显示（左槽右键脱下）
-    row({
-      nm: g.name, color: g.color || '#ffb08a',
-      sub: (g.q ? g.q + ' · ' : '') + (g.kind === 'rig' ? '弹挂 · 快捷可用 · ' : '背包 · Tab 倒腾 · ') + g.cap + ' 格' +
-        (g.blocks ? '（' + blkSizesText(g.blocks) + ' 舱）' : '') +
-        (g.ads ? ' · 瞄准速度 ' + g.ads + '%' : '') + (g.spd ? ' · 移动速度 ' + g.spd + '%' : ''),
-      ct: '备用 ×' + gspare,
-      pick: () => loSetHeld({ t: 'gear', key }),   // 拿备用件，身上穿着的不动
-      quick: () => {                          // F：直接穿上，容量变化立刻结算（多出的格子回仓）
-        SAVE.worn[g.kind] = key;
-        trimCarryToCap();
-        uiToast(g.name + ' 已穿上', 'small');
-        Sfx.tone(620, 0.05, 0.04, 'square');
-      },
-    });
-  }
-  if (!gearAny) {
-    const el = document.createElement('div');
-    el.className = 'lo-row off';
-    el.innerHTML = '<span class="nm">没买过携行装备</span><span class="sub">军火库「携行」页有弹挂和背包</span><span class="ct">—</span>';
-    curBox.appendChild(el);
+  /* 携行装备：弹挂 / 背包分两节列出（买过就永久拥有，穿了才算数） */
+  for (const gk of ['rig', 'pack']) {
+    sect(gk === 'rig' ? '弹 挂' : '背 包', gk === 'rig' ? 'gearRig' : 'gearPack');
+    let gearAny = false;
+    for (const key in GEAR) {
+      const g0 = GEAR[key];
+      if (g0.kind !== gk) continue;                  // 本节只列这一类
+      const gcnt = (SAVE.gearOwned && SAVE.gearOwned[key]) | 0;
+      if (gcnt <= 0) continue;
+      gearAny = true;
+      const g = g0;
+      /* 身上穿的那件不算库存；剩下的备用件列出来（同款囤几件显示几件） */
+      const wornThis = !!(SAVE.worn && SAVE.worn[g.kind] === key);
+      const gspare = gcnt - (wornThis ? 1 : 0);
+      if (gspare <= 0) continue;    // 只有身上那件：不显示（左槽右键脱下）
+      row({
+        nm: g.name, color: g.color || '#ffb08a',
+        sub: (g.q ? g.q + ' · ' : '') + (g.kind === 'rig' ? '弹挂 · 快捷可用 · ' : '背包 · Tab 倒腾 · ') + g.cap + ' 格' +
+          (g.blocks ? '（' + blkSizesText(g.blocks) + ' 舱）' : '') +
+          (g.ads ? ' · 瞄准速度 ' + g.ads + '%' : '') + (g.spd ? ' · 移动速度 ' + g.spd + '%' : ''),
+        ct: '备用 ×' + gspare,
+        pick: () => loSetHeld({ t: 'gear', key }),   // 拿备用件，身上穿着的不动
+        quick: () => {                          // F：直接穿上，容量变化立刻结算（多出的格子回仓）
+          SAVE.worn[g.kind] = key;
+          trimCarryToCap();
+          uiToast(g.name + ' 已穿上', 'small');
+          Sfx.tone(620, 0.05, 0.04, 'square');
+        },
+      });
+    }
+    if (!gearAny) {
+      const el = document.createElement('div');
+      el.className = 'lo-row off';
+      el.innerHTML = gk === 'rig'
+        ? '<span class="nm">没有备用弹挂</span><span class="sub">军火库「弹挂」页有售</span><span class="ct">—</span>'
+        : '<span class="nm">没有备用背包</span><span class="sub">军火库「背包」页有售</span><span class="ct">—</span>';
+      curBox.appendChild(el);
+    }
   }
 
   /* 弹药：每个口径每个弹级单独一行（1 级弹和 4 级弹分开放，想拿哪级拿哪级），
@@ -19326,9 +19333,9 @@ function renderLoadout() {
 
   /* 三排容器格：弹挂 / 口袋 / 背包（没穿弹挂或背包时整排隐藏） */
   const zoneDefs = [
-    ['loRig', SAVE.carry.rig, 'loRigNote', '快捷可用 · 按 5 打药 / R 换弹', rigCap(), '没穿弹挂 · 备弹没地方放，从右侧「携行」穿一件'],
+    ['loRig', SAVE.carry.rig, 'loRigNote', '快捷可用 · 按 5 打药 / R 换弹', rigCap(), '没穿弹挂 · 备弹没地方放，从右侧「弹挂」穿一件'],
     ['loPocket', SAVE.carry.pocket, 'loPocketNote', '快捷可用 · 按 5 打药 / R 换弹', pocketCap(), ''],
-    ['loPack', SAVE.carry.pack, 'loPackNote', 'Tab 里倒腾 · 不能直接用', packCap(), '没穿背包 · 从右侧「携行」穿一件'],
+    ['loPack', SAVE.carry.pack, 'loPackNote', 'Tab 里倒腾 · 不能直接用', packCap(), '没穿背包 · 从右侧「背包」穿一件'],
   ];
   for (const [gridId, arr, noteId, base, cap, emptyHint] of zoneDefs) {
     $(noteId).textContent = cap > 0 ? (base + ' · ' + cap + ' 格') : emptyHint;
