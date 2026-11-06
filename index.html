@@ -4048,6 +4048,7 @@ window.addEventListener('keydown', e => {
     e.preventDefault();
     keys['tab'] = true;
     if (G.packOpen) closePackPanel();
+    else if (G.lootPanel) closeLootPanel();        // 搜刮面板开着：Tab 先关它，别直接弹背包
     else if (G.scene === 'playing') openPackPanel();
     return;
   }
@@ -12091,6 +12092,7 @@ function lootBoxFits(cell) {
 function lootDepositPlace() {
   const L = G.lootPanel;
   if (!L || !PK_UI.held) return;
+  if (!L.again) { uiToast('首次搜刮的箱子先翻完 · 下次打开才能存放', 'small warn'); return; }   // 首次搜刮不收物
   const c = L.crate, held = PK_UI.held;
   const C = containerOf(c.kind);
   const it = cellToLootItem(held);
@@ -12250,7 +12252,7 @@ function lootRender() {
 
   const left = L.items.filter(it => !it.taken).length;
   const lay = lootBoxLayout(L);
-  const canStore = !!(L.crate && !L.pile && !L.gear);   // 只有真容器（箱子）能存放；地面堆 / 搜装备不收
+  const canStore = !!(L.crate && !L.pile && !L.gear && L.again);   // 只有再打开的容器（第二次起）能存放；首次搜刮中的箱子不收
   const nm = $('lootName');
   if (nm) nm.textContent = (L.col ? L.col.name : '容 器');
   const st = $('lootStatus');
@@ -12316,9 +12318,11 @@ function lootRender() {
     if (e.w > 1) el.style.width = 'calc(' + e.w + ' * var(--bcell) + ' + ((e.w - 1) * 2) + 'px)';
     if (e.h > 1) el.style.height = 'calc(' + e.h + ' * var(--bcell) + ' + ((e.h - 1) * 2) + 'px)';
     const shp = e.cell ? shapeOf(e.cell, LOOT_BOX_COLS) : [1, 1];
-    el.title = e.it.name + (e.it.val ? ' · ' + e.it.val : '') + ' · 占 ' + shp[0] + '×' + shp[1];
+    const sub = e.cell ? cellSub(e.cell) : '';     // 价格 / 耐久 / 口径等信息行（收集品这里是 ¥ 价格）
+    el.title = e.it.name + (sub ? ' · ' + sub : '') + ' · 占 ' + shp[0] + '×' + shp[1];
     let html = '<span class="ic" style="color:' + (e.it.color || '#cfe8f5') + '">' + (e.it.icon || '?') + '</span>';
-    if (e.w > 1 || e.h > 1) html += '<span class="nm">' + e.it.name + '</span>';
+    if (e.w > 1 || e.h > 1) html += '<span class="nm">' + e.it.name + '</span>' +
+      (sub ? '<span class="sub">' + sub + '</span>' : '');
     el.innerHTML = html;
     el.__pkPlace = canStore ? lootDepositPlace : null;   // 拖东西松在容器格上 = 存进箱子
     el.addEventListener('pointerdown', () => {      // 点一下就选中它（F 收的就是这件）
@@ -12334,7 +12338,9 @@ function lootRender() {
   if (pd) {
     pd.innerHTML = lay.pend
       ? ('还有 <b>' + lay.pend + '</b> 件没翻出来 · 虚线剪影是它们的轮廓，翻到哪件哪件现形')
-      : (left ? '拖到左边入包 · 按 F 收下选中的那件 · 身上的东西也能拖进这里存放' : '箱子已清空 · 把身上的东西拖进来存放（撤离不带走）');
+      : (left
+        ? ('拖到左边入包 · 按 F 收下选中的那件' + (canStore ? ' · 身上的东西也能拖进这里存放' : ' · 关掉再打开才能存放东西'))
+        : '箱子已清空 · 把身上的东西拖进来存放（撤离不带走）');
   }
 }
 
@@ -20676,9 +20682,12 @@ function pkFinishDrag(target) {
     }
   } finally {
     if (PK_UI.held) {                              // 没放出去：回原位
-      if (PK_DRAG.revert) PK_DRAG.revert();
-      else if (stowCell(PK_UI.held)) PK_UI.held = null;   // 塞进去了就要松手，否则会复制一件
-      else dropHeldToGround();
+      let back = false;
+      if (PK_DRAG.revert) { PK_DRAG.revert(); back = !PK_UI.held; }   // 回退真的把手上的东西安顿好才算数
+      if (!back && PK_UI.held) {
+        if (stowCell(PK_UI.held)) PK_UI.held = null;   // 塞进去了就要松手，否则会复制一件
+        else dropHeldToGround();
+      }
     }
     PK_DRAG.pending = null;
     PK_DRAG.revert = null;
