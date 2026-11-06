@@ -1977,7 +1977,7 @@ const KNOWN_WEAPON_IDS = { g17: 1, '93r': 1, g18: 1, bizon: 1, m870: 1,
 const PISTOL_IDS = { g17: 1, '93r': 1, g18: 1 };
 
 /* 干员白名单：存档加载比 OPERATORS 表更早执行，这里只放 id，别引用表本身 */
-const OP_IDS = { redwolf: 1, weilong: 1, luna: 1, beeser: 1, uluru: 1, nameless: 1 };
+const OP_IDS = { redwolf: 1, weilong: 1, luna: 1, beeser: 1, uluru: 1, nameless: 1, gu: 1 };
 
 /* 空弹药表：CAL_ORDER 个口径 × 8 个弹级，全 0。
    新档和清洗共用一份，加口径时不用再改两处。 */
@@ -2876,6 +2876,26 @@ const SKILL = {
             bandageCd: 14, kdMul: 1.5 },
   /* 敌人流血（只有无名的「重伤延滞」才挂得上）：每层每秒掉血，最多 3 层 */
   ebleed: { dps: 1.1, max: 3, life: 5.0 },
+
+  /* ── 蛊（支援）── */
+  /* 高效治疗（被动）：全队打药 / 修甲 / 用医疗品的读条 -20%，倒地自救也快 20% */
+  med: 0.8,
+  /* 致盲毒雾：瓦斯弹落地或撞墙就地扩散，烟区 15 秒。
+     敌人必须待在烟里满 0.75 秒才会被致盲（致盲 2.2 秒），离开后还残留 1.2 秒 —— 自己一样吃。 */
+  gas: { speed: 520, range: 16 * 18, r: 132, life: 15, grow: 0.6, fade: 2.2,
+         delay: 0.75, blind: 2.2, residual: 1.2, selfMul: 1 },
+  /* 肾上腺素激活：增益无人机半径 12.75 米、15 秒；前 10 秒抹掉装备带来的移速 / 开镜惩罚。
+     每层强度 +15%，最多 10 层；层数整局保留，倒地 / 阵亡清空。 */
+  adr: { r: 12.75 * 18, life: 15, gearClear: 10, linger: 1.6,
+         ads: 0.25, move: 0.08, recoil: 0.20, kick: 0.55, shake: 0.35,
+         stackMax: 10, stackGain: 0.15, passBuff: 12 },
+  /* 流荧集群：自动绕障寻路的无人机群，最远 55 米；
+     小兵缠 3 秒、BOSS 2 秒后自己拔掉；上限最低压到 10%（BOSS 50%），
+     拔完 6 秒慢慢回满，被扣掉的血也一起还回来。 */
+  swarm: { count: 6, speed: 300, range: 55 * 18, life: 22, radius: 42,
+           attach: 3.0, bossAttach: 2.0, ramp: 1.2, recover: 6.0,
+           capFloor: 0.10, bossCapFloor: 0.50, sightMul: 0.38, fovMul: 0.62, hearMul: 0.22,
+           turn: 3.8, retarget: 1.2 },
 };
 
 /* 旋刃飞行器的锁定状态：长按 V 时一直在跑，松手才发射 */
@@ -3031,9 +3051,34 @@ const OPERATORS = {
       desc: '被无名打中的敌人挂上 8 秒「重伤」：打药（战地包扎）耗时翻倍、回血只回一半，被击倒后起身也更慢（×1.5）；同时每一击有 55% 概率（重击额外 +25%）撕开流血，最多叠 3 层、每层每秒掉血。没有冷却。',
     },
   },
+
+  gu: {
+    id: 'gu', name: '蛊', role: '支援', en: 'GU',
+    color: '#a6ef5e', glow: '#5fbf18',
+    desc: '队医的另一半：别人靠药，她靠针和雾。无人机把整队的状态顶上去，瓦斯把走廊变成毒气室 —— 被她缠上的敌人，血条会一直往下掉，连上限一起。',
+    g: {
+      name: '致盲毒雾', short: '毒雾', tag: '战术道具', kind: 'gas',
+      desc: '朝准星抛出一枚瓦斯弹（最远 16 米）：落地或撞上障碍物就地炸开，铺出一片半径 7.3 米的毒雾，持续 15 秒。<b>敌人在雾里待满 0.75 秒才会被致盲</b>（致盲 2.2 秒，期间看不见你、也开不了枪），离开雾区后效果还会残留 1.2 秒 —— 冲进去时便宜，退出来时还得再瞎一会儿。这雾不认人，自己站在里面一样会被致盲。储备 2 枚，按 50 秒回充。',
+      cd: 50, charges: 2,
+    },
+    v: {
+      name: '肾上腺素激活', short: '肾上腺素', tag: '小技能', kind: 'adr',
+      desc: '放出一台增益无人机（原地悬停 15 秒，半径 12.75 米）：站在圈里的队友立刻提升开镜速度（-25%）、枪械操控，并压低受击枪口上抬与视野抖动；<b>前 10 秒还额外清掉装备带来的移速 / 开镜负面</b>，另附小幅移速加成（+8%）。<b>叠层</b>：buff 期间由蛊本人击杀敌人会 +1 层强度（每层再 +15%，最多 10 层），层数整局保留、倒地或阵亡清空，下次开 V 直接继承 —— 越打越强。CD 45 秒。',
+      cd: 45, charges: 1, dur: 15,
+    },
+    x: {
+      name: '流荧集群系统', short: '流荧集群', tag: '大招', kind: 'swarm',
+      desc: '放出一群自动寻路的无人机（最远 55 米）：绕开障碍、自己找敌人，路上经过队友先给对方挂一份「肾上腺素」。<b>命中敌人</b>：视野模糊、听力大幅衰减，并持续压低生命上限（最低压到 10%，BOSS 压到 50%）；小兵被缠 3 秒、BOSS 2 秒后会自己动手拔除，<b>拔完 6 秒上限慢慢回满、被扣掉的血也一起还回来</b> —— 不拔就一直被压着打。CD 120 秒。',
+      cd: 120, charges: 1,
+    },
+    passive: {
+      name: '高效治疗', short: '高效治疗', tag: '被动', kind: 'medic',
+      desc: '全队生效（同小队不限距离，蛊活着就有效）：打药、修甲、使用医疗消耗品的速度全部 +20%（读条 -20%，回血速率同步提高），救援动作也快 20%。没有冷却 —— 她什么都不用做，站着就是治疗加成。',
+    },
+  },
 };
 
-const OP_ORDER = ['redwolf', 'weilong', 'luna', 'beeser', 'uluru', 'nameless'];
+const OP_ORDER = ['redwolf', 'weilong', 'luna', 'beeser', 'uluru', 'nameless', 'gu'];
 
 function opDef() { return OPERATORS[SAVE.operator] || null; }
 function exoOn() { return !!(P.op && P.op.x && P.op.x.on); }
@@ -4261,6 +4306,12 @@ const G = {
   blades: [],       // 无名的旋刃飞行器（直掷 / 锁定追踪）
   footprints: [],   // 玩家的脚印（静默潜袭期间不落）
   flashBlind: 0,    // 玩家被闪光闪到的强度（0..1，屏幕白屏遮罩用）
+  mists: [],        // 蛊的致盲毒雾烟区（不挡视线，只让人瞎）
+  gasbombs: [],     // 蛊的瓦斯弹（飞行体，落地 / 撞墙炸开成雾）
+  gasT: 0,          // 玩家在毒雾里累计待了多久（满 0.75s 才致盲）
+  gasBlind: 0,      // 玩家中毒的屏幕遮蔽强度（0..1，绿色遮罩）
+  adrFields: [],    // 蛊的肾上腺素增益无人机（圈内加 buff）
+  swarms: [],       // 蛊的流荧集群（自动寻路无人机群）
   arrows: [],       // 露娜的电击箭 / 侦察箭
   ezones: [],       // 电击箭落地的电圈
   scanPings: [],    // 侦察箭落地的侦察视野（无遮挡开雾）
@@ -5118,6 +5169,8 @@ function initOperatorSkills() {
     lastMag: SKILL.mag.def,// 磁吸炸弹上次的投掷距离（短按沿用）
     lastThrow: 5 * 18,      // 燃烧弹 / 破片雷上次的投掷距离
     rescueCd: 0,           // 蜂医「专业救援」的冷却（每局重生一次）
+    adrStack: 0,           // 蛊：肾上腺素叠层（整局保留，倒地 / 阵亡 / 新一局清空）
+    adrBuffT: 0,           // 蛊：被流荧集群「路过队友」挂上的独立肾上腺素时长
   };
   P.concuss = 0;
   P.kd = 0;                // 被虎蹲炮掀翻的剩余时间
@@ -6226,7 +6279,7 @@ function playerShoot() {
   /* 点射内的间隔很短，打完整轮才进入循环冷却 */
   P.fireCd = (P.burstLeft > 1) ? (W.burstGap || 0.06) : W.rate;
   if (P.burstLeft > 0) P.burstLeft--;
-  P.recoil = W.recoil * (1 - P.ads * 0.5);      // 开镜后坐减半
+  P.recoil = W.recoil * (1 - P.ads * 0.5) * adrRecoilMul();   // 开镜后坐减半；肾上腺素再压一档
   P.muzzle = 0.06;
   Sfx.shoot(W.sound);
 
@@ -6288,7 +6341,7 @@ function playerShoot() {
 
 /* 读条时长：手臂骨折时拆包、缝合都不利索（止痛可以屏蔽） */
 function careWindSec(base) {
-  return base * (armHurt() ? DEBUFF.armHeal : 1);
+  return base * (armHurt() ? DEBUFF.armHeal : 1) * careTimeMul();
 }
 
 /* 医疗包这次要读多久 —— 读条长度由「要回多少血」决定：
@@ -6297,7 +6350,7 @@ function careWindSec(base) {
 function medReadPlan(M, s) {
   const need = Math.max(0, P.maxHp - P.hp);
   const eff = P.deb.bleed > 0 ? WOUND_HEAL_K : 1;         // 还在流血：包扎效率打折
-  const hps = Math.max(0.5, M.hps * eff);
+  const hps = Math.max(0.5, M.hps * eff * careRateMul());  // 高效治疗：每秒灌得更多，窗口更短
   const canPay = Math.max(0, s ? s.left : 0);             // 耐久只够回这么多
   const heal = Math.min(need, canPay > 0 ? canPay : need);
   const win = Math.max(1, Math.ceil(heal / hps));         // 向上取整到整秒
@@ -6676,7 +6729,7 @@ function updateMedHeal(dt) {
 
   /* 还在流血的时候包扎效率很低，止血带能先解决这个问题 */
   const eff = P.deb.bleed > 0 ? WOUND_HEAL_K : 1;
-  const heal = Math.min(M.hps * eff * dt, s.left, P.maxHp - P.hp);
+  const heal = Math.min(M.hps * eff * careRateMul() * dt, s.left, P.maxHp - P.hp);
   if (heal <= 0) { P.medOn = null; backToGun(); return; }
 
   P.hp += heal;
@@ -6792,17 +6845,24 @@ function updatePlayer(dt) {
   const adsOn = mouse.right && gunOut && P.alive && P.reloading <= 0 && !P.sprinting
                 && P.concuss <= 0 && !dashOn() && !knockOn() && !modeOn() && !isDowned()
                 && !P.medOn && P.medCd <= 0;
-  /* 手臂断了抬枪又慢又抖，止痛之后能压住；大容量弹挂也会拖慢抬枪 */
-  const adsTime = aCfg.time * (armHurt() ? DEBUFF.armAds : 1) * (1 + 0.12 * P.chill) * (1 + rigWornMods().ads / 100);
+  /* 手臂断了抬枪又慢又抖，止痛之后能压住；大容量弹挂也会拖慢抬枪。
+     蛊的肾上腺素：开镜更快；圈里前 10 秒连装备的惩罚一起抹掉 */
+  const gearClear = adrClearGear();
+  const rigAds = rigWornMods().ads;
+  const adsTime = aCfg.time * (armHurt() ? DEBUFF.armAds : 1) * (1 + 0.12 * P.chill)
+                * (1 + (gearClear ? 0 : rigAds) / 100) * adrAdsMul();
   P.ads = clamp(P.ads + (adsOn ? dt / adsTime : -dt / (adsTime * 0.75)), 0, 1);
   if (P.ads > 0.02 && P.adsPrev <= 0.02) Sfx.adsIn();
   if (P.ads <= 0.02 && P.adsPrev > 0.02) Sfx.adsOut();
   P.adsPrev = P.ads;
 
   let spd = P.speed * (wNow.moveMul || 1);           // 配件带来的负重 / 轻量化
-  spd *= 1 + rigWornMods().spd / 100;                // 弹挂移速修正（大挂具的负重）
-  spd *= 1 - SPRINT.loadWalk * (P.armorLoad || 0);   // 护甲负重：穿得越厚走得越慢
-  spd *= 1 - (P.armorMove || 0);                     // 护甲移速惩罚（具名甲各自不同）
+  spd *= 1 + (gearClear ? 0 : rigWornMods().spd) / 100;  // 弹挂移速修正（肾上腺素前 10 秒抹掉）
+  if (!gearClear) {
+    spd *= 1 - SPRINT.loadWalk * (P.armorLoad || 0);  // 护甲负重：穿得越厚走得越慢
+    spd *= 1 - (P.armorMove || 0);                    // 护甲移速惩罚（具名甲各自不同）
+  }
+  spd *= adrMoveMul();                               // 蛊：肾上腺素的小幅移速加成
   if (P.sprinting) spd *= SPRINT.mul;                // 按住 Shift：跑步
   else if (P.exhaust > 0) spd *= SPRINT.exhaustMul;  // 体力见底：先喘几口
   if (P.curSlot === 'melee') spd *= 1.06;            // 收枪持刀：跑得更利索
@@ -7026,7 +7086,7 @@ function updateDowned(dt) {
 
   /* ── 长按 F 自救：累计满 8 秒爬起来；松手进度停住但不倒退 ── */
   const pulling = !!keys['f'] && !G.lootPanel;
-  P.downRev = clamp(P.downRev + (pulling ? dt : 0), 0, SKILL.rescue.down);
+  P.downRev = clamp(P.downRev + (pulling ? dt * careRateMul() : 0), 0, SKILL.rescue.down);
   if (pulling && Math.random() < dt * 10) {
     addParticle(P.x + rand(-14, 14), P.y + rand(-10, 8), {
       vx: rand(-8, 8), vy: rand(-30, -8), life: 0.45, r: rand(1.6, 3),
@@ -7112,7 +7172,8 @@ function damagePlayer(amount, srcX, srcY, inv, pen) {
     P.hurtDir = Math.atan2(srcY - P.y, srcX - P.x);
     P.hurtDirT = 1.5;
   }
-  shake(9);
+  shake(9 * adrShakeMul());
+  P.recoil = Math.max(P.recoil, 3.4 * adrKickMul());   // 受击枪口上抬（肾上腺素压得住）
   Sfx.hurt();
   G.combo = 0;
   G.comboTimer = 0;
@@ -7165,12 +7226,15 @@ function angleDiff(a, b) {
 function canSeePlayer(e) {
   if (!P.alive) return false;
   if (e.blind > 0) return false;                  // 被闪光弹晃到：睁着眼也是白的
+  /* 蛊的流荧集群：被缠住时视野糊成一片 —— 看不远，也看不宽 */
+  const blurK = (e.swarmT || 0) > 0 ? SKILL.swarm.sightMul : 1;
+  const fovK = (e.swarmT || 0) > 0 ? SKILL.swarm.fovMul : 1;
   const dx = P.x - e.x, dy = P.y - e.y;
   const d = Math.hypot(dx, dy);
-  if (d > e.sight) return false;
+  if (d > e.sight * blurK) return false;
   /* 自己站在烟里：除了贴脸（64px 内）什么都看不见 */
   if (d > 64 && pointInSmoke(e.x, e.y)) return false;
-  if (d > 54 && Math.abs(angleDiff(Math.atan2(dy, dx), e.facing)) > e.fov) return false;
+  if (d > 54 && Math.abs(angleDiff(Math.atan2(dy, dx), e.facing)) > e.fov * fovK) return false;
   if (!losClear(e.x, e.y, P.x, P.y)) return false;
   /* 烟幕：线段穿过成形后的烟圈就看不见 —— 这就是烟雾弹的全部价值 */
   return !smokeBlocks(e.x, e.y, P.x, P.y);
@@ -7186,9 +7250,11 @@ function emitNoise(x, y, radius, hardness, byPlayer) {
   if (radius < 30) return;
   for (const e of G.enemies) {
     if (e.state === 'combat') continue;
+    /* 蛊的流荧集群：被缠住时听力大幅衰减，喊他他听不见 */
+    const ear = (e.deaf || 0) > 0 ? radius * SKILL.swarm.hearMul : radius;
     const d = dist(e.x, e.y, x, y);
-    if (d > radius) continue;
-    const k = 1 - d / radius;
+    if (d > ear) continue;
+    const k = 1 - d / ear;
 
     e.lastSeenX = x; e.lastSeenY = y;
 
@@ -7806,6 +7872,7 @@ function useTactic(dist) {
   if (op.g.kind === 'magbomb') throwMagBomb(dist);
   else if (op.g.kind === 'beesmoke') throwBeeSmoke();
   else if (op.g.kind === 'flash') throwFlash();
+  else if (op.g.kind === 'gas') throwGas();
   else throwSmoke();
 
   kineticKick();                                // 动能辅助：放技能就给一档移速
@@ -8005,6 +8072,8 @@ function useSkill() {
 
   if (op.v.kind === 'dash') {
     dashForward();
+  } else if (op.v.kind === 'adr') {
+    deployAdr();
   }
   kineticKick();
 }
@@ -8171,6 +8240,13 @@ function useUlt() {
   }
 
   if (op.x.kind === 'silent') { fireSilent(); return; }
+
+  if (op.x.kind === 'swarm') {
+    launchSwarm();
+    S.cd = op.x.cd;
+    kineticKick();
+    return;
+  }
 
   if (op.x.kind !== 'exo') return;   // 其余大招都在手持模式里处理
 
@@ -8890,6 +8966,372 @@ function endSilent() {
   P.op.x.t = 0;
   popup(P.x, P.y - 50, '静默结束', '#8f7bff', 12);
   Sfx.tone(260, 0.16, 0.04, 'sine', 110);
+}
+
+/* ══════════════════════════════════════════════════════════
+   蛊（支援）：致盲毒雾 / 肾上腺素激活 / 流荧集群系统
+   ──────────────────────────────────────────────────────────
+   设计意图：她不给队友发枪，只给队友发状态。
+   · G 毒雾：不挡视线的软封锁 —— 踩进去要过半秒才瞎，逼人换路，而不是把人糊在原地。
+   · V 肾上腺素：一个必须守着打的圈；圈里是另一个自己，击杀叠层让"打得顺"滚成雪球。
+   · X 流荧集群：真正伤人的不是伤害，是上限 —— 被缠上的人打不赢，也跑不快。
+   ══════════════════════════════════════════════════════════ */
+
+/* 被动「高效治疗」：全队读条 -20% / 回血与救援速率 +25%（本作单兵行动，落在自己身上） */
+function guOn() {
+  const op = opDef();
+  return !!(op && op.passive && op.passive.kind === 'medic');
+}
+function careTimeMul() { return guOn() ? SKILL.med : 1; }        // 读条时长倍率
+function careRateMul() { return guOn() ? 1 / SKILL.med : 1; }    // 回血 / 自救速率倍率
+
+/* ── 肾上腺素：在场 / 叠层 / 各项修正 ── */
+function adrFieldAt(x, y) {
+  for (const f of G.adrFields) {
+    if (f.t >= f.life) continue;
+    if (dist(x, y, f.x, f.y) <= SKILL.adr.r) return f;
+  }
+  return null;
+}
+function adrOn() {
+  if (!P.op) return false;
+  if ((P.op.adrLinger || 0) > 0 || (P.op.adrBuffT || 0) > 0) return true;
+  return !!adrFieldAt(P.x, P.y);
+}
+function adrStackN() { return Math.min((P.op && P.op.adrStack) || 0, SKILL.adr.stackMax); }
+function adrEff() { return 1 + adrStackN() * SKILL.adr.stackGain; }
+function adrAdsMul() { return adrOn() ? Math.max(0.4, 1 - SKILL.adr.ads * adrEff()) : 1; }
+function adrMoveMul() { return adrOn() ? 1 + SKILL.adr.move * adrEff() : 1; }
+function adrRecoilMul() { return adrOn() ? Math.max(0.5, 1 - SKILL.adr.recoil * adrEff()) : 1; }
+function adrKickMul() { return adrOn() ? Math.max(0.2, 1 - SKILL.adr.kick * adrEff()) : 1; }
+function adrShakeMul() { return adrOn() ? Math.max(0.28, 1 - SKILL.adr.shake * adrEff()) : 1; }
+/* 前 10 秒：抹掉装备带来的移速 / 开镜负面 */
+function adrClearGear() {
+  const f = adrFieldAt(P.x, P.y);
+  return !!(f && f.t <= SKILL.adr.gearClear);
+}
+/* buff 期间由蛊本人击杀：叠一层强度（层数整局保留） */
+function adrOnKill() {
+  if (!adrOn() || !P.op) return;
+  if (P.op.adrStack >= SKILL.adr.stackMax) return;
+  P.op.adrStack++;
+  popup(P.x, P.y - 66, '肾上腺素 +1 层 · ' + P.op.adrStack, '#d8ffa8', 12);
+  Sfx.tone(880, 0.1, 0.05, 'triangle', 620);
+}
+
+/* ── V：放出增益无人机 ── */
+function deployAdr() {
+  const AD = SKILL.adr;
+  G.adrFields.push({ x: P.x, y: P.y, t: 0, life: AD.life, seed: rand(0, TAU) });
+  uiToast('肾 上 腺 素 激 活 · ' + AD.life + 's', '');
+  popup(P.x, P.y - 54, '肾 上 腺 素', '#a6ef5e', 14);
+  if (P.op && P.op.adrStack > 0) popup(P.x, P.y - 76, '继承 ' + P.op.adrStack + ' 层强度', '#d8ffa8', 11);
+  Sfx.adsIn();
+  Sfx.tone(660, 0.18, 0.05, 'triangle', 480);
+  burst(P.x, P.y, 22, {
+    color: ['#d8ffa8', '#a6ef5e', '#5fbf18'], life: 0.6, r: 4,
+    spdMin: 50, spdMax: 240, drag: 0.9, glow: true,
+  });
+}
+
+function updateAdrFields(dt) {
+  const AD = SKILL.adr;
+  for (let i = G.adrFields.length - 1; i >= 0; i--) {
+    const f = G.adrFields[i];
+    f.t += dt;
+    if (f.t >= f.life) G.adrFields.splice(i, 1);
+  }
+  if (!P.op) return;
+  const inside = P.alive && !!adrFieldAt(P.x, P.y);
+  if (inside) P.op.adrLinger = AD.linger;
+  else P.op.adrLinger = Math.max(0, (P.op.adrLinger || 0) - dt);
+  P.op.adrBuffT = Math.max(0, (P.op.adrBuffT || 0) - dt);
+
+  if (inside && Math.random() < dt * 16) {
+    addParticle(P.x + rand(-22, 22), P.y + rand(-18, 18), {
+      vx: rand(-6, 6), vy: rand(-30, -10), life: rand(0.5, 1.0), r: rand(1.4, 2.6),
+      color: pick(['#d8ffa8', '#a6ef5e']), drag: 0.94, glow: true,
+    });
+  }
+}
+
+/* ── G：瓦斯弹 → 毒雾 ── */
+function throwGas() {
+  const GS = SKILL.gas;
+  const a = P.aim;
+  const want = clamp(magAimDist() || 160, 70, GS.range);
+  const mx = P.x + Math.cos(a) * (P.r + 9);
+  const my = P.y + Math.sin(a) * (P.r + 9);
+  G.gasbombs.push({
+    x: mx, y: my, px: mx, py: my,
+    vx: Math.cos(a) * GS.speed, vy: Math.sin(a) * GS.speed,
+    fuse: Math.min(1.4, want / GS.speed + 0.35), spin: rand(0, TAU),
+  });
+  P.recoil = Math.max(P.recoil, 2.2);
+  popup(P.x, P.y - 46, '致 盲 毒 雾', '#c8f57a', 12);
+  burst(mx, my, 8, {
+    angle: a, spread: 0.4, spdMin: 60, spdMax: 200,
+    color: ['#e8ffc0', '#a6ef5e'], life: 0.24, r: 3, glow: true,
+  });
+  Sfx.dash();
+}
+
+function updateGasBombs(dt) {
+  const GS = SKILL.gas;
+  for (let i = G.gasbombs.length - 1; i >= 0; i--) {
+    const b = G.gasbombs[i];
+    b.fuse -= dt;
+    b.spin += dt * 14;
+    b.px = b.x; b.py = b.y;
+
+    const step = Math.hypot(b.vx, b.vy) * dt;
+    const n = Math.max(1, Math.ceil(step / 8));
+    let hit = false;
+    for (let k = 0; k < n; k++) {
+      const dtt = dt / n;
+      let nx = b.x + b.vx * dtt;
+      let ny = b.y + b.vy * dtt;
+      if (nx < 12 || nx > WORLD.w - 12) { nx = clamp(nx, 12, WORLD.w - 12); b.vx *= -0.35; hit = true; }
+      if (ny < 12 || ny > WORLD.h - 12) { ny = clamp(ny, 12, WORLD.h - 12); b.vy *= -0.35; hit = true; }
+      if (pointInObstacle(nx, b.y)) { nx = b.x; b.vx *= -0.35; hit = true; }
+      if (pointInObstacle(b.x, ny)) { ny = b.y; b.vy *= -0.35; hit = true; }
+      b.x = nx; b.y = ny;
+    }
+    /* 碰到墙 / 地面就放气：几乎立刻炸开成雾 */
+    if (hit) b.fuse = Math.min(b.fuse, 0.22);
+
+    if (Math.random() < 0.6) {
+      addParticle(b.x, b.y, {
+        vx: rand(-20, 20), vy: rand(-30, 4), life: rand(0.2, 0.45), r: rand(1.6, 3),
+        color: '#c8f57a', drag: 0.9, glow: true,
+      });
+    }
+    if (b.fuse <= 0) { gasBlast(b.x, b.y); G.gasbombs.splice(i, 1); }
+  }
+}
+
+function gasBlast(x, y) {
+  const GS = SKILL.gas;
+  G.mists.push({ x, y, t: 0, life: GS.life, r: 0, seed: rand(0, 100) });
+  Sfx.noiseBurst(0.42, 1100, 1.1, 0.22);
+  Sfx.tone(170, 0.46, 0.06, 'sawtooth', 70);
+  burst(x, y, 26, {
+    color: ['#e8ffc0', '#a6ef5e', '#6fbf2a'], life: 0.8, r: 6,
+    spdMin: 40, spdMax: 240, drag: 0.9, glow: true,
+  });
+  emitNoise(x, y, 700, 0.45);
+}
+
+function updateMists(dt) {
+  const GS = SKILL.gas;
+  for (let i = G.mists.length - 1; i >= 0; i--) {
+    const m = G.mists[i];
+    m.t += dt;
+    const fadeK = 1 - clamp((m.t - (GS.life - GS.fade)) / GS.fade, 0, 0.45);
+    m.r = GS.r * clamp(m.t / GS.grow, 0, 1) * fadeK;
+    if (m.t >= GS.life) { G.mists.splice(i, 1); continue; }
+    if (Math.random() < dt * 20) {
+      const a = rand(0, TAU), rr = rand(0.2, 0.95) * m.r;
+      addParticle(m.x + Math.cos(a) * rr, m.y + Math.sin(a) * rr, {
+        vx: rand(-14, 14), vy: rand(-22, -4), life: rand(0.6, 1.3), r: rand(2, 5),
+        color: 'rgba(186,232,116,0.35)', drag: 0.92,
+      });
+    }
+  }
+
+  /* 敌人：在雾里待满 0.75 秒才致盲；离开后盲只留 1.2 秒残效 */
+  for (const e of G.enemies) {
+    if (!e.alive) continue;
+    let inside = false;
+    for (const m of G.mists) {
+      if (m.r < 20) continue;
+      if (dist(e.x, e.y, m.x, m.y) <= m.r * 0.92 + e.r) { inside = true; break; }
+    }
+    if (inside) {
+      e.gasT = (e.gasT || 0) + dt;
+      if (e.gasT >= GS.delay) {
+        if (!e.gasHit) {
+          e.gasHit = 1;
+          e.blind = Math.max(e.blind || 0, GS.blind);
+          e.bandaging = false;
+          popup(e.x, e.y - e.r - 30, '毒雾致盲', '#d6ff9c', 11);
+        } else {
+          e.blind = Math.max(e.blind || 0, GS.residual);
+        }
+        e.bandaging = false;
+      }
+    } else {
+      e.gasT = Math.max(0, (e.gasT || 0) - dt);
+      if (e.gasT <= 0) e.gasHit = 0;
+    }
+  }
+
+  /* 自己：同一套规矩，一样会瞎 */
+  let pin = false;
+  if (P.alive) {
+    for (const m of G.mists) {
+      if (m.r < 20) continue;
+      if (dist(P.x, P.y, m.x, m.y) <= m.r * 0.92 + P.r) { pin = true; break; }
+    }
+  }
+  if (pin) G.gasT += dt;
+  else G.gasT = Math.max(0, G.gasT - dt);
+  const blindT = G.gasT >= GS.delay ? 1 : 0;
+  if (blindT > 0) P.concuss = Math.max(P.concuss, 0.4);
+  G.gasBlind += (blindT - G.gasBlind) * clamp(dt * (blindT > 0 ? 3.2 : 0.9), 0, 1);
+  if (G.gasBlind < 0.004) G.gasBlind = 0;
+}
+
+/* ── X：流荧集群 ── */
+function swarmSteer(s, ang) {
+  const look = 30;
+  const free = a => !pointInObstacle(s.x + Math.cos(a) * look, s.y + Math.sin(a) * look);
+  if (free(ang)) return ang;
+  for (let k = 1; k <= 6; k++) {
+    const d = k * 0.34;
+    if (free(ang + d)) return ang + d;
+    if (free(ang - d)) return ang - d;
+  }
+  return ang + Math.PI;
+}
+
+function pickSwarmTarget(s) {
+  const SW = SKILL.swarm;
+  let best = null, bd = 1e9;
+  for (const e of G.enemies) {
+    if (!e.alive) continue;
+    if ((e.swarmT || 0) > 0) continue;                                  // 已经在拔了，别叠
+    if (dist(P.x, P.y, e.x, e.y) > SW.range) continue;                   // 母机 55 米内
+    const d = dist(s.x, s.y, e.x, e.y);
+    if (d < bd) { bd = d; best = e; }
+  }
+  return best;
+}
+
+function launchSwarm() {
+  const SW = SKILL.swarm;
+  const a = P.aim;
+  G.swarms.push({
+    x: P.x + Math.cos(a) * 26, y: P.y + Math.sin(a) * 26,
+    vx: Math.cos(a) * SW.speed, vy: Math.sin(a) * SW.speed,
+    t: 0, life: SW.life, target: null, retarget: 0,
+    given: false, seed: rand(0, TAU), bob: 0,
+  });
+  uiToast('流 荧 集 群 系 统', '');
+  popup(P.x, P.y - 56, '流 荧 集 群', '#a6ef5e', 15);
+  Sfx.adsIn();
+  Sfx.tone(760, 0.2, 0.05, 'triangle', 380);
+  burst(P.x, P.y, 26, {
+    color: ['#e8ffc0', '#a6ef5e', '#5fbf18'], life: 0.7, r: 4,
+    spdMin: 50, spdMax: 260, drag: 0.9, glow: true,
+  });
+}
+
+function attachSwarm(e) {
+  const SW = SKILL.swarm;
+  if ((e.swarmT || 0) > 0) return;
+  const boss = e.type === 'boss' || e.type === 'director';
+  e.swarmT = boss ? SW.bossAttach : SW.attach;
+  e.capMul = 1;
+  e.capLost = 0;
+  e.capFloor = boss ? SW.bossCapFloor : SW.capFloor;
+  e.capBoss = boss;
+  e.swarmRec = 0;
+  e.blur = 1;
+  e.deaf = 1;
+  e.bandaging = false;
+  popup(e.x, e.y - e.r - 26, boss ? '无人机群缠上 · 拔除 2s' : '无人机群缠上 · 拔除 3s', '#c8f57a', 12);
+  Sfx.tone(620, 0.12, 0.05, 'square', 380);
+  burst(e.x, e.y, 14, {
+    color: ['#d8ffa8', '#a6ef5e'], life: 0.45, r: 3, spdMin: 40, spdMax: 180, glow: true,
+  });
+}
+
+function updateSwarms(dt) {
+  const SW = SKILL.swarm;
+  for (let i = G.swarms.length - 1; i >= 0; i--) {
+    const s = G.swarms[i];
+    s.t += dt;
+    s.bob += dt;
+    if (s.t >= s.life) { G.swarms.splice(i, 1); continue; }
+
+    /* 经过队友（本作唯一的队友就是自己）：直接挂一份肾上腺素 */
+    if (!s.given && P.alive && dist(s.x, s.y, P.x, P.y) < 48) {
+      s.given = true;
+      if (P.op) P.op.adrBuffT = Math.max(P.op.adrBuffT || 0, SKILL.adr.passBuff);
+      popup(P.x, P.y - 62, '肾上腺素', '#a6ef5e', 12);
+    }
+
+    s.retarget -= dt;
+    if (!s.target || !s.target.alive || s.retarget <= 0) {
+      s.target = pickSwarmTarget(s);
+      s.retarget = SW.retarget;
+    }
+
+    const tx = s.target ? s.target.x : P.x;
+    const ty = s.target ? s.target.y : P.y;
+    const cur = Math.atan2(s.vy, s.vx);
+    const want = Math.atan2(ty - s.y, tx - s.x);
+    let ang = cur + clamp(angleDiff(want, cur), -SW.turn * dt, SW.turn * dt);
+    ang = swarmSteer(s, ang);
+    const spd = s.target ? SW.speed : SW.speed * 0.45;
+    s.vx = Math.cos(ang) * spd;
+    s.vy = Math.sin(ang) * spd;
+    s.x = clamp(s.x + s.vx * dt, 14, WORLD.w - 14);
+    s.y = clamp(s.y + s.vy * dt, 14, WORLD.h - 14);
+
+    if (s.target && dist(s.x, s.y, s.target.x, s.target.y) < SW.radius + s.target.r) attachSwarm(s.target);
+
+    if (Math.random() < dt * 26) {
+      addParticle(s.x + rand(-10, 10), s.y + rand(-10, 10), {
+        vx: rand(-14, 14), vy: rand(-14, 14), life: rand(0.25, 0.6), r: rand(1.2, 2.4),
+        color: pick(['#d8ffa8', '#a6ef5e']), drag: 0.9, glow: true,
+      });
+    }
+  }
+}
+
+/* 敌人身上的集群：压上限 / 拔除 / 恢复（每帧在 updateEnemies 里跑） */
+function updateSwarmDebuff(e, dt) {
+  const SW = SKILL.swarm;
+  if ((e.swarmT || 0) > 0) {
+    e.swarmT -= dt;
+    const floor = e.capFloor == null ? SW.capFloor : e.capFloor;
+    const rate = (1 - floor) / SW.ramp;
+    e.capMul = Math.max(floor, (e.capMul == null ? 1 : e.capMul) - rate * dt);
+    const cap = e.maxHp * e.capMul;
+    if (e.hp > cap) {
+      e.capLost = (e.capLost || 0) + (e.hp - cap);
+      e.hp = cap;
+    }
+    e.blur = 1;
+    e.deaf = 1;
+    if (e.swarmT <= 0) {
+      e.swarmT = 0;
+      e.swarmRec = SW.recover;
+      e.capHeal = e.capLost || 0;      // 记下要还回去的血量，恢复期里按固定节奏还
+      e.capHeal0 = e.capHeal;
+      e.blur = 0;
+      e.deaf = 0;
+      popup(e.x, e.y - e.r - 26, '拔除无人机群', '#c8f57a', 11);
+    }
+  } else if ((e.swarmRec || 0) > 0) {
+    e.swarmRec = Math.max(0, e.swarmRec - dt);
+    const floor = e.capFloor == null ? SW.capFloor : e.capFloor;
+    e.capMul = Math.min(1, (e.capMul == null ? 1 : e.capMul) + (1 - floor) * dt / SW.recover);
+    /* 上限回来了，血也跟着还 —— 按「拔除那一刻欠下的量」在 6 秒里匀速补 */
+    const back = Math.min(e.capHeal || 0, (e.capHeal0 || 0) * dt / SW.recover);
+    e.capHeal = Math.max(0, (e.capHeal || 0) - back);
+    e.capLost = e.capHeal;
+    e.hp = Math.min(e.maxHp, e.hp + back);
+    if (e.swarmRec <= 0) {
+      e.capMul = 1;
+      e.hp = Math.min(e.maxHp, e.hp + (e.capHeal || 0));
+      e.capHeal = 0;
+      e.capHeal0 = 0;
+      e.capLost = 0;
+    }
+  }
 }
 
 /* ── 脚印：静默潜袭期间不落 ── */
@@ -10174,6 +10616,8 @@ function updateEnemies(dt) {
     e.blind = Math.max(0, (e.blind || 0) - dt);
     e.trauma = Math.max(0, (e.trauma || 0) - dt);
     e.careCd = Math.max(0, (e.careCd || 0) - dt);
+    /* 蛊：流荧集群压在身上的上限 / 拔除读条 / 拔完的回血 */
+    updateSwarmDebuff(e, dt);
     /* 流血：每层每秒掉血，掉光就倒 —— 这是「重伤延滞」撕开的口子 */
     if (e.bleedT > 0) {
       e.bleedT -= dt;
@@ -10967,6 +11411,7 @@ function updateEnemies(dt) {
     let spd = e.speed * spdMul * (e.stagger > 0 ? 0.25 : 1);
     if (e.cripple > 0) spd *= 0.6;                        // 被炸断腿：一瘸一拐
     if (e.blind > 0) spd *= 0.5;                          // 被闪光晃到：摸着墙走
+    if ((e.swarmT || 0) > 0) spd *= 0.45;                 // 被流荧集群缠住：一边跑一边扯无人机
     if (e.type === 'runner') {
       // 点射时半蹲着走，打完继续撒腿冲
       if (e.ptN > 0) spd *= 0.5;
@@ -11215,6 +11660,7 @@ function killEnemy(e) {
     G.combo++;
     G.comboTimer = 2.6;
     exoOnKill();                  // 外骨骼期间：每倒一个都续 5 秒 + 回 30 血 + 满体力
+    adrOnKill();                  // 蛊：肾上腺素期间每倒一个叠一层强度
     /* 威龙：动力推进每倒一个直接扣 10 秒冷却（冷却在 recharge 上，cd 只剩出弹间隔） */
     if (P.op && (P.op.v.cd > 0 || P.op.v.recharge > 0)) {
       const od = opDef();
@@ -15020,6 +15466,21 @@ function drawEnemy(e) {
     ctx.lineWidth = 1;
     ctx.strokeRect(e.x - w / 2, y, w, h);
 
+    /* 蛊的流荧集群：被压掉的那一截上限画成暗紫，右边缘一道绿刻线 */
+    if ((e.capMul || 1) < 0.995) {
+      const cw = w * clamp(e.capMul, 0, 1);
+      ctx.save();
+      ctx.fillStyle = 'rgba(24,12,34,0.88)';
+      ctx.fillRect(e.x - w / 2 + cw, y, w - cw, h);
+      ctx.strokeStyle = '#c8f57a';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(e.x - w / 2 + cw, y - 1);
+      ctx.lineTo(e.x - w / 2 + cw, y + h + 1);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     if (e.armorMax > 0 && e.armorHp > 0) {
       const ar = clamp(e.armorHp / e.armorMax, 0, 1);
       ctx.save();
@@ -15487,6 +15948,184 @@ function drawBladeLock() {
   ctx.fillText(locked ? (BLADE_LOCK.behind ? '背 后 · 已锁定' : '已 锁 定')
                       : (BLADE_LOCK.behind ? '背 后 · 快 锁 ' : '锁 定 ') + Math.round(k * 100) + '%',
                t.x, t.y - r - 12);
+  ctx.restore();
+}
+
+/* ── 蛊：瓦斯弹 / 毒雾 / 增益无人机 / 流荧集群 ── */
+function drawGasBombs() {
+  for (const b of G.gasbombs) {
+    if (!fogVisibleAt(b.x, b.y)) continue;
+    ctx.save();
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.ellipse(b.x, b.y + 5, 6, 3.6, 0, 0, TAU); ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.translate(b.x, b.y);
+    /* 泄气尾迹 */
+    const g0 = ctx.createRadialGradient(0, 0, 0, 0, 0, 14);
+    g0.addColorStop(0, 'rgba(216,255,168,0.45)');
+    g0.addColorStop(1, 'rgba(166,239,94,0)');
+    ctx.fillStyle = g0;
+    ctx.beginPath(); ctx.arc(0, 0, 14, 0, TAU); ctx.fill();
+    ctx.rotate(b.spin);
+    ctx.fillStyle = '#8fbf3c';
+    ctx.strokeStyle = '#e8ffc0';
+    ctx.lineWidth = 1.3;
+    drawRoundRect(-4.6, -6.2, 9.2, 12.4, 3);
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#2a3a12';
+    ctx.fillRect(-2.4, -6.2, 4.8, 2.2);
+    ctx.restore();
+  }
+}
+
+function drawMists() {
+  const GS = SKILL.gas;
+  for (const m of G.mists) {
+    if (!fogVisibleAt(m.x, m.y)) continue;
+    const r = m.r;
+    if (r < 2) continue;
+    const a = clamp(Math.min(m.t / 0.35, (GS.life - m.t) / GS.fade), 0, 1);
+    /* 半透明的黄绿雾：看得见人影，但看不清脸 —— 不挡视线，只让人瞎 */
+    const g = ctx.createRadialGradient(m.x, m.y, r * 0.12, m.x, m.y, r);
+    g.addColorStop(0, 'rgba(150,196,70,' + (0.34 * a).toFixed(3) + ')');
+    g.addColorStop(0.58, 'rgba(158,206,76,' + (0.30 * a).toFixed(3) + ')');
+    g.addColorStop(0.9, 'rgba(178,224,98,' + (0.2 * a).toFixed(3) + ')');
+    g.addColorStop(1, 'rgba(190,232,116,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(m.x, m.y, r, 0, TAU); ctx.fill();
+
+    /* 翻滚的雾团 */
+    for (let i = 0; i < 6; i++) {
+      const ang = m.seed + i * 2.399 + G.time * 0.35;
+      const rr = r * (0.3 + (i % 3) * 0.14);
+      const bx = m.x + Math.cos(ang) * r * 0.42;
+      const by = m.y + Math.sin(ang * 1.3) * r * 0.34;
+      const gg = ctx.createRadialGradient(bx, by, 0, bx, by, rr);
+      gg.addColorStop(0, 'rgba(196,240,120,' + (0.18 * a).toFixed(3) + ')');
+      gg.addColorStop(1, 'rgba(166,239,94,0)');
+      ctx.fillStyle = gg;
+      ctx.beginPath(); ctx.arc(bx, by, rr, 0, TAU); ctx.fill();
+    }
+
+    /* 一圈边界：告诉所有人"这圈不能待" */
+    ctx.strokeStyle = 'rgba(196,240,120,' + (0.22 * a).toFixed(3) + ')';
+    ctx.lineWidth = 1.6;
+    ctx.setLineDash([9, 9]);
+    ctx.lineDashOffset = -G.time * 22;
+    ctx.beginPath(); ctx.arc(m.x, m.y, r * 0.94, 0, TAU); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+function drawAdrFields() {
+  const AD = SKILL.adr;
+  for (const f of G.adrFields) {
+    if (!fogVisibleAt(f.x, f.y)) continue;
+    const left = f.life - f.t;
+    const a = clamp(Math.min(f.t / 0.4, left / 1.2), 0, 1);
+    const pulse = 0.5 + Math.sin(G.time * 3.4) * 0.5;
+
+    /* 作用范围 */
+    ctx.strokeStyle = 'rgba(166,239,94,' + ((0.34 + pulse * 0.2) * a).toFixed(3) + ')';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([12, 10]);
+    ctx.lineDashOffset = -G.time * 26;
+    ctx.beginPath(); ctx.arc(f.x, f.y, AD.r, 0, TAU); ctx.stroke();
+    ctx.setLineDash([]);
+
+    const g = ctx.createRadialGradient(f.x, f.y, AD.r * 0.2, f.x, f.y, AD.r);
+    g.addColorStop(0, 'rgba(166,239,94,0)');
+    g.addColorStop(0.75, 'rgba(166,239,94,' + (0.05 * a).toFixed(3) + ')');
+    g.addColorStop(1, 'rgba(166,239,94,' + (0.13 * a).toFixed(3) + ')');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(f.x, f.y, AD.r, 0, TAU); ctx.fill();
+
+    /* 悬停的无人机（三叶旋翼） */
+    const dy = Math.sin(G.time * 2.2 + f.seed) * 4;
+    ctx.save();
+    ctx.translate(f.x, f.y + dy);
+    ctx.rotate(G.time * 0.9);
+    for (let i = 0; i < 3; i++) {
+      ctx.rotate(TAU / 3);
+      ctx.fillStyle = 'rgba(200,255,150,' + (0.5 * a).toFixed(3) + ')';
+      ctx.beginPath(); ctx.ellipse(9, 0, 6, 2.4, 0, 0, TAU); ctx.fill();
+    }
+    ctx.restore();
+    const gg = ctx.createRadialGradient(f.x, f.y + dy, 0, f.x, f.y + dy, 16);
+    gg.addColorStop(0, 'rgba(166,239,94,0.5)');
+    gg.addColorStop(1, 'rgba(166,239,94,0)');
+    ctx.fillStyle = gg;
+    ctx.beginPath(); ctx.arc(f.x, f.y + dy, 16, 0, TAU); ctx.fill();
+    ctx.fillStyle = 'rgba(230,255,196,' + a.toFixed(3) + ')';
+    ctx.beginPath(); ctx.arc(f.x, f.y + dy, 3.2, 0, TAU); ctx.fill();
+
+    /* 剩余秒数 + 当前层数 */
+    const stackN = (P.op && P.op.adrStack) || 0;
+    ctx.textAlign = 'center';
+    ctx.font = '800 10px ui-monospace, monospace';
+    ctx.fillStyle = 'rgba(216,255,168,' + (0.8 * a).toFixed(3) + ')';
+    ctx.fillText(Math.ceil(left) + 's' + (stackN ? ' · 强度 ×' + stackN : ''), f.x, f.y - 22);
+    ctx.textAlign = 'left';
+  }
+}
+
+function drawSwarms() {
+  const SW = SKILL.swarm;
+  for (const s of G.swarms) {
+    if (!fogVisibleAt(s.x, s.y)) continue;
+    const fade = clamp(Math.min(s.t / 0.3, (s.life - s.t) / 1.0), 0, 1);
+    for (let i = 0; i < SW.count; i++) {
+      const a = s.seed + i * TAU / SW.count + G.time * 2.4;
+      const rr = 12 + (i % 2) * 5;
+      const px = s.x + Math.cos(a) * rr;
+      const py = s.y + Math.sin(a) * rr * 0.7;
+      const g = ctx.createRadialGradient(px, py, 0, px, py, 8);
+      g.addColorStop(0, 'rgba(232,255,200,' + (0.85 * fade).toFixed(3) + ')');
+      g.addColorStop(0.35, 'rgba(166,239,94,' + (0.5 * fade).toFixed(3) + ')');
+      g.addColorStop(1, 'rgba(166,239,94,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(px, py, 8, 0, TAU); ctx.fill();
+      ctx.fillStyle = 'rgba(240,255,220,' + (0.9 * fade).toFixed(3) + ')';
+      ctx.beginPath(); ctx.arc(px, py, 1.6, 0, TAU); ctx.fill();
+    }
+  }
+
+  /* 缠在敌人身上：五颗小机绕着转，头顶画拔除进度 */
+  for (const e of G.enemies) {
+    if (!e.alive || !(e.swarmT > 0)) continue;
+    if (!fogVisibleAt(e.x, e.y)) continue;
+    const total = e.capBoss ? SW.bossAttach : SW.attach;
+    const k = 1 - clamp(e.swarmT / total, 0, 1);
+    for (let i = 0; i < 5; i++) {
+      const a = G.time * 5.2 + i * TAU / 5;
+      const rr = e.r + 8 + Math.sin(G.time * 7 + i) * 3;
+      const px = e.x + Math.cos(a) * rr;
+      const py = e.y + Math.sin(a) * rr * 0.85;
+      ctx.fillStyle = 'rgba(200,255,150,0.85)';
+      ctx.beginPath(); ctx.arc(px, py, 2.2, 0, TAU); ctx.fill();
+    }
+    ctx.strokeStyle = 'rgba(200,255,150,0.85)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y - e.r - 34, 7, -Math.PI / 2, -Math.PI / 2 + TAU * k);
+    ctx.stroke();
+  }
+}
+
+/* ── 蛊的毒雾致盲：整块屏幕压成黄绿，只留身边一点轮廓 ── */
+function drawGasBlind() {
+  const k = clamp(G.gasBlind || 0, 0, 1);
+  if (k <= 0.01 || !P.alive) return;
+  const px = (P.x - G.cam.x) * ZOOM + G.shakeX;
+  const py = (P.y - G.cam.y) * ZOOM + G.shakeY;
+  ctx.save();
+  const g = ctx.createRadialGradient(px, py, 34, px, py, Math.max(VW, VH) * 0.72);
+  g.addColorStop(0, 'rgba(140,180,50,' + (0.32 * k).toFixed(3) + ')');
+  g.addColorStop(0.5, 'rgba(112,152,38,' + (0.72 * k).toFixed(3) + ')');
+  g.addColorStop(1, 'rgba(66,96,20,' + (0.95 * k).toFixed(3) + ')');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, VW, VH);
   ctx.restore();
 }
 
@@ -16638,6 +17277,7 @@ function drawStatusTags(mono) {
   if (d.fissure > 0) tags.push(['骨裂 ×' + d.fissure, '#ff5c7a']);
   if (d.weak > 0) tags.push(['虚弱', '#b46bff']);
   if (P.painT > 0) tags.push(['止痛 ' + Math.ceil(P.painT) + 's', '#82ffcd']);
+  if (adrOn()) tags.push(['肾上腺素' + (adrStackN() ? ' ×' + adrStackN() : ''), '#a6ef5e']);
   if (!tags.length) return;
 
   ctx.save();
@@ -17492,6 +18132,10 @@ function update(dt) {
   updateFlashes(dt);
   updateBlades(dt);
   updateFootprints(dt);
+  updateGasBombs(dt);
+  updateMists(dt);
+  updateAdrFields(dt);
+  updateSwarms(dt);
   updateArrows(dt);
   updateEZones(dt);
   updateScanPings(dt);
@@ -17986,6 +18630,10 @@ function render() {
   drawFlashes();
   drawBlades();
   drawBladeLock();       // 锁定框画在人和技能特效上面
+  drawGasBombs();
+  drawMists();
+  drawAdrFields();
+  drawSwarms();
   drawArrows();
   drawDrones();
   drawLoiters();
@@ -18007,6 +18655,7 @@ function render() {
   drawLighting();
   drawGlAim();               // 红狼手炮：准星落点 + 爆炸范围（画在迷雾之上才看得见）
   drawSmokeBlind();          // 自己在烟里：先糊住世界，再画 HUD
+  drawGasBlind();            // 毒雾致盲：黄绿一片，比烟更闷
   drawFlashBlind();          // 闪光弹炸白（比烟更狠，直接盖满屏）
   if (G.scene === 'playing' || G.scene === 'paused') {
     drawOffscreenMarkers();
