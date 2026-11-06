@@ -1528,6 +1528,26 @@ const PACK_KEY_MIGRATE = { pack_assault: 'pack_sling', pack_large: 'pack_sport',
   pack_exp: 'pack_bigmtn', pack_alpine: 'pack_3h', pack_mil: 'pack_ga', pack_air: 'pack_d2',
   pack_delta: 'pack_gt1', pack_logi: 'pack_gt5', pack_chixiao: 'pack_heavymtn', pack_director: 'pack_gto' };
 
+/* ── 物品占格表（字面量）──
+   必须定义在 loadSave() 执行之前：读档清洗 / 老档重排会调 cellSize()，
+   那时 WEAPONS / MEDKITS 这些运行期数据表还没初始化。
+   没登记的 id 按类型兜底：枪 4 / 手术·修理·近战 2 / 护甲 6 / 其余 1。 */
+const CELLS = {
+  /* 枪：手枪 2（1x2），冲锋枪·步枪·精确射手 4（2x2），霰弹枪·狙击枪 6（3x2） */
+  g17: 2, '93r': 2, g18: 2,
+  bizon: 4,
+  akm: 4, m4a1: 4, qbz95: 4, ak12: 4, qbz192: 4, qbz191: 4, sr9: 4,
+  m870: 6, r93: 6, awm: 6,
+  /* 医疗包：注射器 1，软包 2，医疗箱 4 */
+  inject_s: 1, inject_m: 1, kit_vehicle: 2, kit_field: 2, box_outdoor: 4, box_battle: 4,
+  /* 止血 / 止痛：一律 1 格 */
+  bandage: 1, tourniquet: 1, pain_release: 1, pain_antibio: 1, pain_dve: 1,
+  /* 手术包：简易 / 战术快拆 2，DEK 4 */
+  surg_simple: 2, surg_tactical: 2, surg_dek: 4,
+  /* 甲修包：蓝 / 紫 2，金 / 红 4 */
+  repair_b: 2, repair_p: 2, repair_g: 4, repair_r: 4,
+};
+
 
 /* 基准枪：只在「查不到 id」时给数值表兜底，不代表玩家拥有它。
    G17 现在是一把要花钱买的手枪，不再白送、也不再自动塞进手枪槽。 */
@@ -2793,8 +2813,9 @@ function exoOn() { return !!(P.op && P.op.x && P.op.x.on); }
    品质：白(基础) → 绿 → 蓝 → 紫 → 金 → 红，颜色沿用弹药档位色板。 */
 const GEAR = {
   /* ── 弹挂（隔舱制：blocks = 每个隔舱的连续格数，总和 = cap = 携带空间。
-        物品按类型占格：弹药 / 药品 / 收集品 / 配件 1 格，手术包 / 修理包 2 格，
-        近战 2 格，枪 4 格 —— 必须整个塞进同一个隔舱的连续空格里。
+        物品占格查 CELLS 表：弹药 / 止血 / 止痛 / 收集品 / 配件 1 格，手枪 2 格，
+        步枪 4 格，狙击 / 霰弹 6 格，手术包 2~4 格，甲修包 2~4 格，护甲 6 格
+        —— 必须整个塞进同一个隔舱的连续空格里。
         ads / spd = 瞄准速度 / 移动速度 修正（负数为惩罚，百分比）── */
   dar:      { name: 'DAR突击手胸挂',   kind: 'rig', cap: 24, price: 16000, q: '红', color: '#ff7a9c', ads: -5, spd: -1,
               blocks: [[2, 2], [2, 2], [4, 2], [4, 2], [3, 1], [3, 1], [6, 2]],
@@ -3183,10 +3204,16 @@ function ensureCarry() {
     const overflow = [];
     const zones = [['rig', SAVE.carry.rig, rigCap()], ['pocket', SAVE.carry.pocket, pocketCap()], ['pack', SAVE.carry.pack, packCap()]];
     for (const [z, arr, cap] of zones) {
-    const valid = arr.map(cellValid);
+    /* cont 占位格也要原样留下：cellValid 只认「真物品」，会把占位格判成 null，
+       多格物品（枪 / 药箱 / 手术包）的占位一丢，格子就被当成空的、能被别的东西压上去 */
+    const valid = arr.map(c => (c && c.cont) ? { cont: 1, head: c.head | 0 } : cellValid(c));
     arr.length = cap;
     for (let i = 0; i < cap; i++) arr[i] = valid[i] || null;
-    sanitizeSpans(arr);
+    const blocks = zoneBlocks(z);
+    sanitizeSpans(arr, blocks);
+    /* 占格规则改过（枪 4→2/6、药箱 1→4、DEK 2→4…）：老档里对不上的矩形整舱重排，摆不下的回仓 */
+    const ov = reflowZone(arr, blocks);
+    if (ov) for (const c of ov) overflow.push(c);
     for (let i = cap; i < valid.length; i++) if (valid[i] && !valid[i].cont) overflow.push(valid[i]);
     }
     /* 老档默认口袋是四个独立单格舱：双格大件（手术包 / 修理包 / 近战）塞不下，原物退回仓库 */
@@ -3196,7 +3223,7 @@ function ensureCarry() {
         const c = pk[i];
         if (c && !c.cont && cellSize(c) > 1) { overflow.push(c); clearSpanAt(pk, i, zoneBlocks('pocket')); }
       }
-      sanitizeSpans(pk);
+      sanitizeSpans(pk, zoneBlocks('pocket'));
     }
     mergeCarryOverflow(SAVE, overflow);
     if (overflow.length) saveGame();
@@ -3235,12 +3262,15 @@ function ensureCarry() {
 function trimCarryToCap() {
   if (!SAVE.carry) return;
   const c = SAVE.carry;
-  const zones = [[c.rig, rigCap()], [c.pocket, pocketCap()], [c.pack, packCap()]];
-  for (const [arr, cap] of zones) {
+  const zones = [['rig', c.rig, rigCap()], ['pocket', c.pocket, pocketCap()], ['pack', c.pack, packCap()]];
+  for (const [z, arr, cap] of zones) {
     const overflow = [];
     while (arr.length < cap) arr.push(null);
     while (arr.length > cap) { const x = arr.pop(); if (x && !x.cont) overflow.push(x); }
-    sanitizeSpans(arr);
+    const blocks = zoneBlocks(z);
+    sanitizeSpans(arr, blocks);
+    const ov = reflowZone(arr, blocks);        // 换装后隔舱布局变了：装不下的重排回仓
+    if (ov) for (const x of ov) overflow.push(x);
     mergeCarryOverflow(SAVE, overflow);
   }
 }
@@ -5037,14 +5067,17 @@ function usableCellList() {
   return out;
 }
 /* ── 物品占格（隔舱制）：不同物品占不同格数，且必须整个塞进同一个隔舱的连续空格。
-   占格数：弹药 / 药品 / 止血 / 收集品 / 配件 = 1，手术包 / 修理包 / 近战 = 2，枪 = 4。
+   具体占几格查 CELLS 表（精确到每一件）：手枪 2 / 步枪 4 / 狙击·霰弹 6，
+   注射器 1 · 软包 2 · 医疗箱 4，手术包 2~4，甲修包 2~4，护甲 6，弹药 / 收集品 / 配件 1。
    容器的隔舱 = GEAR[key].blocks（弹挂）；没写 blocks 的（背包 / 口袋）= 一个整舱。
    多格物品只落在首个格子（head），后续格子放 { cont:1, head } 占位标记，
    所有「读物品」的循环都按 c.t 匹配类型，cont 标记天然被跳过。 ── */
 function cellSize(c) {
   if (!c || c.cont) return 0;
+  if (c.id && CELLS[c.id] > 0) return CELLS[c.id];
   if (c.t === 'gun') return 4;
   if (c.t === 'melee' || c.t === 'surg' || c.t === 'repair') return 2;
+  if (c.t === 'armor') return 6;                 // 护甲进背包：3x2
   return 1;
 }
 /* ── 隔舱 2D 化：每个舱摆成一个正方格小网格（1x2 / 1x3 竖条、2x2、2x3 …），
@@ -5060,13 +5093,23 @@ function blkCols(n) {
 function blkSizesText(blocks) { return blocks.map(b => Array.isArray(b) ? b[0] : b).join('+'); }
 /* 隔舱定义解析：数字 = 自动列数（blkCols），[格数, 列数] = 指定列数（如 [3,1] = 竖 1x3 弹匣条） */
 function blkSpec(b) { return Array.isArray(b) ? [b[0], b[1], b[2] | 0] : [b, blkCols(b), 0]; }
-/* sz 格物品在 C 列舱里的 w×h 形状（与铺设、渲染一一对应） */
+/* sz 格物品在 C 列舱里的 w×h 形状（与铺设、渲染一一对应）。
+   只用「宽×高刚好等于 sz」的矩形，绝不出现 L 形缺口：把 sz 拆成因数对，
+   取最接近正方形的那一对（同样方正时取更宽的，枪横着躺）。 */
 function itemShape(sz, C) {
   if (C <= 1) return [1, Math.max(1, sz)];   // 单列舱（口袋 / 1 格）：竖放
   if (sz <= 1) return [1, 1];
-  if (sz === 2) return [2, 1];               // 多列舱：横放 Domino
-  if (sz === 4) return [2, 2];               // 枪：2x2
-  const w = Math.min(sz, C);
+  let best = null;
+  for (let w = 1; w <= Math.min(sz, C); w++) {
+    if (sz % w) continue;                    // 只认能整除的宽度
+    const h = sz / w;
+    const ratio = Math.max(w, h) / Math.min(w, h);
+    if (!best || ratio < best.ratio - 1e-9 || (Math.abs(ratio - best.ratio) < 1e-9 && w > best.w)) {
+      best = { w, h, ratio };
+    }
+  }
+  if (best) return [best.w, best.h];
+  const w = Math.min(sz, C);                 // 质数等怪尺寸：退化成铺满的行优先矩形
   return [w, Math.ceil(sz / w)];
 }
 /* 某容器（'rig' | 'pocket' | 'pack'）的隔舱 → [[start, end, cols], ...] */
@@ -5147,15 +5190,57 @@ function clearSpanAt(arr, i, blocks) {
     if (j >= 0 && j < arr.length) arr[j] = null;
   }
 }
-/* 孤儿占位清理（容量截断后 head 被挤掉、cont 还留着之类） */
-function sanitizeSpans(arr) {
+/* 孤儿占位清理：head 没了 / 指向的不是 head / 落在 head 矩形之外 —— 一律清掉。
+   传 blocks 时按矩形（2x2 的第二行下标差 = 列数，不能再用「下标差 < 格数」判断）；
+   不传（地上的箱子那种一维格子）退回线性判断。 */
+function sanitizeSpans(arr, blocks) {
   for (let i = 0; i < arr.length; i++) {
     const c = arr[i];
-    if (c && c.cont) {
-      const h = arr[c.head];
-      if (!h || h.cont || cellSize(h) <= i - c.head) arr[i] = null;
-    }
+    if (!c || !c.cont) continue;
+    const h = c.head;
+    const head = arr[h];
+    if (!head || head.cont) { arr[i] = null; continue; }
+    const sz = cellSize(head);
+    if (sz <= 1) { arr[i] = null; continue; }
+    const b = blocks ? blkAt(blocks, h) : null;
+    const idxs = b ? spanIdxs(h, sz, b[0], b[1], b[2]) : null;
+    const ok = idxs ? idxs.indexOf(i) > 0 : (i - h > 0 && i - h < sz);
+    if (!ok) arr[i] = null;
   }
+}
+/* head 的矩形是否完整：每个占位格都得是「指向自己的 cont」（混进别人的东西 = 尺寸变了 / 老档错位） */
+function spanOk(arr, i, blocks) {
+  const c = arr[i];
+  if (!c || c.cont) return true;
+  const sz = cellSize(c);
+  if (sz <= 1) return true;
+  const b = blkAt(blocks, i);
+  if (!b) return false;
+  const idxs = spanIdxs(i, sz, b[0], b[1], b[2]);
+  if (idxs.length < sz) return false;
+  for (const j of idxs) {
+    if (j === i) continue;
+    const d = arr[j];
+    if (!d || !d.cont || d.head !== i) return false;
+  }
+  return true;
+}
+/* 占格规则改动后的老档重排：只要有一件的矩形对不上，就把整舱物品取出、按新尺寸重新摆；
+   摆不下的原物回仓（返回溢出清单，null = 不用重排）。 */
+function reflowZone(arr, blocks) {
+  let bad = false;
+  for (let i = 0; i < arr.length && !bad; i++) if (!spanOk(arr, i, blocks)) bad = true;
+  if (!bad) return null;
+  const items = [];
+  for (let i = 0; i < arr.length; i++) { const c = arr[i]; if (c && !c.cont) items.push(c); }
+  arr.fill(null);
+  const overflow = [];
+  for (const c of items) {
+    const at = findFitRun(arr, blocks, cellSize(c));
+    if (at < 0) overflow.push(c); else placeAtRun(arr, at, c, blocks);
+  }
+  sanitizeSpans(arr, blocks);
+  return overflow;
 }
 const ZONE_NAMES = ['rig', 'pocket', 'pack'];
 /* 找一个能放下的位置：先背包（storage），再弹挂、口袋（快捷）。
@@ -19489,7 +19574,7 @@ function autoRestock() {
   const zones = [C.rig, C.pocket, C.pack];
   for (const it of fillOrder) {
     for (let k = 0; k < (it.n == null ? 1 : it.n); k++) {
-      const probe = { t: it.kind };                 // 只为算占格数
+      const probe = { t: it.kind, id: it.id };       // 只为算占格数（必须带 id：药箱 4 格 / DEK 手术包 4 格）
       const isz = cellSize(probe);
       let placed = false;
       for (let zi = 0; zi < zones.length && !placed; zi++) {
@@ -20467,7 +20552,9 @@ function endRaid(success) {
       pocket: P.pocket.map(stripGranted),
       pack: P.pack.map(stripGranted),
     };
-    sanitizeSpans(SAVE.carry.rig); sanitizeSpans(SAVE.carry.pocket); sanitizeSpans(SAVE.carry.pack);
+    sanitizeSpans(SAVE.carry.rig, zoneBlocks('rig'));
+    sanitizeSpans(SAVE.carry.pocket, zoneBlocks('pocket'));
+    sanitizeSpans(SAVE.carry.pack, zoneBlocks('pack'));
     SAVE.carePick = normCareKey(P.carePick);
 
     // 搜到的配件入库（配件是格子物品，从随身格子里读），之后才能在改装台上装
