@@ -1515,11 +1515,17 @@ const SAVE_KEY = 'neonpurge_extract_v1';
    新增弹挂 / 背包时同步在这里加 key。 */
 const GEAR_KEYS = ['dar', 'heijiang', 'jufeng', 'gir', 'drc', 'raider', 'xiqiang', 'g01', 'dsa', 'hd3',
   'jyd', 'ty', 'd01', 'hk3', 'nylon', 'gzd', 'qxs', 'scout', 'bxb',
-  'pack_assault', 'pack_large', 'pack_hike', 'pack_exp', 'pack_alpine', 'pack_mil', 'pack_air', 'pack_delta',
-  'pack_logi', 'pack_chixiao', 'pack_director'];
+  'pack_sling', 'pack_sport', 'pack_travel', 'pack_canvas', 'pack_outdoor', 'pack_dgsport',
+  'pack_bolt', 'pack_raidpk', 'pack_camp', 'pack_bigmtn', 'pack_3h', 'pack_ga', 'pack_dash',
+  'pack_jungle', 'pack_d2', 'pack_march', 'pack_map', 'pack_gt1', 'pack_d3', 'pack_hls',
+  'pack_als', 'pack_surv', 'pack_gt5', 'pack_d7', 'pack_heavymtn', 'pack_gto'];
 /* 老弹挂 key → 新弹挂 key（按容量就近映射；读档时把所有权 / 穿着状态搬过去） */
 const RIG_KEY_MIGRATE = { rig_basic: 'd01', rig_ext: 'dsa', rig_light: 'g01', rig_tactic: 'raider',
   rig_elite: 'drc', rig_storm: 'gir', rig_havk: 'dar' };
+/* 旧背包 key → 新背包 key（按容量就近映射，读档时搬所有权 / 穿着状态） */
+const PACK_KEY_MIGRATE = { pack_assault: 'pack_sling', pack_large: 'pack_sport', pack_hike: 'pack_outdoor',
+  pack_exp: 'pack_bigmtn', pack_alpine: 'pack_3h', pack_mil: 'pack_ga', pack_air: 'pack_d2',
+  pack_delta: 'pack_gt1', pack_logi: 'pack_gt5', pack_chixiao: 'pack_heavymtn', pack_director: 'pack_gto' };
 
 
 /* 基准枪：只在「查不到 id」时给数值表兜底，不代表玩家拥有它。
@@ -2846,29 +2852,85 @@ const GEAR = {
   bxb:      { name: '便携胸包',         kind: 'rig', cap: 6,  price: 500,   q: '白', color: '#dfe9f2',
               blocks: [[1, 1], [1, 1], [1, 1], [1, 1], [1, 1], [1, 1]],
               desc: '六格胸包。街头货色改的战场款，六个独立小袋，拉链头换成了伞绳。' },
-  /* ── 背包（白 = 基础款；本轮不改隔舱 —— 不写 blocks 就是一个整舱，按物品占格算）── */
-  pack_assault:{ name: '突击背包', kind: 'pack', cap: 4,  price: 600,  q: '白', color: '#dfe9f2',
-                 desc: '四格突击包。搜刮的药和器械先塞背包，Tab 随时倒进弹挂。' },
-  pack_large:  { name: '大型背包', kind: 'pack', cap: 8,  price: 1500, q: '白', color: '#dfe9f2',
-                 desc: '八格大包。搬家式的搜刮选手用它，一趟顶两趟。' },
-  pack_hike:   { name: '徒步背包', kind: 'pack', cap: 12, price: 1800, q: '绿', color: '#63d68a',
-                 desc: '十二格徒步包。户外牌子，没想到会用在战场上。' },
-  pack_exp:    { name: '扩容背包', kind: 'pack', cap: 16, price: 2600, q: '绿', color: '#63d68a',
-                 desc: '十六格扩容包。主仓外挂了三个附仓，能塞的都塞。' },
-  pack_alpine: { name: '登山背包', kind: 'pack', cap: 18, price: 3800, q: '蓝', color: '#4fa8ff',
-                 desc: '十八格登山包。骨架承重，装满了也不勒肩膀。' },
-  pack_mil:    { name: '军用背包', kind: 'pack', cap: 20, price: 5000, q: '蓝', color: '#4fa8ff',
-                 desc: '二十格军用背囊。正规军标，防水耐磨。' },
-  pack_air:    { name: '空降背包', kind: 'pack', cap: 24, price: 7000, q: '紫', color: '#b782ff',
-                 desc: '二十四格空降包。从天上掉下来的那种货。' },
-  pack_delta:  { name: '特勤背包', kind: 'pack', cap: 25, price: 8400, q: '紫', color: '#b782ff',
-                 desc: '二十五格特勤包。特勤干员的搬家神器。' },
-  pack_logi:   { name: '哈夫克后勤背包', kind: 'pack', cap: 30, price: 12000, q: '金', color: '#ffcc4d',
-                 desc: '三十格哈夫克后勤背包。军需官看着它比看着自己孩子还亲。' },
-  pack_chixiao:{ name: '赤霄运输背包', kind: 'pack', cap: 40, price: 19000, q: '红', color: '#ff7a9c',
-                 desc: '四十格重载运输包。从阿萨拉重装单位上拆下来的，几乎没人背得空。' },
-  pack_director:{ name: '总监特供背包', kind: 'pack', cap: 50, price: 28000, q: '红', color: '#ff7a9c',
-                 desc: '五十格特供背包。传说安全总监的私人物品，装下一整个基地的物资。' },
+  /* ── 背包（26 件，按三角洲实物布局；[格数,列数] 指定每舱横竖）── */
+  pack_sling:  { name: '斜挎包',           kind: 'pack', cap: 6,  price: 600,   q: '白', color: '#dfe9f2',
+                 blocks: [[6, 2]],
+                 desc: '六格斜挎包。两列窄仓贴身一挂，装点绷带弹药刚够跑一趟短的。' },
+  pack_sport:  { name: '运动背包',         kind: 'pack', cap: 8,  price: 1000,  q: '白', color: '#dfe9f2',
+                 blocks: [[8, 2]],
+                 desc: '八格运动背包。健身房同款，拉绳束口，搜东西得把整个包翻开。' },
+  pack_travel: { name: '旅行背包',         kind: 'pack', cap: 10, price: 1300,  q: '白', color: '#dfe9f2',
+                 blocks: [[10, 2]],
+                 desc: '十格旅行背包。竖长的主仓一次吞两条竖着的物资，出门十分能装。' },
+  pack_canvas: { name: '帆布背囊',         kind: 'pack', cap: 10, price: 1300,  q: '白', color: '#dfe9f2',
+                 blocks: [[10, 5]],
+                 desc: '十格帆布背囊。又宽又扁的老式背囊，横着铺开塞扁平物件正好。' },
+  pack_outdoor:{ name: '轻型户外背包',     kind: 'pack', cap: 12, price: 1900,  q: '绿', color: '#63d68a',
+                 blocks: [[12, 3]],
+                 desc: '十二格轻型户外包。三列主仓透气网背，徒步爱好者的入门选择。' },
+  pack_dgsport:{ name: 'DG运动背包',       kind: 'pack', cap: 12, price: 1900,  q: '绿', color: '#63d68a',
+                 blocks: [[12, 4]],
+                 desc: '十二格运动背包。四列宽仓，装球鞋的包现在装战术物资。' },
+  pack_bolt:   { name: '战术快拆背包',     kind: 'pack', cap: 15, price: 2400,  q: '绿', color: '#63d68a',
+                 blocks: [[15, 3]],
+                 desc: '十五格快拆背包。快拆扣具一扯就脱，落地交火前先扔包再拔枪。' },
+  pack_raidpk: { name: '突袭战术背包',     kind: 'pack', cap: 15, price: 2400,  q: '绿', color: '#63d68a',
+                 blocks: [[15, 3]],
+                 desc: '十五格突袭背包。突击单位标配，三列窄仓深，长条物件好归位。' },
+  pack_camp:   { name: '露营背包',         kind: 'pack', cap: 15, price: 2400,  q: '绿', color: '#63d68a',
+                 blocks: [[15, 5]],
+                 desc: '十五格露营背包。宽扁五列大仓，露营装备和战利品都能平铺。' },
+  pack_bigmtn: { name: '大型登山包',       kind: 'pack', cap: 16, price: 3000,  q: '绿', color: '#63d68a',
+                 blocks: [[2, 2], [2, 2], [12, 4]],
+                 desc: '十六格大型登山包。顶袋两个 2x2 小仓，下方 4x3 主仓压着重心。' },
+  pack_3h:     { name: '3H战术背包',       kind: 'pack', cap: 18, price: 3600,  q: '蓝', color: '#4fa8ff',
+                 blocks: [[18, 3]],
+                 desc: '十八格 3H 战术包。三列深仓模块化内衬，军规面料防水耐磨。' },
+  pack_ga:     { name: 'GA野战背包',       kind: 'pack', cap: 20, price: 4500,  q: '蓝', color: '#4fa8ff',
+                 blocks: [[20, 5]],
+                 desc: '二十格 GA 野战背包。五列宽仓野战标准款，能横着吞整支卡宾枪。' },
+  pack_dash:   { name: 'DASH战术背包',     kind: 'pack', cap: 20, price: 4500,  q: '蓝', color: '#4fa8ff',
+                 blocks: [[4, 2], [4, 2], [12, 4]],
+                 desc: '二十格 DASH 战术包。顶仓两个 2x2 快取袋，主仓 4x3 装大头。' },
+  pack_jungle: { name: '雨林猎手背包',     kind: 'pack', cap: 21, price: 5000,  q: '蓝', color: '#4fa8ff',
+                 blocks: [[21, 3]],
+                 desc: '二十一格雨林猎手包。三列超深竖仓，雨林渗透七天不掉链子。' },
+  pack_d2:     { name: 'D2战术登山包',     kind: 'pack', cap: 24, price: 6200,  q: '紫', color: '#b782ff',
+                 blocks: [[24, 4]],
+                 desc: '二十四格 D2 登山包。四列大主仓带铝合金骨架，重装也压得住。' },
+  pack_march:  { name: '野战徒步背包',     kind: 'pack', cap: 24, price: 6200,  q: '紫', color: '#b782ff',
+                 blocks: [[20, 4], [2, 2], [2, 2]],
+                 desc: '二十四格野战徒步包。4x5 主仓加两个 2x1 侧袋，长途行军好搭档。' },
+  pack_map:    { name: 'MAP侦察背包',      kind: 'pack', cap: 24, price: 6200,  q: '紫', color: '#b782ff',
+                 blocks: [[16, 4], [4, 2], [4, 2]],
+                 desc: '二十四格 MAP 侦察包。4x4 地图主仓加两个 2x2 附仓，侦察特供。' },
+  pack_gt1:    { name: 'GT1户外登山包',    kind: 'pack', cap: 25, price: 6800,  q: '紫', color: '#b782ff',
+                 blocks: [[25, 5]],
+                 desc: '二十五格 GT1 登山包。五列方正大仓，老练登山客的万能容量。' },
+  pack_d3:     { name: 'D3战术登山包',     kind: 'pack', cap: 28, price: 8000,  q: '紫', color: '#b782ff',
+                 blocks: [[28, 4]],
+                 desc: '二十八格 D3 登山包。四列七行深仓，垂直补给单位的重载选择。' },
+  pack_hls:    { name: 'HLS-2重型背包',    kind: 'pack', cap: 28, price: 8000,  q: '紫', color: '#b782ff',
+                 blocks: [[3, 1], [6, 2], [3, 1], [16, 4]],
+                 desc: '二十八格 HLS-2 重型包。顶袋 1x3 / 2x3 / 1x3 错落排布，下接 4x4 主仓。' },
+  pack_als:    { name: 'ALS背负系统',      kind: 'pack', cap: 28, price: 8000,  q: '紫', color: '#b782ff',
+                 blocks: [[20, 4], [2, 2], [2, 2], [2, 2], [2, 2]],
+                 desc: '二十八格 ALS 背负系统。模块化装载理念：4x5 主仓外挂四个 2x1 附包。' },
+  pack_surv:   { name: '生存战术背包',     kind: 'pack', cap: 28, price: 8000,  q: '紫', color: '#b782ff',
+                 blocks: [[6, 2], [6, 2], [4, 2], [4, 2], [4, 2], [4, 2]],
+                 desc: '二十八格生存背包。六个 2 宽分舱把物资分类码放，末日生存派最爱。' },
+  pack_gt5:    { name: 'GT5野战背包',      kind: 'pack', cap: 30, price: 10500, q: '金', color: '#ffcc4d',
+                 blocks: [[30, 5]],
+                 desc: '三十格 GT5 野战背包。五列六行的整仓巨胃，一次出击的极限容量。' },
+  pack_d7:     { name: 'D7战术背包',       kind: 'pack', cap: 35, price: 14000, q: '金', color: '#ffcc4d',
+                 blocks: [[35, 5]],
+                 desc: '三十五格 D7 战术背包。五列七行旗舰装载，背它的人从不空手而归。' },
+  pack_heavymtn:{ name: '重型登山包',      kind: 'pack', cap: 40, price: 19000, q: '红', color: '#ff7a9c',
+                 blocks: [[2, 1], [6, 3], [2, 1], [30, 5]],
+                 desc: '四十格重型登山包。顶袋 1x2 / 3x2 / 1x2 一排，下方 5x6 主仓吞天吞地。' },
+  pack_gto:    { name: 'GTO重型战术包',    kind: 'pack', cap: 45, price: 24000, q: '红', color: '#ff7a9c',
+                 blocks: [[45, 5]],
+                 desc: '四十五格 GTO 重型战术包。五列九行的最终答案，装下一整次战役。' },
 };
 
 /* ── 随身容器 ──
@@ -2987,15 +3049,13 @@ function mergeCarryOverflow(S, overflow) {
   }
 }
 
-/* 携行装备所有权清洗：老档只有三个旧 key（当年弹挂默认就有 8 格 → 人人都补一件基础弹挂；
-   旧扩展弹挂 = 12 格；旧大背包（叠加 6+4+8=18）= 大背包 + 突击包都补上）。
-   新档 key 全量保留（多实例按件计数）。注意：loadSave 在 GEAR 表初始化之前执行，
+/* 携行装备所有权清洗：老档旧弹挂 key 经 RIG_KEY_MIGRATE 迁移、旧背包 key 经 PACK_KEY_MIGRATE 迁移
+   （件数并入目标 key）。新档 key 全量保留（多实例按件计数）。注意：loadSave 在 GEAR 表初始化之前执行，
    这里只许用字面量 key —— 新增装备时记得把 key 加进 GEAR_KEYS。 */
 function cleanGearOwned(raw) {
-  const out = { pack_assault: 0, pack_large: 0 };
+  const out = {};
   if (raw && typeof raw === 'object') {
     for (const k of GEAR_KEYS) {
-      if (k in out) continue;                          // 老背包两件走下面的旧档迁移
       const n = raw[k] | 0;
       if (n > 0) out[k] = Math.min(99, n);
     }
@@ -3004,8 +3064,11 @@ function cleanGearOwned(raw) {
       const n = raw[ok] | 0;
       if (n > 0) out[RIG_KEY_MIGRATE[ok]] = Math.min(99, (out[RIG_KEY_MIGRATE[ok]] | 0) + n);
     }
-    if (raw.pack_large) { out.pack_assault = 1; out.pack_large = 1; }
-    else if (raw.pack_assault) out.pack_assault = 1;
+    /* 旧背包 key → 新 key（件数并入，容量就近） */
+    for (const ok in PACK_KEY_MIGRATE) {
+      const n = raw[ok] | 0;
+      if (n > 0) out[PACK_KEY_MIGRATE[ok]] = Math.min(99, (out[PACK_KEY_MIGRATE[ok]] | 0) + n);
+    }
   }
   if (!(out.d01 > 0)) out.d01 = 1;                     // 新档 / 老档都保底一件入门弹挂
   return out;
@@ -3018,7 +3081,8 @@ function cleanWorn(raw, gear) {
   if (raw && typeof raw === 'object') {
     const rk = RIG_KEY_MIGRATE[raw.rig] || raw.rig;      // 老弹挂 key 搬到新 key
     if (rk && gear[rk]) out.rig = rk;
-    if (raw.pack && gear[raw.pack]) out.pack = raw.pack;
+    const pk = PACK_KEY_MIGRATE[raw.pack] || raw.pack;   // 旧背包 key 搬到新 key
+    if (pk && gear[pk]) out.pack = pk;
     return out;
   }
   /* 老档没有 worn：自动穿上拥有的最好的弹挂（按字面量顺序，从好到差），别让老玩家裸奔 */
@@ -3026,7 +3090,13 @@ function cleanWorn(raw, gear) {
     'jyd', 'ty', 'hk3', 'nylon', 'd01', 'gzd', 'qxs', 'scout', 'bxb']) {
     if (gear[k]) { out.rig = k; break; }
   }
-  out.pack = gear.pack_large ? 'pack_large' : (gear.pack_assault ? 'pack_assault' : null);
+  /* 背包同理：按容量从好到差挑一件拥有的穿上 */
+  for (const k of ['pack_gto', 'pack_heavymtn', 'pack_d7', 'pack_gt5', 'pack_d3', 'pack_hls', 'pack_als',
+    'pack_surv', 'pack_gt1', 'pack_d2', 'pack_march', 'pack_map', 'pack_jungle', 'pack_ga', 'pack_dash',
+    'pack_3h', 'pack_bigmtn', 'pack_camp', 'pack_bolt', 'pack_raidpk', 'pack_outdoor', 'pack_dgsport',
+    'pack_travel', 'pack_canvas', 'pack_sport', 'pack_sling']) {
+    if (gear[k]) { out.pack = k; break; }
+  }
   return out;
 }
 
