@@ -435,6 +435,8 @@
     border:1px dashed rgba(80,140,185,.35); border-radius:6px; padding:12px 8px 8px;
     background:rgba(16,28,40,.28); position:relative;
   }
+  /* 隔舱高度变化时强制换行：2x2 一排、竖 1x3 弹匣条另起一排（照胸挂实物图对齐） */
+  .blk-break { flex-basis:100%; height:0; }
   .pk-blk::before {
     content:attr(data-cap); position:absolute; top:-8px; left:10px;
     font-size:9px; font-weight:800; color:#4f7f9f; letter-spacing:.15em;
@@ -19265,7 +19267,15 @@ function renderLoadout() {
     if (cap <= 0) continue;
     const zone = gridId === 'loRig' ? 0 : (gridId === 'loPocket' ? 1 : 2);
     const blocks = zoneBlocks(ZONE_NAMES[zone]);
+    let lastBlkH = -1;
     for (const [s, e, C] of blocks) {
+      const bh = (e - s) / C;                        // 舱高（格）
+      if (lastBlkH >= 0 && bh !== lastBlkH) {        // 与上一排高度不同 → 另起一排（照胸挂实物图对齐）
+        const br = document.createElement('div');
+        br.className = 'blk-break';
+        grid.appendChild(br);
+      }
+      lastBlkH = bh;
       const blk = document.createElement('div');
       blk.className = 'pk-blk';
       blk.dataset.cap = '隔舱 ' + (e - s) + ' 格';
@@ -19990,7 +20000,15 @@ function renderPackPanel() {
     const grid = $(gridId);
     grid.innerHTML = '';
     const blocks = zoneBlocks(ZONE_NAMES[zone]);
+    let lastBlkH = -1;
     for (const [s, e, C] of blocks) {
+      const bh = (e - s) / C;                        // 舱高（格）
+      if (lastBlkH >= 0 && bh !== lastBlkH) {        // 与上一排高度不同 → 另起一排（照胸挂实物图对齐）
+        const br = document.createElement('div');
+        br.className = 'blk-break';
+        grid.appendChild(br);
+      }
+      lastBlkH = bh;
       const blk = document.createElement('div');
       blk.className = 'pk-blk';
       blk.dataset.cap = '隔舱 ' + (e - s) + ' 格';
