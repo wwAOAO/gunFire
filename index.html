@@ -963,13 +963,17 @@
     </header>
     <div class="lo-wrap">
       <section class="lo-main">
+        <div class="lo-ttl" id="lootGunsNote">武 器 / 护 甲 槽 · 拖枪装上 · 拖护甲穿上</div>
+        <div class="lo-grid" id="lootGuns"></div>
+        <div class="lo-ttl" id="lootGearNote">弹 挂 / 背 包 槽 · 拖上换穿（里面的东西跟着走）</div>
+        <div class="lo-grid" id="lootGear"></div>
         <div class="lo-ttl" id="lootPackNote">背 包</div>
         <div class="lo-grid" id="lootPack"></div>
         <div class="lo-ttl" id="lootRigNote">弹 挂 · 快捷可用</div>
         <div class="lo-grid" id="lootRig"></div>
         <div class="lo-ttl" id="lootPocketNote">口 袋 · 快捷可用</div>
         <div class="lo-grid" id="lootPocket"></div>
-        <div class="lo-foot"><span class="lo-hint">按住右边的物品拖到左边格子松手放入 · 松在别处 = 取消（东西还留在容器里）· 按 F 收下选中的那件 · 走动会立刻收面板（时间不暂停）</span></div>
+        <div class="lo-foot"><span class="lo-hint">按住右边的物品拖到左边格子松手放入 · 枪 / 甲 / 弹挂 / 背包拖到上面槽位直接穿上 · 松在别处 = 取消（东西还留在容器里）· 按 F 收下选中的那件 · 走动会立刻收面板（时间不暂停）</span></div>
       </section>
       <aside class="lo-panel lo-lootside">
         <div class="lo-ttl" id="lootBoxNote">容 器</div>
@@ -12039,6 +12043,7 @@ function lootItemCell(it) {
   if (it.kind === 'weapon') return { t: 'gun', id: it.weapon };
   if (it.kind === 'mod' && MODS[it.mod]) return { t: 'mod', id: it.mod };
   if (it.kind === 'bullet') return { t: 'ammo', cal: it.cal, lv: it.lv | 0 || 1, n: Math.max(1, it.n | 0) };
+  if (it.kind === 'gear' && GEAR[it.gear]) return { t: 'gear', key: it.gear, cells: [] };
   if (it.kind === 'surg' && it.surg) return { t: 'surg', id: it.surg, uses: it.uses };
   if (it.kind === 'repair' && it.repair) return { t: 'repair', id: it.repair, left: it.left };
   if (it.kind === 'med' && it.med && it.left !== undefined) return { t: 'med', id: it.med, left: it.left };
@@ -12107,11 +12112,48 @@ function lootBoxPick(it) {
   Sfx.tone(500, 0.05, 0.04, 'square');
   lootRender();
   return () => {                                   // 没放出去：回容器原样待着
-    if (it.taken) { it.taken = false; L.taken--; }
+    /* 条件回退：只有手上还拿着「这件本身」才算拖放失败（放置成功换了别的在手上时，
+       这件已经安顿好 —— 回退会把穿好的装备又送回箱子，还会把换下来的旧枪吞掉） */
+    if (PK_UI.held === cell) {
+      if (it.taken) { it.taken = false; L.taken--; }
+      PK_UI.held = null;
+      PK_UI.fromLoot = null;
+      lootRender();
+    }
+  };
+}
+
+/* 搜刮面板左栏的武器 / 护甲 / 弹挂 / 背包槽：箱里翻出的装备拖上来直接穿。
+   装备槽的换穿走 wearGearInRaid —— 缴获台账（gearLoot）跟着记，撤离按实例入库。 */
+function lootPlaceGear(kind) {
+  return () => {
+    if (!PK_UI.held) return;
+    if (PK_UI.held.t !== 'gear') { uiToast(kind === 'rig' ? '弹挂槽只能穿弹挂' : '背包槽只能穿背包', 'small warn'); return; }
+    const nk = PK_UI.held.key, ng = GEAR[nk];
+    if (!ng || ng.kind !== kind) { uiToast('这是' + (GEAR[nk] && GEAR[nk].kind === 'rig' ? '弹挂' : '背包') + '，拖到对应的槽', 'small warn'); return; }
+    if (SAVE.worn[kind] === nk && !PK_UI.fromLoot) {    // 自己的备用件：别在这儿消耗掉，回背包存着
+      uiToast('这件已经穿在身上 · 手上这份拖进背包存放', 'small warn');
+      return;
+    }
+    const incoming = PK_UI.held.cells || [];
+    if (!wearGearInRaid(nk, !!PK_UI.fromLoot, incoming)) { uiToast('这件装备穿不上', 'small warn'); return; }
     PK_UI.held = null;
     PK_UI.fromLoot = null;
-    lootRender();
   };
+}
+
+function renderLootEquipSlots() {
+  const guns = $('lootGuns');
+  if (!guns) return;
+  $('lootGunsNote').textContent = '武 器 / 护 甲 槽 · 拖枪装上 · 拖护甲穿上';
+  guns.innerHTML = '';
+  guns.appendChild(pkBuildArmorSlot(lootRender));
+  for (const sl of GUN_SLOTS) guns.appendChild(pkBuildGunSlot(sl, lootRender));
+  const gear = $('lootGear');
+  if (!gear) return;
+  $('lootGearNote').textContent = '弹 挂 / 背 包 槽 · 拖上换穿（里面的东西跟着走）';
+  gear.innerHTML = '';
+  for (const kind of ['rig', 'pack']) gear.appendChild(pkBuildGearSlot(kind, lootRender, lootPlaceGear(kind)));
 }
 
 function lootRender() {
@@ -12129,6 +12171,9 @@ function lootRender() {
       ? ('翻出 ' + (lay.list.length - lay.pend) + ' / ' + left + ' 件 · 已拿 ' + L.taken + (lay.pend ? ' · 还在翻…' : ''))
       : '已 全 部 收 下';
   }
+
+  /* 左栏：武器 / 护甲 / 弹挂 / 背包槽 —— 箱里翻出的装备拖上来直接穿 */
+  renderLootEquipSlots();
 
   /* 左栏：背包 / 弹挂 / 口袋 —— 拖到这里的格子就放进对应容器 */
   const zones = [
@@ -20097,6 +20142,20 @@ function pkPlaceInto(arr, i, zone) {
     }
   }
   Sfx.tone(620, 0.05, 0.04, 'square');
+  /* 缴获台账：箱里翻出的枪 / 弹挂 / 背包收进包里 = 这局缴获 +1（撤离按实例入库；
+     箱里的枪在 F 收下路径已记过账，这里只管拖拽路径） */
+  if (PK_UI.fromLoot) {
+    if (cell.t === 'gun' && WEAPONS[cell.id]) {
+      if (!P.owned[cell.id]) {
+        P.owned[cell.id] = true;
+        P.ammo[cell.id] = { mag: weaponStats(cell.id).mag, tier: ammoPickOf(calOfWeapon(cell.id)), cal: calOfWeapon(cell.id) };
+      }
+      P.gunLoot[cell.id] = (P.gunLoot[cell.id] | 0) + 1;
+    } else if (cell.t === 'gear' && GEAR[cell.key]) {
+      P.gearLoot[cell.key] = (P.gearLoot[cell.key] | 0) + 1;
+    }
+    PK_UI.fromLoot = null;
+  }
   recountLoot();
 }
 
@@ -20130,175 +20189,193 @@ function dropHeldToGround() {
   Sfx.tone(240, 0.09, 0.06, 'square');
 }
 
+/* ══ 槽位构建器：Tab 背包面板（renderPackPanel）和搜刮面板（renderLootEquipSlots）共用 ══
+   refresh = 面板自己的重绘函数（右键脱下后刷哪边）。 */
+
+function pkBuildArmorSlot(refresh) {              // 护甲槽：拖甲穿上，身上那件（耐久原样）换到手上
+  const el = document.createElement('div');
+  el.className = 'lo-cell pk-slot' + (P.armorLv > 0 ? '' : ' empty');
+  if (P.armorLv > 0) {
+    const A = ARMORS[P.armorId] || ARMORS[0];
+    el.innerHTML = '<span class="ic" style="color:' + armorLvColor(P.armorLv) + '">⛨</span>' +
+      '<span class="nm">' + A.short + '</span>' +
+      '<span class="sub">' + P.armorLv + ' 级 · ' + Math.round(P.armorHp) + '/' + Math.round(P.armorMax) + ' · 右键脱下</span>';
+  } else el.innerHTML = '<span class="sub" style="color:#7fb8d4">护 甲</span>';
+
+  const pickArmor = () => {                     // 拿起：脱下来（回到无护甲）
+    if (P.armorLv <= 0) return null;
+    const pc = currentArmorPiece();
+    stripArmorNaked();
+    PK_UI.held = { t: 'armor', id: pc.id, hp: pc.hp, max: pc.max };
+    Sfx.tone(500, 0.05, 0.04, 'square');
+    return () => {                              // 取消：身上还光着就穿回去
+      if (P.armorLv <= 0 && PK_UI.held && PK_UI.held.t === 'armor') {
+        wearArmorPiece(PK_UI.held);
+        PK_UI.held = null;
+      }
+    };
+  };
+  const placeArmor = () => {                    // 放置：穿上（身上那件换到手上）
+    if (!PK_UI.held) return;
+    if (PK_UI.held.t !== 'armor') { uiToast('只有护甲能穿进护甲槽', 'small warn'); return; }
+    const prev = currentArmorPiece();
+    if (!wearArmorPiece(PK_UI.held)) { uiToast('这件护甲有问题，穿不上', 'small warn'); return; }
+    PK_UI.held = prev ? { t: 'armor', id: prev.id, hp: prev.hp, max: prev.max } : null;
+    uiToast(ARMORS[P.armorId].name + ' 已穿上', 'small');
+    Sfx.tone(620, 0.05, 0.04, 'square');
+  };
+  el.__pkPlace = placeArmor;
+  el.oncontextmenu = e => { e.preventDefault(); e.stopPropagation(); pickArmor(); refresh(); };   // 右键 = 脱下到手上
+  pkPressable(el, pickArmor, placeArmor);
+  return el;
+}
+
+function pkBuildGearSlot(kind, refresh, placeGear) {   // 弹挂 / 背包槽：拖上换穿（里面的东西跟着走）
+  const key = SAVE.worn ? SAVE.worn[kind] : null;
+  const g = key ? GEAR[key] : null;
+  const arr = kind === 'rig' ? P.rig : P.pack;
+  const used = arr ? arr.filter(c => c && !c.cont).length : 0;
+  const el = document.createElement('div');
+  el.className = 'lo-cell pk-slot' + (g ? '' : ' empty');
+  el.innerHTML = g
+    ? '<span class="ic" style="color:' + (g.color || '#ffb08a') + '">' + (kind === 'rig' ? '\u25a4' : '\u25a9') + '</span>' +
+      '<span class="nm">' + g.name + '</span>' +
+      '<span class="sub">' + g.cap + ' 格 · 里面 ' + used + ' 件</span>'
+    : '<span class="sub" style="color:#7fb8d4">' + (kind === 'rig' ? '\u5f39 \u6302' : '\u80cd \u5305') + '</span>';
+
+  const pickGearSlot = () => {              // 脱下到手上（连内容）
+    if (!g) return null;
+    const cells = (arr || []).filter(c => c && !c.cont);
+    SAVE.worn[kind] = null;
+    if (arr) arr.length = 0;
+    PK_UI.held = { t: 'gear', key, cells };
+    recountLoot();
+    Sfx.tone(500, 0.05, 0.04, 'square');
+    return () => {                          // 取消：穿回去（东西还原）
+      if (SAVE.worn && !SAVE.worn[kind] && PK_UI.held && PK_UI.held.t === 'gear' && PK_UI.held.key === key) {
+        const gg = GEAR[key];
+        const a = kind === 'rig' ? P.rig : P.pack;
+        a.length = 0;
+        for (let i = 0; i < gg.cap; i++) a.push(PK_UI.held.cells[i] || null);
+        PK_UI.held = null;
+        recountLoot();
+      }
+    };
+  };
+  const defaultGearPlace = () => {          // 换上（旧的下到手上，新装备带来的东西入格，装不下掉脚边）
+    if (!PK_UI.held || PK_UI.held.t !== 'gear') {
+      uiToast(kind === 'rig' ? '弹挂槽只能穿弹挂（背包槽在右边）' : '背包槽只能穿背包（弹挂槽在左边）', 'small warn');
+      return;
+    }
+    const nk = PK_UI.held.key, ng = GEAR[nk];
+    if (!ng || ng.kind !== kind) { uiToast('这是' + (GEAR[nk] && GEAR[nk].kind === 'rig' ? '弹挂' : '背包') + '，拖到对应的槽', 'small warn'); return; }
+    const incoming = PK_UI.held.cells || [];
+    const prevKey = SAVE.worn[kind];
+    if (prevKey === nk) {                              // 同款已经在身上：手上这份是另一份实体，换穿会造出双指针幽灵
+      uiToast('这件已经穿在身上 · 手上这份拖进背包存放', 'small warn');
+      return;
+    }
+    const outgoing = (arr || []).filter(c => c && !c.cont);
+    PK_UI.held = prevKey && GEAR[prevKey] ? { t: 'gear', key: prevKey, cells: outgoing } : null;
+    SAVE.worn[kind] = nk;
+    arr.length = 0;
+    for (let i = 0; i < ng.cap; i++) arr.push(null);
+    for (const c of incoming) { if (!stowCell(c)) gearDropCell(c); }
+    recountLoot();
+    uiToast(ng.name + ' 已换上' + (prevKey && GEAR[prevKey] ? '（' + GEAR[prevKey].name + ' 在手上）' : ''), 'small');
+    Sfx.tone(620, 0.05, 0.04, 'square');
+  };
+  el.__pkPlace = placeGear || defaultGearPlace;
+  el.oncontextmenu = e => { e.preventDefault(); e.stopPropagation(); pickGearSlot(); refresh(); };  // 右键 = 脱下到手上
+  pkPressable(el, pickGearSlot, el.__pkPlace);
+  return el;
+}
+
+function pkBuildGunSlot(sl, refresh) {            // 武器槽：拖枪装上（旧的下到手上），拖配件上枪直接改装
+  const sd = SLOT_DEFS.find(d => d.id === sl);
+  const id = P.slots ? P.slots[sl] : null;
+  const el = document.createElement('div');
+  el.className = 'lo-cell pk-slot' + (id ? '' : ' empty');
+  el.innerHTML = id
+    ? '<span class="ic" style="color:#ffca7a">' + cellIcon({ t: 'gun', id }) + '</span>' +
+      '<span class="nm">' + WEAPONS[id].short + '</span>' +
+      '<span class="sub">' + caliberOf(id).short + ' · ' + weaponStats(id).mag + ' 发 · 配件 ' + gunModCount(id) + '/' + modSlotTotal(id) + '</span>'
+    : '<span class="sub">' + (sd ? sd.cn : sl) + '</span>';
+  const pickSlot = () => {                      // 拿起：从槽里取下
+    if (!P.slots || !P.slots[sl]) return null;
+    const gid = P.slots[sl];
+    P.slots[sl] = null;
+    PK_UI.held = { t: 'gun', id: gid };
+    Sfx.tone(500, 0.05, 0.04, 'square');
+    return () => {                              // 取消：还回槽里
+      if (!P.slots[sl]) { P.slots[sl] = PK_UI.held.id; PK_UI.held = null; }
+    };
+  };
+  const placeSlot = () => {                     // 放置：装枪 / 装配件
+    if (!PK_UI.held) return;
+    /* 拖配件到枪上：按配件自身的槽位装进去，换下来的回到手上 */
+    if (PK_UI.held.t === 'mod') {
+      const m = MODS[PK_UI.held.id];
+      if (!m) { uiToast('未知配件', 'small warn'); return; }
+      const wid = P.slots ? P.slots[sl] : null;
+      if (!wid) { uiToast('这个槽上没有枪', 'small warn'); return; }
+      if (!slotAllowed(wid, m.slot)) { uiToast(WEAPONS[wid].short + ' 装不了' + (MOD_SLOTS.find(s => s.id === m.slot) || {}).cn, 'small warn'); return; }
+      SAVE.mods[wid] = SAVE.mods[wid] || {};
+      const old = SAVE.mods[wid][m.slot];
+      SAVE.mods[wid][m.slot] = PK_UI.held.id;   // 配件装上（直接写档案：撤离/死亡结算都认这份数据）
+      PK_UI.held = old ? { t: 'mod', id: old } : null;   // 换下来的配件回到手上
+      uiToast(WEAPONS[wid].short + ' · ' + m.name + ' 已装上', 'small');
+      Sfx.tone(760, 0.06, 0.05, 'square');
+      return;
+    }
+    if (PK_UI.held.t !== 'gun') {
+      uiToast('只有枪能装进武器槽（配件拖到装着的枪上改装）', 'small warn');
+      return;
+    }
+    /* 缴获的枪直接上槽：台账 +1（撤离按实例入库）+ 登记所有权（自带弹匣子弹） */
+    if (PK_UI.fromLoot) {
+      const wid = PK_UI.held.id;
+      if (WEAPONS[wid]) {
+        if (!P.owned[wid]) {
+          P.owned[wid] = true;
+          P.ammo[wid] = { mag: weaponStats(wid).mag, tier: ammoPickOf(calOfWeapon(wid)), cal: calOfWeapon(wid) };
+        }
+        P.gunLoot[wid] = (P.gunLoot[wid] | 0) + 1;
+      }
+      PK_UI.fromLoot = null;
+    }
+    const prev = P.slots[sl];
+    P.slots[sl] = PK_UI.held.id;
+    PK_UI.held = prev ? { t: 'gun', id: prev } : null;
+    Sfx.tone(620, 0.05, 0.04, 'square');
+  };
+  el.__pkPlace = placeSlot;                     // 拖拽落点用「目标格」自己的放置回调
+  el.oncontextmenu = e => {                     // 右键 = 打开这把枪的改装窗（拖上装 / 拖下卸）
+    e.preventDefault(); e.stopPropagation();
+    if (!id) return;
+    if (G.lootPanel) { uiToast('改装窗挂在背包面板上 · 关掉搜刮面板再改装', 'small warn'); return; }
+    openModWin(id);
+  };
+  pkPressable(el, pickSlot, placeSlot);
+  return el;
+}
+
 function renderPackPanel() {
   /* 武器槽：拖背包里的枪到这儿装上（原来的枪换到手上），拖下来收回背包；
      拖配件到枪上直接改装（换下来的配件回到手上）；护甲拖到护甲槽直接穿上 */
   const gunGrid = $('pkGuns');
   $('pkGunNote').textContent = '武 器 / 护 甲 槽 · 拖枪装上 · 拖护甲穿上 · 拖配件上枪 · 右键枪开改装窗';
   gunGrid.innerHTML = '';
-
-  /* 护甲槽：拖背包里的甲到这儿穿上，身上那件（耐久原样）换到手上 */
-  {
-    const el = document.createElement('div');
-    el.className = 'lo-cell pk-slot' + (P.armorLv > 0 ? '' : ' empty');
-    if (P.armorLv > 0) {
-      const A = ARMORS[P.armorId] || ARMORS[0];
-      el.innerHTML = '<span class="ic" style="color:' + armorLvColor(P.armorLv) + '">⛨</span>' +
-        '<span class="nm">' + A.short + '</span>' +
-        '<span class="sub">' + P.armorLv + ' 级 · ' + Math.round(P.armorHp) + '/' + Math.round(P.armorMax) + ' · 右键脱下</span>';
-    } else el.innerHTML = '<span class="sub" style="color:#7fb8d4">护 甲</span>';
-
-    const pickArmor = () => {                     // 拿起：脱下来（回到无护甲）
-      if (P.armorLv <= 0) return null;
-      const pc = currentArmorPiece();
-      stripArmorNaked();
-      PK_UI.held = { t: 'armor', id: pc.id, hp: pc.hp, max: pc.max };
-      Sfx.tone(500, 0.05, 0.04, 'square');
-      return () => {                              // 取消：身上还光着就穿回去
-        if (P.armorLv <= 0 && PK_UI.held && PK_UI.held.t === 'armor') {
-          wearArmorPiece(PK_UI.held);
-          PK_UI.held = null;
-        }
-      };
-    };
-    const placeArmor = () => {                    // 放置：穿上（身上那件换到手上）
-      if (!PK_UI.held) return;
-      if (PK_UI.held.t !== 'armor') { uiToast('只有护甲能穿进护甲槽', 'small warn'); return; }
-      const prev = currentArmorPiece();
-      if (!wearArmorPiece(PK_UI.held)) { uiToast('这件护甲有问题，穿不上', 'small warn'); return; }
-      PK_UI.held = prev ? { t: 'armor', id: prev.id, hp: prev.hp, max: prev.max } : null;
-      uiToast(ARMORS[P.armorId].name + ' 已穿上', 'small');
-      Sfx.tone(620, 0.05, 0.04, 'square');
-    };
-    el.__pkPlace = placeArmor;
-    el.oncontextmenu = e => { e.preventDefault(); e.stopPropagation(); pickArmor(); renderPackPanel(); };   // 右键 = 脱下到手上
-    pkPressable(el, pickArmor, placeArmor);
-    gunGrid.appendChild(el);
-  }
+  gunGrid.appendChild(pkBuildArmorSlot(renderPackPanel));
+  for (const sl of GUN_SLOTS) gunGrid.appendChild(pkBuildGunSlot(sl, renderPackPanel));
 
   /* 弹挂 / 背包槽：拖背包里的装备到这儿换上（旧的下到手上，里面的东西跟着走）；
      点住 / 右键脱下到手上 —— 连里面的东西一起，拖到丢弃区扔地上就是「连包带物一起丢」 */
   {
-    const gearNote = $('pkGearNote');
-    gearNote.textContent = '弹 挂 / 背 包 槽 · 拖上换穿 · 点住或右键脱下（里面的东西跟着走）';
+    $('pkGearNote').textContent = '弹 挂 / 背 包 槽 · 拖上换穿 · 点住或右键脱下（里面的东西跟着走）';
     const gearGrid = $('pkGear');
     gearGrid.innerHTML = '';
-    for (const kind of ['rig', 'pack']) {
-      const key = SAVE.worn ? SAVE.worn[kind] : null;
-      const g = key ? GEAR[key] : null;
-      const arr = kind === 'rig' ? P.rig : P.pack;
-      const used = arr ? arr.filter(c => c && !c.cont).length : 0;
-      const el = document.createElement('div');
-      el.className = 'lo-cell pk-slot' + (g ? '' : ' empty');
-      el.innerHTML = g
-        ? '<span class="ic" style="color:' + (g.color || '#ffb08a') + '">' + (kind === 'rig' ? '\u25a4' : '\u25a9') + '</span>' +
-          '<span class="nm">' + g.name + '</span>' +
-          '<span class="sub">' + g.cap + ' 格 · 里面 ' + used + ' 件</span>'
-        : '<span class="sub" style="color:#7fb8d4">' + (kind === 'rig' ? '\u5f39 \u6302' : '\u80cc \u5305') + '</span>';
-
-      const pickGearSlot = () => {              // 脱下到手上（连内容）
-        if (!g) return null;
-        const cells = (arr || []).filter(c => c && !c.cont);
-        SAVE.worn[kind] = null;
-        if (arr) arr.length = 0;
-        PK_UI.held = { t: 'gear', key, cells };
-        recountLoot();
-        Sfx.tone(500, 0.05, 0.04, 'square');
-        return () => {                          // 取消：穿回去（东西还原）
-          if (SAVE.worn && !SAVE.worn[kind] && PK_UI.held && PK_UI.held.t === 'gear' && PK_UI.held.key === key) {
-            const gg = GEAR[key];
-            const a = kind === 'rig' ? P.rig : P.pack;
-            a.length = 0;
-            for (let i = 0; i < gg.cap; i++) a.push(PK_UI.held.cells[i] || null);
-            PK_UI.held = null;
-            recountLoot();
-          }
-        };
-      };
-      const placeGearSlot = () => {             // 换上（旧的下到手上，新装备带来的东西入格，装不下掉脚边）
-        if (!PK_UI.held || PK_UI.held.t !== 'gear') {
-          uiToast(kind === 'rig' ? '弹挂槽只能穿弹挂（背包槽在右边）' : '背包槽只能穿背包（弹挂槽在左边）', 'small warn');
-          return;
-        }
-        const nk = PK_UI.held.key, ng = GEAR[nk];
-        if (!ng || ng.kind !== kind) { uiToast('这是' + (GEAR[nk] && GEAR[nk].kind === 'rig' ? '弹挂' : '背包') + '，拖到对应的槽', 'small warn'); return; }
-        const incoming = PK_UI.held.cells || [];
-        const prevKey = SAVE.worn[kind];
-        if (prevKey === nk) {                              // 同款已经在身上：手上这份是另一份实体，换穿会造出双指针幽灵
-          uiToast('这件已经穿在身上 · 手上这份拖进背包存放', 'small warn');
-          return;
-        }
-        const outgoing = (arr || []).filter(c => c && !c.cont);
-        PK_UI.held = prevKey && GEAR[prevKey] ? { t: 'gear', key: prevKey, cells: outgoing } : null;
-        SAVE.worn[kind] = nk;
-        arr.length = 0;
-        for (let i = 0; i < ng.cap; i++) arr.push(null);
-        for (const c of incoming) { if (!stowCell(c)) gearDropCell(c); }
-        recountLoot();
-        uiToast(ng.name + ' 已换上' + (prevKey && GEAR[prevKey] ? '（' + GEAR[prevKey].name + ' 在手上）' : ''), 'small');
-        Sfx.tone(620, 0.05, 0.04, 'square');
-      };
-      el.__pkPlace = placeGearSlot;
-      el.oncontextmenu = e => { e.preventDefault(); e.stopPropagation(); pickGearSlot(); renderPackPanel(); };  // 右键 = 脱下到手上
-      pkPressable(el, pickGearSlot, placeGearSlot);
-      gearGrid.appendChild(el);
-    }
-  }
-
-  for (const sl of GUN_SLOTS) {
-    const sd = SLOT_DEFS.find(d => d.id === sl);
-    const id = P.slots ? P.slots[sl] : null;
-    const el = document.createElement('div');
-    el.className = 'lo-cell pk-slot' + (id ? '' : ' empty');
-    el.innerHTML = id
-      ? '<span class="ic" style="color:#ffca7a">' + cellIcon({ t: 'gun', id }) + '</span>' +
-        '<span class="nm">' + WEAPONS[id].short + '</span>' +
-        '<span class="sub">' + caliberOf(id).short + ' · ' + weaponStats(id).mag + ' 发 · 配件 ' + gunModCount(id) + '/' + modSlotTotal(id) + '</span>'
-      : '<span class="sub">' + (sd ? sd.cn : sl) + '</span>';
-    const pickSlot = () => {                      // 拿起：从槽里取下
-      if (!P.slots || !P.slots[sl]) return null;
-      const gid = P.slots[sl];
-      P.slots[sl] = null;
-      PK_UI.held = { t: 'gun', id: gid };
-      Sfx.tone(500, 0.05, 0.04, 'square');
-      return () => {                              // 取消：还回槽里
-        if (!P.slots[sl]) { P.slots[sl] = PK_UI.held.id; PK_UI.held = null; }
-      };
-    };
-    const placeSlot = () => {                     // 放置：装枪 / 装配件
-      if (!PK_UI.held) return;
-      /* 拖配件到枪上：按配件自身的槽位装进去，换下来的回到手上 */
-      if (PK_UI.held.t === 'mod') {
-        const m = MODS[PK_UI.held.id];
-        if (!m) { uiToast('未知配件', 'small warn'); return; }
-        const wid = P.slots ? P.slots[sl] : null;
-        if (!wid) { uiToast('这个槽上没有枪', 'small warn'); return; }
-        if (!slotAllowed(wid, m.slot)) { uiToast(WEAPONS[wid].short + ' 装不了' + (MOD_SLOTS.find(s => s.id === m.slot) || {}).cn, 'small warn'); return; }
-        SAVE.mods[wid] = SAVE.mods[wid] || {};
-        const old = SAVE.mods[wid][m.slot];
-        SAVE.mods[wid][m.slot] = PK_UI.held.id;   // 配件装上（直接写档案：撤离/死亡结算都认这份数据）
-        PK_UI.held = old ? { t: 'mod', id: old } : null;   // 换下来的配件回到手上
-        uiToast(WEAPONS[wid].short + ' · ' + m.name + ' 已装上', 'small');
-        Sfx.tone(760, 0.06, 0.05, 'square');
-        return;
-      }
-      if (PK_UI.held.t !== 'gun') {
-        uiToast('只有枪能装进武器槽（配件拖到装着的枪上改装）', 'small warn');
-        return;
-      }
-      const prev = P.slots[sl];
-      P.slots[sl] = PK_UI.held.id;
-      PK_UI.held = prev ? { t: 'gun', id: prev } : null;
-      Sfx.tone(620, 0.05, 0.04, 'square');
-    };
-    el.__pkPlace = placeSlot;                     // 拖拽落点用「目标格」自己的放置回调
-    el.oncontextmenu = e => {                     // 右键 = 打开这把枪的改装窗（拖上装 / 拖下卸）
-      e.preventDefault(); e.stopPropagation();
-      if (!id) return;
-      openModWin(id);
-    };
-    pkPressable(el, pickSlot, placeSlot);
-    gunGrid.appendChild(el);
+    for (const kind of ['rig', 'pack']) gearGrid.appendChild(pkBuildGearSlot(kind, renderPackPanel));
   }
 
   for (const [gridId, getArr, zone, noteTxt] of PK_ZONES) {
