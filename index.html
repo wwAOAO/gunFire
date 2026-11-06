@@ -12105,7 +12105,6 @@ function lootBoxFits(cell) {
 function lootDepositPlace() {
   const L = G.lootPanel;
   if (!L || !PK_UI.held) return;
-  if (!L.again) { uiToast('首次搜刮的箱子先翻完 · 下次打开才能存放', 'small warn'); return; }   // 首次搜刮不收物
   const c = L.crate, held = PK_UI.held;
   const C = containerOf(c.kind);
   const it = cellToLootItem(held);
@@ -12265,7 +12264,7 @@ function lootRender() {
 
   const left = L.items.filter(it => !it.taken).length;
   const lay = lootBoxLayout(L);
-  const canStore = !!(L.crate && !L.pile && !L.gear && L.again);   // 只有再打开的容器（第二次起）能存放；首次搜刮中的箱子不收
+  const canStore = !!(L.crate && !L.pile && !L.gear);   // 真容器（箱子）随时能存放：首次搜刮也可以拖身上的东西进去
   const nm = $('lootName');
   if (nm) nm.textContent = (L.col ? L.col.name : '容 器');
   const st = $('lootStatus');
@@ -12352,8 +12351,8 @@ function lootRender() {
     pd.innerHTML = lay.pend
       ? ('还有 <b>' + lay.pend + '</b> 件没翻出来 · 虚线剪影是它们的轮廓，翻到哪件哪件现形')
       : (left
-        ? ('拖到左边入包 · 按 F 收下选中的那件' + (canStore ? ' · 身上的东西也能拖进这里存放' : ' · 关掉再打开才能存放东西'))
-        : '箱子已清空 · 把身上的东西拖进来存放（撤离不带走）');
+        ? '拖到左边入包 · 按 F 收下选中的那件 · 身上的东西也能拖进这里存放 · 拖到屏幕最右丢弃'
+        : '箱子已清空 · 把身上的东西拖进来存放（撤离不带走） · 拖到屏幕最右丢弃');
   }
 }
 
