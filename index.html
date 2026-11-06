@@ -3019,8 +3019,8 @@ const GEAR = {
               blocks: [[1, 1], [2, 1, 2], [2, 1, 2], [2, 1, 2], [1, 1, 2, -296, 64]],
               desc: '八格轻型弹挂。入门标准款，左边上下两个零钱袋，右边三条竖双格袋。' },
   hk3:      { name: 'HK3便携胸挂',      kind: 'rig', cap: 8,  price: 800,   q: '白', color: '#dfe9f2',
-              blocks: [[1, 1], [1, 1], [1, 1, 1], [2, 1, 2], [2, 1, 2], [1, 1, 2]],
-              desc: '八格便携胸挂。顶上两个零钱袋，中排两侧零钱袋夹两条竖双格袋，掏哪格都顺手。' },
+              blocks: [[1, 1, 0, 74], [1, 1, 2, 74], [2, 1, 0, 74], [2, 1, 2, 74], [1, 1, 2, 0, 48, -222], [1, 1, 2, -148, 48]],
+              desc: '八格便携胸挂。两条竖双格袋顶天立地，顶上各压一个零钱袋，脚下两侧还各挂一个。' },
   nylon:    { name: '尼龙挎包',         kind: 'rig', cap: 8,  price: 1000,  q: '绿', color: '#63d68a',
               blocks: [[1, 1], [2, 1, 2], [1, 1, 2], [1, 1, 1], [1, 1], [1, 1, 1], [1, 1]],
               desc: '八格尼龙挎包。斜挎式老古董，中缝一条竖双格袋，两侧各挂三个零钱小袋。' },
@@ -5301,7 +5301,7 @@ function blkSizesText(blocks) { return blocks.map(b => Array.isArray(b) ? b[0] :
 /* 隔舱定义解析：数字 = 自动列数（blkCols），[格数, 列数] = 指定列数（如 [3,1] = 竖 1x3 弹匣条）。
    第 3 位 brk：1=强制换行 2=强制同行；第 4 位 ind：左移 px（负值把舱拉回上一排舱的正下方）；
    第 5 位 mt：下移 px（小袋压在同行高舱的下方，如 xiqiang 的零钱袋） */
-function blkSpec(b) { return Array.isArray(b) ? [b[0], b[1], b[2] | 0, b[3] | 0, b[4] | 0] : [b, blkCols(b), 0, 0, 0]; }
+function blkSpec(b) { return Array.isArray(b) ? [b[0], b[1], b[2] | 0, b[3] | 0, b[4] | 0, b[5] | 0] : [b, blkCols(b), 0, 0, 0, 0]; }
 /* 自动形状：sz 格物品在 C 列舱里的 w×h（只用于 SHAPES 没写的老物品）。
    只用「宽×高刚好等于 sz」的矩形，绝不出现 L 形缺口：把 sz 拆成因数对，
    取最接近正方形的那一对（同样方正时取更宽的，枪横着躺）。 */
@@ -5334,18 +5334,18 @@ function shapeOf(c, C) {
   if (s[0] > C && s[1] <= C) return [s[1], s[0]];
   return [s[0], s[1]];
 }
-/* 某容器（'rig' | 'pocket' | 'pack'）的隔舱 → [[start, end, cols], ...] */
+/* 某容器（'rig' | 'pocket' | 'pack'）的隔舱 → [[start, end, cols, brk, ml, mt, mr], ...] */
 function zoneBlocks(zone) {
   if (zone === 'pocket') {                                   // 口袋：五个独立单格舱
     const out = []; let s = 0;
-    for (const b of pocketBlocks()) { const [n, cols, brk, ml, mt] = blkSpec(b); out.push([s, s + n, cols, brk, ml, mt]); s += n; }
+    for (const b of pocketBlocks()) { const [n, cols, brk, ml, mt, mr] = blkSpec(b); out.push([s, s + n, cols, brk, ml, mt, mr]); s += n; }
     return out;
   }
   const g = wornGear(zone);
   if (!g || !(g.cap > 0)) return [];
   if (!g.blocks) return [[0, g.cap, blkCols(g.cap), 0]];
   const out = []; let s = 0;
-  for (const b of g.blocks) { const [n, cols, brk, ml, mt] = blkSpec(b); out.push([s, s + n, cols, brk, ml, mt]); s += n; }
+  for (const b of g.blocks) { const [n, cols, brk, ml, mt, mr] = blkSpec(b); out.push([s, s + n, cols, brk, ml, mt, mr]); s += n; }
   return out;
 }
 function blkAt(blocks, i) { for (const b of blocks) if (i >= b[0] && i < b[1]) return b; return null; }
@@ -19684,7 +19684,7 @@ function renderLoadout() {
     const zone = gridId === 'loRig' ? 0 : (gridId === 'loPocket' ? 1 : 2);
     const blocks = zoneBlocks(ZONE_NAMES[zone]);
     let lastBlkH = -1;
-    for (const [s, e, C, brk, ml, mt] of blocks) {
+    for (const [s, e, C, brk, ml, mt, mr] of blocks) {
       const bh = (e - s) / C;                        // 舱高（格）
       // brk=2 → 强制不换行（同排高低舱混排，照实物图）；brk=1 → 强制换行；其余高度变化自动换行
       if (lastBlkH >= 0 && brk !== 2 && (bh !== lastBlkH || brk === 1)) {
@@ -19697,6 +19697,7 @@ function renderLoadout() {
       blk.className = 'pk-blk';
       if (ml) blk.style.marginLeft = ml + 'px';      // 左移：压在上一排指定舱的正下方（如 raider 居中快取袋）
       if (mt) blk.style.marginTop = mt + 'px';       // 下移：小袋挂在同行高舱下方（如 xiqiang 零钱袋）
+      if (mr) blk.style.marginRight = mr + 'px';     // 右缩：负值收窄占位宽，最右下小袋不触发 flex 回流
       const bgrid = document.createElement('div');
       bgrid.className = 'blk-grid';
       bgrid.style.gridTemplateColumns = 'repeat(' + C + ', var(--bcell))';
@@ -20484,7 +20485,7 @@ function renderCarryZoneGrid(grid, arr, zone, opts) {
   grid.innerHTML = '';
   const blocks = zoneBlocks(ZONE_NAMES[zone]);
   let lastBlkH = -1;
-  for (const [s, e, C, brk, ml, mt] of blocks) {
+  for (const [s, e, C, brk, ml, mt, mr] of blocks) {
     const bh = (e - s) / C;                        // 舱高（格）
     // brk=2 → 强制不换行（同排高低舱混排，照实物图）；brk=1 → 强制换行；其余高度变化自动换行
     if (lastBlkH >= 0 && brk !== 2 && (bh !== lastBlkH || brk === 1)) {
@@ -20497,6 +20498,7 @@ function renderCarryZoneGrid(grid, arr, zone, opts) {
     blk.className = 'pk-blk';
     if (ml) blk.style.marginLeft = ml + 'px';      // 左移：压在上一排指定舱的正下方（如 raider 居中快取袋）
     if (mt) blk.style.marginTop = mt + 'px';       // 下移：小袋挂在同行高舱下方（如 xiqiang 零钱袋）
+    if (mr) blk.style.marginRight = mr + 'px';     // 右缩：负值收窄占位宽，最右下小袋不触发 flex 回流
     const bgrid = document.createElement('div');
     bgrid.className = 'blk-grid';
     bgrid.style.gridTemplateColumns = 'repeat(' + C + ', var(--bcell))';
