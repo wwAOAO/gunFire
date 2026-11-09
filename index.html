@@ -2695,8 +2695,16 @@ const CALIBERS = {
            desc:'全威力步枪弹：SR9 拿它打半自动，R93 拿它拉栓，同一盒弹喂两把枪。不卖白弹绿弹，上架从蓝弹起步，最高 6 级红弹。' },
   '338': { id:'338', name:'.338 Lapua Magnum', short:'.338 LM', full:'.338 Lapua Magnum', box:10, base:25,
            desc:'AWM 的远程重弹，一发就是一笔钱。全游戏唯一上架 7 级顶级弹的口径，而且只卖高级弹：5 级金弹起步，6 级红弹、7 级顶级弹。' },
+  '9x39': { id:'9x39', name:'9×39mm 亚音速穿甲弹', short:'9×39', full:'9×39mm SP-6', box:20, base:12,
+           desc:'AS VAL / SR-3M 的专用重弹：弹头又重又硬，弹级天生偏向穿甲，近距离一发顶 5.56 一发半；代价是亚音速，弹道衰减全步枪系最狠。最高上架 6 级红弹。' },
+  '300blk': { id:'300blk', name:'.300 BLK 亚音速弹', short:'.300 BLK', full:'.300 AAC Blackout', box:20, base:9,
+           desc:'MCX 的模块化口径：重弹头中等穿透，开火动静比小口径步枪小一截，配消音器几乎贴脸才听得见。最高上架 5 级金弹。' },
+  '46': { id:'46', name:'4.6×30mm PDW 弹', short:'4.6×30', full:'4.6×30mm', box:40, base:6,
+           desc:'MP7 专属的个人防卫弹：又小又快，穿甲是冲锋枪口径里最好的，打肉偏软。只上架到 4 级紫弹。' },
+  '45acp': { id:'45acp', name:'.45 ACP 柯尔特自动手枪弹', short:'.45 ACP', full:'.45 ACP', box:25, base:6,
+           desc:'汤姆逊 / Vector 的大口径手枪弹：弹头重、停顿感强，打无甲目标一发顶 9×19 一发半；穿甲一般，只上架到 4 级紫弹。' },
 };
-const CAL_ORDER = ['919', '918', '762x39', '545', '58', '12g', '556', '762', '338'];
+const CAL_ORDER = ['919', '918', '45acp', '46', '762x39', '545', '58', '9x39', '12g', '556', '300blk', '762', '338'];
 
 /* 0~7 级：颜色 / 肉伤倍率 / 护甲伤害倍率 / 价格倍率（价格 = 口径基价 × 倍率 × 每盒发数）
    armorMul 只影响「磨护甲耐久」的速率，与肉伤 dmgMul 是两条独立曲线：
@@ -2724,18 +2732,24 @@ const AMMO_LV_MAX = AMMO_TIERS.length - 1;
 /* ── 各口径上架的弹级 ──
    没列进来的级别：军火库不卖、老档库存折算、选用自动跳过。
    逻辑是「弹越贵越只给大口径」：
-     手枪 / 霰弹（9×19、9×18、12Ga）     → 0~4 级，最多到紫
-     中间威力 / 小口径步枪（39 系、556、58）→ 0~5 级，到金为止
+     手枪 / 霰弹（9×19、9×18、.45 ACP、12Ga）→ 0~4 级，最多到紫
+     PDW 4.6×30                              → 0~4 级，到紫为止
+     中间威力 / 小口径步枪（39 系、556、58、.300 BLK）→ 0~5 级，到金为止
+     9×39 亚音速重弹                          → 0~6 级（天生穿甲，给到红弹）
      全威力 7.62×51                        → 0、3~6 级（不卖白绿，起步就是蓝弹）
      .338 LM                               → 只卖高级弹 5~7 级（金弹起步，7 级顶级弹是 AWM 专属） */
 const CAL_TIERS = {
   '919':    [0, 1, 2, 3, 4],
   '918':    [0, 1, 2, 3, 4],
+  '45acp':  [0, 1, 2, 3, 4],
+  '46':     [0, 1, 2, 3, 4],
   '12g':    [0, 1, 2, 3, 4],
   '762x39': [0, 1, 2, 3, 4, 5],
   '545':    [0, 1, 2, 3, 4, 5],
   '58':     [0, 1, 2, 3, 4, 5],
   '556':    [0, 1, 2, 3, 4, 5],
+  '300blk': [0, 1, 2, 3, 4, 5],
+  '9x39':   [0, 1, 2, 3, 4, 5, 6],
   '762':    [0, 3, 4, 5, 6],
   '338':    [5, 6, 7],
 };
@@ -2763,14 +2777,20 @@ const ARMOR_LV_COLOR = ['#5a6b78', '#dfe9f2', '#63d68a', '#4fa8ff', '#b782ff', '
 const CAL_OF_WEAPON = {
   g17: '919', '93r': '919', g18: '919',
   bizon: '918', m870: '12g',
-  akm: '762x39', ak12: '545',
+  thompson: '45acp', vector: '45acp', mk4: '919', mp7: '46',
+  akm: '762x39', sks: '762x39',
+  ak12: '545',
   qbz95: '58', qbz191: '58', qbz192: '58',
-  m4a1: '556', sr9: '762', r93: '762', awm: '338',
+  m4a1: '556', hk416: '556', aug: '556', k437: '556',
+  mcx: '300blk', sr3m: '9x39', asval: '9x39',
+  rpk: '762x39', m249: '556', pkm: '762',
+  sr9: '762', m14: '762', sr25: '762',
+  r93: '762', m700: '762', awm: '338',
 };
 /* 老档迁移时按「3 个弹匣」补的起步弹（发数按口径定；弹级取该口径上架的最便宜一级，
    7.62×51 不卖白绿，所以补的是 3 级蓝弹） */
-const STARTER_AMMO = { '919': 51, '918': 64, '762x39': 90, '545': 90, '58': 90,
-                       '12g': 21, '556': 90, '762': 54, '338': 15 };
+const STARTER_AMMO = { '919': 51, '918': 64, '45acp': 75, '46': 120, '762x39': 90, '545': 90, '58': 90,
+                       '9x39': 60, '12g': 21, '556': 90, '300blk': 90, '762': 54, '338': 15 };
 
 /* 存档读取不在这里 —— loadSave 会用到 REPAIRS / GEAR 等后定义的数据表，
    提前读会踩 TDZ 被 catch 吞掉，等于每次刷新都重置。真正的读取点在 GEAR 表之后。 */
@@ -2788,6 +2808,7 @@ const WEAPON_CATS = [
   { id: 'smg',     cn: '冲锋枪',       en: 'SMG',     trait: '射速压制 · 大弹容' },
   { id: 'shotgun', cn: '霰弹枪',       en: 'SHOTGUN', trait: '贴脸爆发 · 破盾' },
   { id: 'rifle',   cn: '步枪',         en: 'RIFLE',   trait: '全能主力 · 穿透 1 人' },
+  { id: 'lmg',     cn: '机枪',         en: 'LMG',     trait: '持续压制 · 大弹容重枪' },
   { id: 'dmr',     cn: '精确射手步枪', en: 'DMR',     trait: '中远半自动 · 高精度' },
   { id: 'sniper',  cn: '狙击枪',       en: 'SNIPER',  trait: '超远一击 · 穿透 3 人' },
 ];
@@ -2931,6 +2952,181 @@ const WEAPONS = {
     color: '#e8f4ff', range: 2800, knock: 300, sound: 'sniper', pierce: 4, noise: 1300,
     bars: { dmg: 1.0, rate: .09, mag: .14, acc: 1.0 },
   },
+
+  /* ══════ 冲锋枪扩编 ══════ */
+  mk4: {
+    cat: 'smg', label: '冲锋枪 · MK4', short: 'MK4', name: 'MK4', code: 'MK-4 SMG', price: 1800, cal: '919',
+    desc: '制式冲锋枪，吃最便宜的 9×19。35 发长弹匣、射速快、换弹利索，是野牛之外的第二个「泼水」选择；单发轻，磨甲也一般。',
+    dmg: 17, armorDmg: 9, rate: 0.062, spread: 0.058, count: 1, mode: 'auto',
+    bspeed: 1150, mag: 35, reload: 1.70, recoil: 1.6, size: 2.8, reserveMul: 4,
+        ads: { spread: 0.60, move: 0.66, time: 0.14 },
+    color: '#a8e6ff', range: 700, knock: 44, sound: 'smg', noise: 600,
+    bars: { dmg: .34, rate: .92, mag: .78, acc: .42 },
+  },
+  thompson: {
+    cat: 'smg', label: '冲锋枪 · 汤姆逊', short: '汤姆逊', name: '汤姆逊', code: 'M1928 THOMPSON', price: 2400, cal: '45acp',
+    desc: '坝区黑市里的老家伙。.45 大弹头一发顶 9mm 一发半，打无甲目标格外疼；枪老、散布大、远距离掉得快，适合贴脸换血。',
+    dmg: 23, armorDmg: 10, rate: 0.082, spread: 0.056, count: 1, mode: 'auto',
+    bspeed: 1050, mag: 30, reload: 2.30, recoil: 2.4, size: 3.0, reserveMul: 4,
+        ads: { spread: 0.62, move: 0.62, time: 0.16 },
+    color: '#ffc9a3', range: 640, knock: 68, sound: 'smg', noise: 640,
+    fb: { d0: 180, min: 0.60 },
+    bars: { dmg: .42, rate: .80, mag: .68, acc: .40 },
+  },
+  mp7: {
+    cat: 'smg', label: '冲锋枪 · MP7', short: 'MP7', name: 'MP7', code: 'H&K MP7', price: 2800, cal: '46',
+    desc: 'PDW 定位的异类：4.6×30 弹又小又快，穿甲是冲锋枪里最好的，磨重甲几乎和步枪一样快；单发肉伤偏软，靠射速把伤害灌满。',
+    dmg: 15, armorDmg: 12, rate: 0.055, spread: 0.060, count: 1, mode: 'auto',
+    bspeed: 1250, mag: 40, reload: 1.60, recoil: 1.3, size: 2.6, reserveMul: 4,
+        ads: { spread: 0.58, move: 0.68, time: 0.13 },
+    color: '#b0ffd8', range: 720, knock: 40, sound: 'smg', noise: 560,
+    bars: { dmg: .30, rate: .96, mag: .86, acc: .38 },
+  },
+  vector: {
+    cat: 'smg', label: '冲锋枪 · Vector', short: 'Vector', name: 'Vector', code: 'KRISS VECTOR', price: 3600, cal: '45acp',
+    desc: '后坐力系统吹出来的怪物：全系射速最高，.45 弹头泼出去像水流，贴脸一瞬间就能灌完半个弹匣；弹匣小、枪口乱，两秒内解决不了战斗就得换弹。',
+    dmg: 19, armorDmg: 10, rate: 0.048, spread: 0.054, count: 1, mode: 'auto',
+    bspeed: 1100, mag: 25, reload: 1.90, recoil: 1.5, size: 2.7, reserveMul: 4,
+        ads: { spread: 0.58, move: 0.66, time: 0.14 },
+    color: '#d6c8ff', range: 600, knock: 52, sound: 'smg', noise: 580,
+    fb: { d0: 160, min: 0.58 },
+    bars: { dmg: .36, rate: 1.0, mag: .62, acc: .44 },
+  },
+
+  /* ══════ 机枪（新类目）：大弹容 · 持续压制，代价是散布、后坐与换弹 ══════ */
+  rpk: {
+    cat: 'lmg', label: '机枪 · RPK', short: 'RPK', name: 'RPK', code: 'KALASHNIKOV RPK', price: 4600, cal: '762x39',
+    role: '压制 · 轻机枪', desc: 'AKM 的机枪版：加重枪管、40 发长弹匣，单发和 AKM 一样重，能多泼十发；散布比 AKM 大一号，远距衰减也狠，适合卡着中距离一梭子压死一个据点。',
+    dmg: 42, armorDmg: 12, rate: 0.125, spread: 0.034, count: 1, mode: 'auto',
+    bspeed: 1600, mag: 40, reload: 3.0, recoil: 5.2, size: 3.9, reserveMul: 4,
+        ads: { spread: 0.54, move: 0.52, time: 0.22 },
+    color: '#ff8f5e', range: 1200, knock: 125, sound: 'lmg', pierce: 1, noise: 1000,
+    fb: { d0: 320, min: 0.70 },
+    bars: { dmg: .64, rate: .62, mag: .72, acc: .68 },
+  },
+  m249: {
+    cat: 'lmg', label: '机枪 · M249', short: 'M249', name: 'M249', code: 'FN M249 SAW', price: 6400, cal: '556',
+    role: '压制 · 弹箱', desc: '100 发弹箱的班用机枪：抬一次枪管就能从据点这头泼到那头，5.56 弹的射速和弹道都不吃亏；散布大、换弹慢得像换轮胎，开打前先把位置想好。',
+    dmg: 31, armorDmg: 15, rate: 0.082, spread: 0.037, count: 1, mode: 'auto',
+    bspeed: 1700, mag: 100, reload: 4.8, recoil: 4.4, size: 4.0, reserveMul: 3,
+        ads: { spread: 0.56, move: 0.46, time: 0.26 },
+    color: '#c9a3ff', range: 1400, knock: 100, sound: 'lmg', pierce: 1, noise: 1050,
+    fb: { d0: 360, min: 0.82 },
+    bars: { dmg: .50, rate: .80, mag: 1.0, acc: .60 },
+  },
+  pkm: {
+    cat: 'lmg', label: '机枪 · PKM', short: 'PKM', name: 'PKM', code: 'KALASHNIKOV PKM', price: 7600, cal: '762',
+    role: '重压制 · 泼水', desc: '全威力弹的重机枪：单发 47 点、两发破盾，80 发弹链泼出去就是一面墙，子弹还能穿透两名目标；全游戏最沉的枪，走位慢、换弹更慢，架住了就是据点死神。',
+    dmg: 47, armorDmg: 17, rate: 0.108, spread: 0.040, count: 1, mode: 'auto',
+    bspeed: 1750, mag: 80, reload: 5.6, recoil: 6.4, size: 4.2, reserveMul: 3,
+        ads: { spread: 0.58, move: 0.42, time: 0.28 },
+    color: '#ff6f8f', range: 1350, knock: 140, sound: 'lmg', pierce: 2, noise: 1150,
+    fb: { d0: 330, min: 0.72 },
+    bars: { dmg: .68, rate: .66, mag: .90, acc: .56 },
+  },
+
+  /* ══════ 步枪扩编 ══════ */
+  mcx: {
+    cat: 'rifle', label: '步枪 · MCX', short: 'MCX', name: 'MCX', code: 'SIG MCX', price: 4800, cal: '300blk',
+    role: '模块 · 亚音速', desc: '.300 BLK 的模块化步枪：重弹头单发 36 点，开火动静比小口径小一截，配消音器几乎就是一把长管冲锋枪；枪管短，两百步外伤害一路掉。',
+    dmg: 36, armorDmg: 14, rate: 0.088, spread: 0.024, count: 1, mode: 'auto',
+    bspeed: 1500, mag: 30, reload: 1.80, recoil: 3.3, size: 3.3, reserveMul: 5,
+        ads: { spread: 0.44, move: 0.64, time: 0.15 },
+    color: '#ffc98f', range: 1100, knock: 92, sound: 'rifle', pierce: 1, noise: 700,
+    fb: { d0: 300, min: 0.76 },
+    bars: { dmg: .56, rate: .78, mag: .60, acc: .78 },
+  },
+  aug: {
+    cat: 'rifle', label: '步枪 · AUG', short: 'AUG', name: 'AUG', code: 'STEYR AUG A3', price: 5200, cal: '556',
+    role: '无托 · 快瞄', desc: '自带瞄准镜的无托步枪：抬枪速度仅次于 QBZ-192，5.56 弹手感扎实、弹道规整；无托结构换弹偏慢，被近身时第二枪总是慢半拍。',
+    dmg: 33, armorDmg: 14, rate: 0.092, spread: 0.021, count: 1, mode: 'auto',
+    bspeed: 1720, mag: 30, reload: 2.15, recoil: 3.1, size: 3.5, reserveMul: 5,
+        ads: { spread: 0.40, move: 0.62, time: 0.13 },
+    color: '#9fffc4', range: 1450, knock: 95, sound: 'rifle', pierce: 1, noise: 890,
+    fb: { d0: 380, min: 0.86 },
+    bars: { dmg: .52, rate: .74, mag: .60, acc: .84 },
+  },
+  hk416: {
+    cat: 'rifle', label: '步枪 · HK416', short: 'HK416', name: 'HK416', code: 'H&K 416', price: 5600, cal: '556',
+    role: '精工 · 全能', desc: '短行程活塞版 M4：把 M4 的每一项短板都补了半格 —— 射速快一点、散布小一点、衰减轻一点，单项都不冒尖但没有任何缺点；贵，是它唯一的门槛。',
+    dmg: 34, armorDmg: 13, rate: 0.095, spread: 0.019, count: 1, mode: 'auto',
+    bspeed: 1750, mag: 30, reload: 1.85, recoil: 3.0, size: 3.6, reserveMul: 5,
+        ads: { spread: 0.40, move: 0.62, time: 0.16 },
+    color: '#8fb8ff', range: 1550, knock: 100, sound: 'rifle', pierce: 1, noise: 900,
+    fb: { d0: 390, min: 0.88 },
+    bars: { dmg: .53, rate: .72, mag: .60, acc: .88 },
+  },
+  sr3m: {
+    cat: 'rifle', label: '步枪 · SR-3M', short: 'SR-3M', name: 'SR-3M', code: 'TSNIITOCHMASH SR-3M', price: 5600, cal: '9x39',
+    role: '重弹 · 近中距', desc: '缩小的「旋风」：吃 9×39 亚音速重弹，单发 38 点、磨甲快得不像步枪，两百步内换血几乎无敌；亚音速弹出了两百步一路掉到六成，只适合往里冲。',
+    dmg: 38, armorDmg: 17, rate: 0.098, spread: 0.028, count: 1, mode: 'auto',
+    bspeed: 1300, mag: 20, reload: 1.95, recoil: 3.8, size: 3.2, reserveMul: 5,
+        ads: { spread: 0.48, move: 0.64, time: 0.16 },
+    color: '#ffb8a0', range: 850, knock: 105, sound: 'rifle', pierce: 1, noise: 820,
+    fb: { d0: 220, min: 0.60 },
+    bars: { dmg: .58, rate: .72, mag: .44, acc: .70 },
+  },
+  k437: {
+    cat: 'rifle', label: '步枪 · K437', short: 'K437', name: 'K437', code: 'K437 CARBINE', price: 6000, cal: '556',
+    role: '稳定 · 中远', desc: '慢射速、低后坐的 precision 卡宾：单发 32 点但弹着点极其老实，d0 四百一步的存速让它在中远距离几乎不掉伤；泼水不如 M4 系，点射才是它的用法。',
+    dmg: 32, armorDmg: 15, rate: 0.086, spread: 0.020, count: 1, mode: 'auto',
+    bspeed: 1780, mag: 30, reload: 1.90, recoil: 2.8, size: 3.6, reserveMul: 5,
+        ads: { spread: 0.40, move: 0.62, time: 0.17 },
+    color: '#a0e8ff', range: 1500, knock: 95, sound: 'rifle', pierce: 1, noise: 880,
+    fb: { d0: 410, min: 0.90 },
+    bars: { dmg: .50, rate: .76, mag: .60, acc: .88 },
+  },
+  asval: {
+    cat: 'rifle', label: '步枪 · AS VAL', short: 'AS VAL', name: 'AS VAL', code: 'TSNIITOCHMASH AS VAL', price: 6400, cal: '9x39',
+    role: '消音 · 潜袭', desc: '自带整体消音器的特种步枪：开一枪的动静比跺一脚还小，敌人几乎不会循声找你；9×39 重弹单发 40 点、磨甲凶狠 —— 近距离是刺客，远距离亚音速弹掉得你怀疑人生。',
+    dmg: 40, armorDmg: 18, rate: 0.104, spread: 0.027, count: 1, mode: 'auto',
+    bspeed: 1320, mag: 20, reload: 2.0, recoil: 3.9, size: 3.4, reserveMul: 5,
+        ads: { spread: 0.46, move: 0.62, time: 0.17 },
+    color: '#c0b8ff', range: 900, knock: 110, sound: 'rifle', pierce: 1, noise: 340,
+    fb: { d0: 240, min: 0.62 },
+    bars: { dmg: .60, rate: .70, mag: .44, acc: .72 },
+  },
+
+  /* ══════ 精确射手步枪扩编 ══════ */
+  sks: {
+    cat: 'dmr', label: '精确射手步枪 · SKS', short: 'SKS', name: 'SKS', code: 'SIMONOV SKS', price: 3400, cal: '762x39',
+    desc: '最便宜的半自动射手步枪：吃 AKM 同款 7.62×39，单发 54 点、桥夹供弹装得慢，但胜在一发是一发、枪枪有谱；预算不够上 SR9 时的过渡选择。',
+    dmg: 54, armorDmg: 19, rate: 0.30, spread: 0.012, count: 1, mode: 'semi',
+    bspeed: 1600, mag: 15, reload: 2.6, recoil: 6, size: 3.7, reserveMul: 5,
+        ads: { spread: 0.34, move: 0.58, time: 0.22 },
+    color: '#e8c88f', range: 1350, knock: 130, sound: 'dmr', pierce: 1, noise: 960,
+    fb: { d0: 300, min: 0.72 },
+    bars: { dmg: .60, rate: .44, mag: .36, acc: .88 },
+  },
+  m14: {
+    cat: 'dmr', label: '精确射手步枪 · M14', short: 'M14', name: 'M14', code: 'SPRINGFIELD M14', price: 5600, cal: '762',
+    desc: '全威力半自动的中间档：单发 64 点、20 发弹匣、后坐比 SR9 稍重，弹道和 SR9 同一套 7.62×51；比 SR9 贵一截，换来的是更整齐的中远点射手感。',
+    dmg: 64, armorDmg: 24, rate: 0.32, spread: 0.010, count: 1, mode: 'semi',
+    bspeed: 2000, mag: 20, reload: 2.3, recoil: 6.5, size: 3.8, reserveMul: 5,
+        ads: { spread: 0.32, move: 0.56, time: 0.23 },
+    color: '#aef2b0', range: 1800, knock: 145, sound: 'dmr', pierce: 1, noise: 1040,
+    bars: { dmg: .66, rate: .42, mag: .46, acc: .92 },
+  },
+  sr25: {
+    cat: 'dmr', label: '精确射手步枪 · SR-25', short: 'SR-25', name: 'SR-25', code: 'KNIGHT SR-25', price: 7000, cal: '762',
+    desc: '7.62 半自动的天花板：单发 78 点、散布比狙击枪只差一线，子弹能穿透两名目标 —— 一轮点射就能清掉一个双人巡逻组；后坐沉、弹匣金贵，扣扳机之前先想好。',
+    dmg: 78, armorDmg: 30, rate: 0.35, spread: 0.008, count: 1, mode: 'semi',
+    bspeed: 2100, mag: 20, reload: 2.5, recoil: 7.5, size: 4.0, reserveMul: 5,
+        ads: { spread: 0.28, move: 0.52, time: 0.26 },
+    color: '#b8f2ff', range: 2000, knock: 160, sound: 'dmr', pierce: 2, noise: 1100,
+    bars: { dmg: .74, rate: .40, mag: .46, acc: .95 },
+  },
+
+  /* ══════ 狙击枪扩编 ══════ */
+  m700: {
+    cat: 'sniper', label: '狙击枪 · M700', short: 'M700', name: 'M700', code: 'REMINGTON M700', price: 7600, cal: '762',
+    desc: '雷明登 M700 栓动，吃 7.62×51：单发 340 点、弹道比 R93 再稳一线，一枪一个重甲兵、子弹穿三名目标；价格卡在 R93 与 AWM 中间，是「再攒一点钱上 .338」之前的体面选择。',
+    dmg: 340, armorDmg: 92, rate: 1.45, spread: 0.0028, count: 1, mode: 'semi',
+    bspeed: 2850, mag: 5, reload: 2.8, recoil: 17, size: 4.3, reserveMul: 5,
+        ads: { spread: 0.16, move: 0.42, time: 0.31 },
+    color: '#c8e4ff', range: 2700, knock: 270, sound: 'sniper', pierce: 3, noise: 1280,
+    bars: { dmg: .97, rate: .10, mag: .14, acc: 1.0 },
+  },
 };
 
 /* 开镜参数：spread 散布倍率 / move 移速倍率 / time 抬枪耗时（重枪更慢） */
@@ -2941,10 +3137,11 @@ function adsOf(w) {
 /* 军火库 / 改装台 / 掉落池的枚举顺序（不直接等于快捷栏）
    同一类里按价格从低到高排，军火库一行读下来就是升级路线。 */
 const WEAPON_ORDER = ['g17', '93r', 'g18',
-                      'bizon', 'm870',
-                      'akm', 'm4a1', 'qbz95', 'ak12', 'qbz192', 'qbz191',
-                      'sr9',
-                      'r93', 'awm'];
+                      'mk4', 'bizon', 'thompson', 'mp7', 'vector', 'm870',
+                      'akm', 'm4a1', 'hk416', 'aug', 'mcx', 'qbz95', 'ak12', 'sr3m', 'qbz192', 'k437', 'asval', 'qbz191',
+                      'rpk', 'm249', 'pkm',
+                      'sks', 'sr9', 'm14', 'sr25',
+                      'r93', 'm700', 'awm'];
 
 
 /* 装备槽：数字键 1~5 一一对应 */
@@ -4335,6 +4532,8 @@ const Sfx = {
       case 'rifle':   this.noiseBurst(0.14, 3000, 1.4, 0.28); this.tone(320, 0.09, 0.14, 'square', 90); break;
       /* 7.62×39：比 5.56 闷一档，尾巴长一点 —— AKM 一响就知道是谁在打 */
       case 'ak':      this.noiseBurst(0.19, 2100, 1.2, 0.34); this.tone(200, 0.13, 0.18, 'square', 62); break;
+      /* 机枪：比步枪更闷更沉的连发，枪管大一声 */
+      case 'lmg':     this.noiseBurst(0.18, 1800, 1.3, 0.38); this.tone(150, 0.12, 0.20, 'square', 55); break;
       case 'sniper':  this.noiseBurst(0.40, 2600, 1.6, 0.50); this.tone(150, 0.30, 0.30, 'sawtooth', 38); break;
        case 'enemy':   this.noiseBurst(0.09, 900, 1.0, 0.10);  this.tone(150, 0.07, 0.06, 'sawtooth', 80); break;
       case 'tap':     this.noiseBurst(0.05, 1700, 1.2, 0.055); this.tone(215, 0.04, 0.045, 'square', 120); break;
@@ -14623,9 +14822,9 @@ function drawPickups() {
 function drawPlayerGun(W, rec) {
   const cat = W.cat;
   const len = cat === 'sniper' ? 36 : cat === 'dmr' ? 30 : cat === 'rifle' ? 26
-    : cat === 'shotgun' ? 26 : cat === 'smg' ? 19 : 13;
+    : cat === 'lmg' ? 30 : cat === 'shotgun' ? 26 : cat === 'smg' ? 19 : 13;
   const gx = P.r * 0.5 + rec;
-  const hw = cat === 'shotgun' ? 4 : 3.4;
+  const hw = cat === 'shotgun' ? 4 : cat === 'lmg' ? 4.2 : 3.4;
 
   ctx.fillStyle = '#48657b';                                   // 机匣
   ctx.fillRect(gx - 3, -hw - 2.4, 12, hw * 2 + 4.8);
@@ -14660,6 +14859,18 @@ function drawPlayerGun(W, rec) {
     ctx.closePath(); ctx.fill();
     ctx.fillStyle = '#5a7d96';
     ctx.fillRect(gx + 1, -hw - 3.4, 10, 2.2);                  // 提把
+  } else if (cat === 'lmg') {
+    ctx.fillStyle = '#2b3c4a';                                 // 弹箱
+    ctx.fillRect(gx + 1, hw + 1.5, 11, 10);
+    ctx.fillStyle = '#48657b';
+    ctx.fillRect(gx + 2.5, hw + 3, 8, 2.2);                    // 弹箱盖
+    ctx.fillStyle = '#5a7d96';
+    ctx.fillRect(gx + 1, -hw - 3.4, 12, 2.2);                  // 提把
+    ctx.strokeStyle = '#5a7d96'; ctx.lineWidth = 1.2;          // 两脚架
+    ctx.beginPath();
+    ctx.moveTo(gx + len - 12, hw); ctx.lineTo(gx + len - 16, hw + 7);
+    ctx.moveTo(gx + len - 12, -hw); ctx.lineTo(gx + len - 16, -hw - 7);
+    ctx.stroke();
   } else if (cat === 'dmr' || cat === 'sniper') {
     const big = cat === 'sniper';
     ctx.fillStyle = '#2b3c4a';
@@ -14723,7 +14934,7 @@ function drawPlayerGun(W, rec) {
     } else if (cat === 'smg') {
       ctx.fillStyle = '#2b3c4a';
       ctx.beginPath(); ctx.arc(gx + 5, hw + 6, 8.1, 0, TAU); ctx.fill();
-    } else if (cat === 'rifle' || cat === 'dmr' || cat === 'sniper') {
+    } else if (cat === 'rifle' || cat === 'lmg' || cat === 'dmr' || cat === 'sniper') {
       ctx.fillStyle = '#2b3c4a';
       ctx.fillRect(gx + 3, hw + 8.4, 5, 6);
     } else {
@@ -14761,6 +14972,7 @@ function gunSideLen(W) {
   const c = W.cat;
   if (c === 'sniper') return 92;
   if (c === 'dmr') return 86;
+  if (c === 'lmg') return 84;
   if (c === 'rifle') return 78;
   if (c === 'shotgun') return 72;
   if (c === 'smg') return 64;
@@ -14867,6 +15079,15 @@ function drawGunSide(g, W) {
       g.strokeStyle = 'rgba(142,242,255,0.45)'; g.lineWidth = 0.9;
       g.beginPath(); g.arc(mx + 4, 9.5, 6.4 + (S.mag === 'extmag' ? 1.6 : 0), 0, TAU); g.stroke();
       g.beginPath(); g.arc(mx + 4, 9.5, 2.3, 0, TAU); g.stroke();
+    } else if (cat === 'lmg') {                 // 机枪：方弹箱
+      g.fillStyle = '#243546';
+      rr(mx - 1.5, 4, 11.5, 15 + (S.mag === 'extmag' ? 2.5 : 0), 1.6); g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.10)';
+      g.fillRect(mx - 0.5, 5.5, 9.5, 1.6);
+      if (S.mag === 'quickmag') {
+        g.fillStyle = 'rgba(255,206,110,0.9)';
+        g.fillRect(mx - 1.5, 6.5, 11.5, 1.6);
+      }
     } else {
       g.fillStyle = '#243546';
       g.beginPath();
@@ -14881,6 +15102,15 @@ function drawGunSide(g, W) {
   } else {                                      // 霰弹枪：管状弹仓
     g.fillStyle = C.body;
     rr(L * 0.10, 2.6, L * 0.30, 2.8, 1.2); g.fill();
+  }
+
+  /* 机枪：枪管下两脚架（收纳状态斜撑） */
+  if (cat === 'lmg') {
+    g.strokeStyle = C.metal; g.lineWidth = 1.4;
+    g.beginPath();
+    g.moveTo(L * 0.52, 2.4); g.lineTo(L * 0.46, 13);
+    g.moveTo(L * 0.52, 2.4); g.lineTo(L * 0.58, 13);
+    g.stroke();
   }
 
   /* 枪托（手枪没有枪托，用一小段套筒尾部收口） */
