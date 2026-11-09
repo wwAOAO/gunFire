@@ -257,12 +257,10 @@
   /* 子分类行：武器类目下的枪种筛选，同款标签缩小一号 */
   .tabs.sub { margin-top:10px; }
   .tabs.sub .tab { font-size:11px; padding:7px 16px; letter-spacing:.18em; }
-  /* 军火库头部整块吸顶：标题 + 余额 + 主/子类目条一起钉在最上面，长列表滚动不跟着走 */
+  /* 军火库头部：正常跟随滚动（不做吸顶，避免卡片从标题后面穿过去） */
   #shopHead {
-    position: sticky; top: 0; z-index: 7;
     display: flex; flex-direction: column; gap: 14px;
     padding: 10px 0 10px;
-    background: linear-gradient(180deg, #0a1420 0%, #0a1420 88%, rgba(10,20,32,0) 100%);
   }
   #shopHead .topbar { padding-bottom: 0; }
   #shopSubTabs.hidden { display: none; }             /* 没有子类目的主类目：整行藏掉 */
