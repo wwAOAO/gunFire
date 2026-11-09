@@ -2893,6 +2893,7 @@ const WEAPONS = {
         ads: { spread: 0.52, move: 0.58, time: 0.19 },
     color: '#ff8f5e', range: 1250, knock: 130, sound: 'ak', pierce: 1, noise: 960,
     fb: { d0: 340, min: 0.72 },
+    vis: { mag: 'curved', wood: true },
     bars: { dmg: .66, rate: .68, mag: .60, acc: .72 },
   },
   m4a1: {
@@ -2903,6 +2904,7 @@ const WEAPONS = {
         ads: { spread: 0.42, move: 0.62, time: 0.18 },
     color: '#c9a3ff', range: 1500, knock: 100, sound: 'rifle', pierce: 1, noise: 900,
     fb: { d0: 380, min: 0.86 },
+    vis: { mag: 'straight' },
     bars: { dmg: .52, rate: .73, mag: .60, acc: .82 },
   },
   qbz95: {
@@ -2913,6 +2915,7 @@ const WEAPONS = {
         ads: { spread: 0.44, move: 0.64, time: 0.15 },
     color: '#b6f07a', range: 1400, knock: 95, sound: 'rifle', pierce: 1, noise: 880,
     fb: { d0: 420, min: 0.90 },
+    vis: { mag: 'curved', bullpup: true, carry: true },
     bars: { dmg: .50, rate: .74, mag: .60, acc: .86 },
   },
   ak12: {
@@ -2923,6 +2926,7 @@ const WEAPONS = {
         ads: { spread: 0.42, move: 0.62, time: 0.17 },
     color: '#8fd4ff', range: 1450, knock: 95, sound: 'rifle', pierce: 1, noise: 900,
     fb: { d0: 360, min: 0.82 },
+    vis: { mag: 'curved', carry: true },
     bars: { dmg: .50, rate: .77, mag: .60, acc: .84 },
   },
   qbz192: {
@@ -2933,6 +2937,7 @@ const WEAPONS = {
         ads: { spread: 0.50, move: 0.66, time: 0.13 },
     color: '#f2b8ff', range: 1000, knock: 78, sound: 'rifle', pierce: 1, noise: 860,
     fb: { d0: 260, min: 0.68 },
+    vis: { mag: 'curved', bullpup: true, carry: true },
     bars: { dmg: .46, rate: .86, mag: .60, acc: .74 },
   },
   qbz191: {
@@ -2943,6 +2948,7 @@ const WEAPONS = {
         ads: { spread: 0.40, move: 0.62, time: 0.20 },
     color: '#7af0d8', range: 1600, knock: 100, sound: 'rifle', pierce: 1, noise: 910,
     fb: { d0: 460, min: 0.95 },
+    vis: { mag: 'curved', carry: true },
     bars: { dmg: .54, rate: .70, mag: .60, acc: .90 },
   },
   sr9: {
@@ -2961,6 +2967,7 @@ const WEAPONS = {
     bspeed: 2800, mag: 5, reload: 2.7, recoil: 16, size: 4.2, reserveMul: 5,
         ads: { spread: 0.18, move: 0.44, time: 0.30 },
     color: '#9fd4ff', range: 2600, knock: 260, sound: 'sniper', pierce: 3, noise: 1250,
+    vis: { bolt: true },
     bars: { dmg: .95, rate: .10, mag: .14, acc: 1.0 },
   },
   awm: {
@@ -2970,6 +2977,7 @@ const WEAPONS = {
     bspeed: 2900, mag: 5, reload: 3.0, recoil: 18, size: 4.4, reserveMul: 5,
         ads: { spread: 0.15, move: 0.40, time: 0.33 },
     color: '#e8f4ff', range: 2800, knock: 300, sound: 'sniper', pierce: 4, noise: 1300,
+    vis: { bolt: true },
     bars: { dmg: 1.0, rate: .09, mag: .14, acc: 1.0 },
   },
 
@@ -2981,6 +2989,7 @@ const WEAPONS = {
     bspeed: 1150, mag: 35, reload: 1.70, recoil: 1.6, size: 2.8, reserveMul: 4,
         ads: { spread: 0.60, move: 0.66, time: 0.14 },
     color: '#a8e6ff', range: 700, knock: 44, sound: 'smg', noise: 600,
+    vis: { mag: 'straight', len: 17, sidel: 58 },
     bars: { dmg: .34, rate: .92, mag: .78, acc: .42 },
   },
   thompson: {
@@ -2991,6 +3000,7 @@ const WEAPONS = {
         ads: { spread: 0.62, move: 0.62, time: 0.16 },
     color: '#ffc9a3', range: 640, knock: 68, sound: 'smg', noise: 640,
     fb: { d0: 180, min: 0.60 },
+    vis: { mag: 'drum', wood: true, len: 21, sidel: 66 },
     bars: { dmg: .42, rate: .80, mag: .68, acc: .40 },
   },
   mp7: {
@@ -3000,6 +3010,7 @@ const WEAPONS = {
     bspeed: 1250, mag: 40, reload: 1.60, recoil: 1.3, size: 2.6, reserveMul: 4,
         ads: { spread: 0.58, move: 0.68, time: 0.13 },
     color: '#b0ffd8', range: 720, knock: 40, sound: 'smg', noise: 560,
+    vis: { mag: 'stick', len: 14, sidel: 50 },
     bars: { dmg: .30, rate: .96, mag: .86, acc: .38 },
   },
   vector: {
@@ -3010,6 +3021,7 @@ const WEAPONS = {
         ads: { spread: 0.58, move: 0.66, time: 0.14 },
     color: '#d6c8ff', range: 600, knock: 52, sound: 'smg', noise: 580,
     fb: { d0: 160, min: 0.58 },
+    vis: { mag: 'stick', len: 15, sidel: 52 },
     bars: { dmg: .36, rate: 1.0, mag: .62, acc: .44 },
   },
 
@@ -3022,6 +3034,7 @@ const WEAPONS = {
         ads: { spread: 0.54, move: 0.52, time: 0.22 },
     color: '#ff8f5e', range: 1200, knock: 125, sound: 'lmg', pierce: 1, noise: 1000,
     fb: { d0: 320, min: 0.70 },
+    vis: { mag: 'curved', len: 30, sidel: 80 },
     bars: { dmg: .64, rate: .62, mag: .72, acc: .68 },
   },
   m249: {
@@ -3032,6 +3045,7 @@ const WEAPONS = {
         ads: { spread: 0.56, move: 0.46, time: 0.26 },
     color: '#c9a3ff', range: 1400, knock: 100, sound: 'lmg', pierce: 1, noise: 1050,
     fb: { d0: 360, min: 0.82 },
+    vis: { mag: 'box', len: 32, sidel: 84 },
     bars: { dmg: .50, rate: .80, mag: 1.0, acc: .60 },
   },
   pkm: {
@@ -3042,6 +3056,7 @@ const WEAPONS = {
         ads: { spread: 0.58, move: 0.42, time: 0.28 },
     color: '#ff6f8f', range: 1350, knock: 140, sound: 'lmg', pierce: 2, noise: 1150,
     fb: { d0: 330, min: 0.72 },
+    vis: { mag: 'box', len: 34, sidel: 88 },
     bars: { dmg: .68, rate: .66, mag: .90, acc: .56 },
   },
 
@@ -3054,6 +3069,7 @@ const WEAPONS = {
         ads: { spread: 0.44, move: 0.64, time: 0.15 },
     color: '#ffc98f', range: 1100, knock: 92, sound: 'rifle', pierce: 1, noise: 700,
     fb: { d0: 300, min: 0.76 },
+    vis: { mag: 'straight', len: 23, sidel: 70 },
     bars: { dmg: .56, rate: .78, mag: .60, acc: .78 },
   },
   aug: {
@@ -3064,6 +3080,7 @@ const WEAPONS = {
         ads: { spread: 0.40, move: 0.62, time: 0.13 },
     color: '#9fffc4', range: 1450, knock: 95, sound: 'rifle', pierce: 1, noise: 890,
     fb: { d0: 380, min: 0.86 },
+    vis: { mag: 'straight', bullpup: true, len: 25, sidel: 74 },
     bars: { dmg: .52, rate: .74, mag: .60, acc: .84 },
   },
   hk416: {
@@ -3074,6 +3091,7 @@ const WEAPONS = {
         ads: { spread: 0.40, move: 0.62, time: 0.16 },
     color: '#8fb8ff', range: 1550, knock: 100, sound: 'rifle', pierce: 1, noise: 900,
     fb: { d0: 390, min: 0.88 },
+    vis: { mag: 'straight' },
     bars: { dmg: .53, rate: .72, mag: .60, acc: .88 },
   },
   sr3m: {
@@ -3084,6 +3102,7 @@ const WEAPONS = {
         ads: { spread: 0.48, move: 0.64, time: 0.16 },
     color: '#ffb8a0', range: 850, knock: 105, sound: 'rifle', pierce: 1, noise: 820,
     fb: { d0: 220, min: 0.60 },
+    vis: { mag: 'straight', supp: true, len: 21, sidel: 62 },
     bars: { dmg: .58, rate: .72, mag: .44, acc: .70 },
   },
   k437: {
@@ -3094,6 +3113,7 @@ const WEAPONS = {
         ads: { spread: 0.40, move: 0.62, time: 0.17 },
     color: '#a0e8ff', range: 1500, knock: 95, sound: 'rifle', pierce: 1, noise: 880,
     fb: { d0: 410, min: 0.90 },
+    vis: { mag: 'straight' },
     bars: { dmg: .50, rate: .76, mag: .60, acc: .88 },
   },
   asval: {
@@ -3104,6 +3124,7 @@ const WEAPONS = {
         ads: { spread: 0.46, move: 0.62, time: 0.17 },
     color: '#c0b8ff', range: 900, knock: 110, sound: 'rifle', pierce: 1, noise: 340,
     fb: { d0: 240, min: 0.62 },
+    vis: { mag: 'straight', supp: true, len: 23, sidel: 68 },
     bars: { dmg: .60, rate: .70, mag: .44, acc: .72 },
   },
 
@@ -3116,6 +3137,7 @@ const WEAPONS = {
         ads: { spread: 0.34, move: 0.58, time: 0.22 },
     color: '#e8c88f', range: 1350, knock: 130, sound: 'dmr', pierce: 1, noise: 960,
     fb: { d0: 300, min: 0.72 },
+    vis: { mag: 'straight', wood: true, bolt: true },
     bars: { dmg: .60, rate: .44, mag: .36, acc: .88 },
   },
   m14: {
@@ -3125,6 +3147,7 @@ const WEAPONS = {
     bspeed: 2000, mag: 20, reload: 2.3, recoil: 6.5, size: 3.8, reserveMul: 5,
         ads: { spread: 0.32, move: 0.56, time: 0.23 },
     color: '#aef2b0', range: 1800, knock: 145, sound: 'dmr', pierce: 1, noise: 1040,
+    vis: { mag: 'straight', wood: true, bolt: true },
     bars: { dmg: .66, rate: .42, mag: .46, acc: .92 },
   },
   sr25: {
@@ -3134,6 +3157,7 @@ const WEAPONS = {
     bspeed: 2100, mag: 20, reload: 2.5, recoil: 7.5, size: 4.0, reserveMul: 5,
         ads: { spread: 0.28, move: 0.52, time: 0.26 },
     color: '#b8f2ff', range: 2000, knock: 160, sound: 'dmr', pierce: 2, noise: 1100,
+    vis: { mag: 'straight' },
     bars: { dmg: .74, rate: .40, mag: .46, acc: .95 },
   },
 
@@ -3145,6 +3169,7 @@ const WEAPONS = {
     bspeed: 2850, mag: 5, reload: 2.8, recoil: 17, size: 4.3, reserveMul: 5,
         ads: { spread: 0.16, move: 0.42, time: 0.31 },
     color: '#c8e4ff', range: 2700, knock: 270, sound: 'sniper', pierce: 3, noise: 1280,
+    vis: { bolt: true, sidel: 88 },
     bars: { dmg: .97, rate: .10, mag: .14, acc: 1.0 },
   },
 };
@@ -14867,10 +14892,12 @@ function drawPickups() {
 /* 每种枪的剪影都不一样：枪管长度、弹鼓/弹匣、瞄具、脚架 */
 function drawPlayerGun(W, rec) {
   const cat = W.cat;
-  const len = cat === 'sniper' ? 36 : cat === 'dmr' ? 30 : cat === 'rifle' ? 26
-    : cat === 'lmg' ? 30 : cat === 'shotgun' ? 26 : cat === 'smg' ? 19 : 13;
+  const V = W.vis || {};                                       // 每把枪的外观特征：弹匣形制/无托/自带消音/木质件
+  const len = V.len || (cat === 'sniper' ? 36 : cat === 'dmr' ? 30 : cat === 'rifle' ? 26
+    : cat === 'lmg' ? 30 : cat === 'shotgun' ? 26 : cat === 'smg' ? 19 : 13);
   const gx = P.r * 0.5 + rec;
   const hw = cat === 'shotgun' ? 4 : cat === 'lmg' ? 4.2 : 3.4;
+  const magKind = V.mag || (cat === 'smg' ? 'helix' : cat === 'lmg' ? 'box' : 'curved');
 
   ctx.fillStyle = '#48657b';                                   // 机匣
   ctx.fillRect(gx - 3, -hw - 2.4, 12, hw * 2 + 4.8);
@@ -14878,6 +14905,10 @@ function drawPlayerGun(W, rec) {
   ctx.fillRect(gx, -hw, len - 6, hw * 2);
   ctx.fillStyle = '#1a2733';                                   // 枪口
   ctx.fillRect(gx + len - 7, -hw + 0.5, 8, hw * 2 - 1);
+  if (V.wood) {                                                // 木质护木：经典枪一眼认出
+    ctx.fillStyle = '#5d4426';
+    ctx.fillRect(gx + 3, -hw - 1.4, Math.min(14, len - 12), hw * 2 + 2.8);
+  }
 
   if (cat === 'pistol') {
     ctx.fillStyle = '#6d8fa6';
@@ -14885,31 +14916,61 @@ function drawPlayerGun(W, rec) {
     ctx.fillStyle = '#2b3c4a';
     ctx.fillRect(gx + 1, hw - 1, 5, 9);                        // 握把
   } else if (cat === 'smg') {
-    ctx.fillStyle = '#2b3c4a';                                 // 螺旋弹鼓
-    ctx.beginPath(); ctx.arc(gx + 5, hw + 6, 6.5, 0, TAU); ctx.fill();
-    ctx.strokeStyle = 'rgba(142,242,255,0.55)'; ctx.lineWidth = 1.2;
-    ctx.beginPath(); ctx.arc(gx + 5, hw + 6, 6.5, 0, TAU); ctx.stroke();
-    ctx.beginPath(); ctx.arc(gx + 5, hw + 6, 2.4, 0, TAU); ctx.stroke();
+    if (magKind === 'helix' || magKind === 'drum') {           // 螺旋弹鼓（野牛）/ 圆弹鼓（汤姆逊）
+      const r = magKind === 'drum' ? 7.6 : 6.5;
+      ctx.fillStyle = '#2b3c4a';
+      ctx.beginPath(); ctx.arc(gx + 5, hw + 6, r, 0, TAU); ctx.fill();
+      ctx.strokeStyle = 'rgba(142,242,255,0.55)'; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(gx + 5, hw + 6, r, 0, TAU); ctx.stroke();
+      ctx.beginPath(); ctx.arc(gx + 5, hw + 6, 2.4, 0, TAU); ctx.stroke();
+    } else {                                                   // 直弹匣（MP7 / Vector / MK4）
+      ctx.fillStyle = '#2b3c4a';
+      ctx.fillRect(gx + 3, hw - 0.5, magKind === 'stick' ? 3.4 : 5, 9);
+    }
     ctx.fillStyle = '#40607a';
     ctx.fillRect(gx - 10, -hw - 2.8, 10, 4);                   // 上翘枪托
   } else if (cat === 'shotgun') {
-    ctx.fillStyle = '#8a6534';
+    ctx.fillStyle = V.wood ? '#5d4426' : '#8a6534';
     ctx.fillRect(gx + 7, hw - 0.5, 14, 4.8);                   // 泵管护木
     ctx.fillStyle = '#2b3c4a';
     ctx.fillRect(gx + 6, hw + 3.6, 3, 3.4);
   } else if (cat === 'rifle') {
-    ctx.fillStyle = '#2b3c4a';                                 // 弯弹匣
-    ctx.beginPath();
-    ctx.moveTo(gx + 2, hw); ctx.lineTo(gx + 8, hw);
-    ctx.lineTo(gx + 10, hw + 9); ctx.lineTo(gx + 4, hw + 9);
-    ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#5a7d96';
-    ctx.fillRect(gx + 1, -hw - 3.4, 10, 2.2);                  // 提把
+    if (V.bullpup) {                                           // 无托布局：弹匣在机匣后方、握把前移
+      ctx.fillStyle = '#2b3c4a';
+      ctx.beginPath();
+      ctx.moveTo(gx - 8, hw); ctx.lineTo(gx - 2, hw);
+      ctx.lineTo(gx, hw + 9); ctx.lineTo(gx - 6, hw + 9);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#40607a';
+      ctx.fillRect(gx + 3, hw + 1, 5, 8);                      // 前移的握把
+    } else {
+      ctx.fillStyle = '#2b3c4a';                               // 弹匣：弯（AK/QBZ）或直（AR 系）
+      ctx.beginPath();
+      ctx.moveTo(gx + 2, hw); ctx.lineTo(gx + 8, hw);
+      if (magKind === 'curved') {
+        ctx.lineTo(gx + 10, hw + 9); ctx.lineTo(gx + 4, hw + 9);
+      } else {
+        ctx.lineTo(gx + 9, hw + 9); ctx.lineTo(gx + 3, hw + 9);
+      }
+      ctx.closePath(); ctx.fill();
+      if (V.carry) {                                           // 提把：QBZ 家族 / AK-12
+        ctx.fillStyle = '#5a7d96';
+        ctx.fillRect(gx + 1, -hw - 3.4, 10, 2.2);
+      }
+    }
   } else if (cat === 'lmg') {
-    ctx.fillStyle = '#2b3c4a';                                 // 弹箱
-    ctx.fillRect(gx + 1, hw + 1.5, 11, 10);
-    ctx.fillStyle = '#48657b';
-    ctx.fillRect(gx + 2.5, hw + 3, 8, 2.2);                    // 弹箱盖
+    if (magKind === 'curved') {                                // RPK：长弯弹匣，不背弹箱
+      ctx.fillStyle = '#2b3c4a';
+      ctx.beginPath();
+      ctx.moveTo(gx + 2, hw); ctx.lineTo(gx + 8, hw);
+      ctx.lineTo(gx + 11, hw + 12); ctx.lineTo(gx + 5, hw + 12);
+      ctx.closePath(); ctx.fill();
+    } else {                                                   // M249 / PKM：弹箱
+      ctx.fillStyle = '#2b3c4a';
+      ctx.fillRect(gx + 1, hw + 1.5, 11, 10);
+      ctx.fillStyle = '#48657b';
+      ctx.fillRect(gx + 2.5, hw + 3, 8, 2.2);                  // 弹箱盖
+    }
     ctx.fillStyle = '#5a7d96';
     ctx.fillRect(gx + 1, -hw - 3.4, 12, 2.2);                  // 提把
     ctx.strokeStyle = '#5a7d96'; ctx.lineWidth = 1.2;          // 两脚架
@@ -14928,6 +14989,12 @@ function drawPlayerGun(W, rec) {
     ctx.fillStyle = '#0e161d';
     ctx.fillRect(gx, sy, 2.8, big ? 4.4 : 3.6);                // 前后镜环
     ctx.fillRect(gx + sl - 2.2, sy, 2.8, big ? 4.4 : 3.6);
+    if (V.bolt) {                                              // 栓动拉柄：R93 / M700 / AWM / SKS / M14
+      ctx.strokeStyle = '#6d8fa6'; ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(gx + 8, -hw - 1); ctx.lineTo(gx + 12, -hw - 5);
+      ctx.stroke();
+    }
     if (big) {                                                 // 脚架
       ctx.strokeStyle = '#5a7d96'; ctx.lineWidth = 1.5;
       ctx.beginPath();
@@ -14941,7 +15008,7 @@ function drawPlayerGun(W, rec) {
   const S = W.slots || {};
   const muzzleX = gx + len - 7;
 
-  if (S.muzzle === 'supp') {                                   // 消音器：粗圆筒
+  if (S.muzzle === 'supp' || V.supp) {                         // 消音器：粗圆筒（AS VAL / SR-3M 自带）
     ctx.fillStyle = '#22333f';
     ctx.fillRect(muzzleX - 2, -hw - 1.4, 15, hw * 2 + 2.8);
     ctx.fillStyle = '#0e161d';
@@ -15015,6 +15082,7 @@ function drawPlayerGun(W, rec) {
 /* 侧视轮廓长度（改装台与预览共用）：手枪按弹匣容量分三档，
    93R 长管 / G18 长弹匣 / G17 制式尺寸，一眼能分开 */
 function gunSideLen(W) {
+  if (W.vis && W.vis.sidel) return W.vis.sidel;                // 每枪覆盖：短管冲锋枪 / 卡宾长度差异
   const c = W.cat;
   if (c === 'sniper') return 92;
   if (c === 'dmr') return 86;
@@ -15029,6 +15097,11 @@ function drawGunSide(g, W) {
   const cat = W.cat;
   const S = W.slots || {};
   const L = gunSideLen(W);
+  const V = W.vis || {};
+  const magKind = V.mag || (cat === 'smg' ? 'helix' : cat === 'lmg' ? 'box' : 'curved');
+  const bullpup = !!V.bullpup;                                 // 无托布局：握把/扳机前移，弹匣在机匣后方
+  const FG = V.wood ? '#5d4426' : '#33475a';                   // 护木配色：木质件用木色
+  const STK = V.wood ? '#4a3520' : null;
   const C = {
     body: '#33475a',
     body2: '#45627b',
@@ -15036,6 +15109,10 @@ function drawGunSide(g, W) {
     dark: '#141d27',
     accent: W.color,
   };
+  /* 布局：常规枪 弹匣前/握把后；无托枪反过来 */
+  const trigX = bullpup ? L * 0.44 : L * 0.58;
+  const gripX = bullpup ? L * 0.47 : L * 0.61;
+  const magX  = bullpup ? L * 0.565 : L * 0.375;
 
   const rr = (x, y, w, h, r) => {
     const rd = Math.max(0, Math.min(r, Math.abs(w) / 2, Math.abs(h) / 2));
@@ -15056,7 +15133,7 @@ function drawGunSide(g, W) {
   g.fillRect(bEnd + 1, -1.7, Math.max(0, L * 0.42 - bEnd - 4), 1);
 
   /* 护木 */
-  g.fillStyle = C.body;
+  g.fillStyle = FG;
   rr(L * 0.17, -4, L * 0.17, 8, 1.4); g.fill();
   g.fillStyle = 'rgba(0,0,0,0.25)';
   if (cat === 'shotgun') {                      // 泵管
@@ -15072,36 +15149,44 @@ function drawGunSide(g, W) {
   /* 抛壳口 + 拉机柄 */
   g.fillStyle = C.dark;
   g.fillRect(L * 0.50, -3.4, Math.max(4, L * 0.08), 2.6);
+  if (V.bolt) {                                 // 栓动 / 直拉枪机：拉柄斜上伸出
+    g.strokeStyle = C.metal; g.lineWidth = 1.6;
+    g.beginPath();
+    g.moveTo(L * 0.555, -3.2); g.lineTo(L * 0.555 + 5, -7.2);
+    g.stroke();
+    g.fillStyle = C.metal;
+    g.beginPath(); g.arc(L * 0.555 + 5.6, -7.8, 1.7, 0, TAU); g.fill();
+  }
 
   /* 扳机护圈 */
   g.strokeStyle = C.body;
   g.lineWidth = 1.3;
   g.beginPath();
-  g.arc(L * 0.58, 7.6, 3.4, Math.PI * 1.02, Math.PI * 1.98);
+  g.arc(trigX, 7.6, 3.4, Math.PI * 1.02, Math.PI * 1.98);
   g.stroke();
 
   /* 握把 */
   g.fillStyle = C.dark;
   g.beginPath();
-  g.moveTo(L * 0.61, 4.6); g.lineTo(L * 0.665, 4.6);
-  g.lineTo(L * 0.715, 16.5); g.lineTo(L * 0.64, 16.5);
+  g.moveTo(gripX, 4.6); g.lineTo(gripX + L * 0.055, 4.6);
+  g.lineTo(gripX + L * 0.105, 16.5); g.lineTo(gripX + L * 0.03, 16.5);
   g.closePath(); g.fill();
 
   /* 握把配件 */
   if (S.grip === 'vgrip') {
     g.fillStyle = '#22394c';
-    rr(L * 0.625, 8.5, 4.4, 8, 1); g.fill();
+    rr(gripX + L * 0.015, 8.5, 4.4, 8, 1); g.fill();
     g.strokeStyle = 'rgba(120,200,240,0.5)'; g.lineWidth = 0.9;
     for (let i = 0; i < 3; i++) {
       g.beginPath();
-      g.moveTo(L * 0.635, 9.6 + i * 2);
-      g.lineTo(L * 0.665, 9.6 + i * 2);
+      g.moveTo(gripX + L * 0.025, 9.6 + i * 2);
+      g.lineTo(gripX + L * 0.055, 9.6 + i * 2);
       g.stroke();
     }
   } else if (S.grip === 'lgrip') {
     g.strokeStyle = 'rgba(150,210,235,0.55)'; g.lineWidth = 1;
     g.beginPath();
-    g.moveTo(L * 0.635, 6.5); g.lineTo(L * 0.70, 15);
+    g.moveTo(gripX + L * 0.025, 6.5); g.lineTo(gripX + L * 0.09, 15);
     g.stroke();
   } else if (S.grip === 'laser') {
     g.fillStyle = '#1b2836';
@@ -15110,22 +15195,32 @@ function drawGunSide(g, W) {
     g.beginPath(); g.arc(L * 0.47 + 1, 6.2, 1.1, 0, TAU); g.fill();
   }
 
-  /* 弹匣 / 供弹 */
+  /* 弹匣 / 供弹 —— 按每把枪的 magKind 画：螺旋弹鼓/圆弹鼓/弹箱/直弹匣/细长条/弯弹匣 */
   if (cat !== 'shotgun') {
     let mh = cat === 'pistol' ? (W.mag >= 30 ? 18 : W.mag >= 19 ? 12 : 10) : 13;
     let mw = 6;
     if (S.mag === 'extmag') mh = cat === 'pistol' ? 20 : 20;
     else if (S.mag === 'quickmag') { mh = 11; mw = 6.4; }
     else if (S.mag === 'lightmag') mh = 10;
-    const mx = L * 0.375;
+    const mx = magX;
 
-    if (cat === 'smg') {                        // 冲锋枪：螺旋弹鼓
+    if (magKind === 'helix') {                  // 野牛：螺旋弹鼓
       g.fillStyle = C.body;
       g.beginPath(); g.arc(mx + 4, 9.5, 6.4 + (S.mag === 'extmag' ? 1.6 : 0), 0, TAU); g.fill();
       g.strokeStyle = 'rgba(142,242,255,0.45)'; g.lineWidth = 0.9;
       g.beginPath(); g.arc(mx + 4, 9.5, 6.4 + (S.mag === 'extmag' ? 1.6 : 0), 0, TAU); g.stroke();
       g.beginPath(); g.arc(mx + 4, 9.5, 2.3, 0, TAU); g.stroke();
-    } else if (cat === 'lmg') {                 // 机枪：方弹箱
+    } else if (magKind === 'drum') {            // 汤姆逊：圆弹鼓
+      const dr = 7.6 + (S.mag === 'extmag' ? 1.4 : 0);
+      g.fillStyle = '#243546';
+      g.beginPath(); g.arc(mx + 4, 9, dr, 0, TAU); g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.10)';
+      g.beginPath(); g.arc(mx + 4, 9, dr * 0.45, 0, TAU); g.fill();
+      if (S.mag === 'quickmag') {
+        g.strokeStyle = 'rgba(255,206,110,0.9)'; g.lineWidth = 1.2;
+        g.beginPath(); g.arc(mx + 4, 9, dr, 0, TAU); g.stroke();
+      }
+    } else if (magKind === 'box' || magKind === 'belt') {   // 机枪：方弹箱（M249 / PKM）
       g.fillStyle = '#243546';
       rr(mx - 1.5, 4, 11.5, 15 + (S.mag === 'extmag' ? 2.5 : 0), 1.6); g.fill();
       g.fillStyle = 'rgba(255,255,255,0.10)';
@@ -15134,11 +15229,22 @@ function drawGunSide(g, W) {
         g.fillStyle = 'rgba(255,206,110,0.9)';
         g.fillRect(mx - 1.5, 6.5, 11.5, 1.6);
       }
-    } else {
+    } else if (magKind === 'stick') {           // 细长直弹匣（MP7 / Vector）
       g.fillStyle = '#243546';
+      g.fillRect(mx + 1, 4, 3.6, mh + (S.mag === 'extmag' ? 6 : 0));
+      if (S.mag === 'quickmag') {
+        g.fillStyle = 'rgba(255,206,110,0.9)';
+        g.fillRect(mx + 1, 6, 3.6, 1.4);
+      }
+    } else {
+      g.fillStyle = '#243546';                  // 弹匣：弯（AK/QBZ 系）或直（AR 系）
       g.beginPath();
       g.moveTo(mx, 4); g.lineTo(mx + mw, 4);
-      g.lineTo(mx + mw + 1.6, 4 + mh); g.lineTo(mx + 1.2, 4 + mh);
+      if (magKind === 'curved') {
+        g.lineTo(mx + mw + 1.6, 4 + mh); g.lineTo(mx + 1.2, 4 + mh);
+      } else {
+        g.lineTo(mx + mw + 0.4, 4 + mh); g.lineTo(mx + 0.4, 4 + mh);
+      }
       g.closePath(); g.fill();
       if (S.mag === 'quickmag') {
         g.fillStyle = 'rgba(255,206,110,0.9)';
@@ -15177,7 +15283,7 @@ function drawGunSide(g, W) {
     g.fillStyle = C.dark;
     rr(sx + L * 0.21, -7.8, L * 0.06, 15.6, 1.6); g.fill();
   } else {
-    g.fillStyle = C.body2;
+    g.fillStyle = STK || C.body2;
     g.beginPath();
     g.moveTo(sx, -5.4); g.lineTo(sx + L * 0.13, -5);
     g.lineTo(sx + L * 0.14, 4.6); g.lineTo(sx + L * 0.13, 6.4);
@@ -15215,8 +15321,8 @@ function drawGunSide(g, W) {
     g.fillRect(L * 0.69, -8, 1.8, 2.2);        // 照门
   }
 
-  /* 枪口配件 */
-  if (S.muzzle === 'supp') {
+  /* 枪口配件（AS VAL / SR-3M 的自带消音同样画粗圆筒） */
+  if (S.muzzle === 'supp' || V.supp) {
     g.fillStyle = C.dark;
     rr(-17, -4.6, 19, 9.2, 2.2); g.fill();
     g.strokeStyle = 'rgba(150,195,220,0.5)'; g.lineWidth = 0.7;
