@@ -123,6 +123,22 @@
   .saveio textarea { width:100%; height:86px; resize:vertical; box-sizing:border-box; background:rgba(8,16,24,.65); border:1px solid rgba(80,140,185,.28); border-radius:3px; color:#9fd8ef; font:600 11px ui-monospace,Consolas,monospace; padding:8px; outline:none; }
   .saveio textarea:focus { border-color:rgba(67,217,245,.5); }
 
+  /* ══════════ 委托 ══════════ */
+  .ct-list { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:10px; }
+  @media (max-width:860px){ .ct-list { grid-template-columns:1fr; } }
+  .ctcard { border:1px solid rgba(80,140,185,.20); background:rgba(255,255,255,.03); border-radius:6px; padding:12px 13px; display:flex; flex-direction:column; gap:7px; min-width:0; }
+  .ctcard.done { border-color:rgba(70,224,138,.45); background:rgba(26,70,48,.30); }
+  .ctcard.ready { border-color:rgba(255,204,77,.55); background:rgba(64,48,14,.30); box-shadow:0 0 14px rgba(255,204,77,.10); }
+  .ctcard h5 { font-size:13px; font-weight:800; color:#dff1fb; letter-spacing:.04em; display:flex; justify-content:space-between; gap:8px; align-items:baseline; }
+  .ctcard h5 span { font-size:11px; color:#ffcc4d; font-weight:800; flex:none; }
+  .ctcard .cd { font-size:11px; color:#8fa8ba; line-height:1.55; }
+  .ctcard .ctbar { height:5px; border-radius:3px; background:rgba(255,255,255,.09); overflow:hidden; }
+  .ctcard .ctbar i { display:block; height:100%; background:linear-gradient(90deg,#43d9f5,#6ee7b7); }
+  .ctcard.ready .ctbar i { background:linear-gradient(90deg,#ffcc4d,#ff9d2e); }
+  .ctcard .ctfoot { display:flex; justify-content:space-between; align-items:center; gap:8px; font:700 10px ui-monospace,Consolas,monospace; color:#6f9ab2; }
+  .ctcard button { font-family:inherit; font-size:10px; letter-spacing:.08em; padding:4px 9px; border-radius:3px; cursor:pointer; border:1px solid rgba(255,204,77,.5); background:rgba(255,204,77,.12); color:#ffd77a; }
+  .ctcard button:disabled { opacity:.35; cursor:default; border-color:rgba(120,150,175,.3); background:transparent; color:#7f93a6; }
+
   /* ══════════ 图鉴 ══════════ */
   .cdx { padding:8px 10px; border:1px solid rgba(80,140,185,.16); border-radius:3px; background:rgba(10,18,26,.55); display:flex; gap:9px; align-items:center; min-width:0; }
   .cdx.locked { opacity:.4; filter:grayscale(.7); }
@@ -225,7 +241,7 @@
     letter-spacing:.1em;
   }
 
-  .footbar { display:flex; align-items:center; gap:12px; }
+  .footbar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
   .footbar .stats { margin-left:auto; font-size:11px; color:#4b6b80; letter-spacing:.1em; }
   .footbar .stats b { color:#7fb8d6; font-weight:700; }
 
@@ -420,6 +436,14 @@
   .stashnote b { color:#ffb02e; }
 
   /* ── 整备（左装备 · 右仓库）── */
+  .lo-presets { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:8px; margin-bottom:16px; }
+  .prcard { border:1px solid rgba(80,140,185,.22); background:rgba(8,16,24,.62); border-radius:4px; padding:8px 10px; display:flex; flex-direction:column; gap:5px; min-width:0; }
+  .prcard .prn { font-size:12px; font-weight:800; color:#dff1fb; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .prcard .prs { font:600 10px ui-monospace,Consolas,monospace; color:#6f9ab2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .prcard .prb { display:flex; gap:6px; flex-wrap:wrap; }
+  .prcard button { font-family:inherit; font-size:10px; letter-spacing:.06em; padding:3px 8px; border-radius:3px; cursor:pointer; border:1px solid rgba(80,140,185,.42); background:rgba(80,140,185,.10); color:#a9d6ea; }
+  .prcard button.apply { border-color:rgba(70,224,138,.5); background:rgba(70,224,138,.12); color:#8df0b6; }
+  .prcard button:disabled { opacity:.35; cursor:default; }
   .lo-wrap { display:flex; gap:18px; min-height:0; flex:1; }
   .lo-panel { width:340px; flex:none; display:flex; flex-direction:column; min-height:0; }
   .lo-main { flex:1; display:flex; flex-direction:column; min-height:0; overflow-y:auto; }
@@ -857,6 +881,7 @@
       <button id="gunsmithBtn" class="btn ghost">改 装 台<span id="modBadge" class="cnt hidden">0</span></button>
       <button id="stashBtn" class="btn ghost">仓 库<span id="stashBadge" class="cnt hidden">0</span></button>
       <button id="achBtn" class="btn ghost">成 就<span id="achBadge" class="cnt hidden">0</span></button>
+      <button id="ctBtn" class="btn ghost">委 托<span id="ctBadge" class="cnt hidden">0</span></button>
       <button id="codexBtn" class="btn ghost">图 鉴<span id="codexBadge" class="cnt hidden">0</span></button>
       <button id="loadoutBtn" class="btn ghost">整 备</button>
       <button id="mapBtn" class="btn ghost">地 图</button>
@@ -916,6 +941,8 @@
     </header>
     <div class="lo-wrap">
       <section class="lo-main">
+        <div class="lo-ttl">配 装 预 设<b id="loPresetNote">存 3 套常用配装 · 一键换回（不含容器里的东西）</b></div>
+        <div class="lo-presets" id="loPresets"></div>
         <div class="lo-ttl">武 器<b id="loGunNote"></b></div>
         <div class="lo-slots">
           <div class="lo-slot" id="loSlotPrimary"></div>
@@ -1095,6 +1122,28 @@
   </div>
 </div>
 
+<!-- ══════════ 委托 ══════════ -->
+<div id="contracts" class="overlay hidden">
+  <div class="frame">
+    <header class="topbar">
+      <div class="logo" style="font-size:22px">委 托</div>
+      <div class="wallet"><i>¥</i><b id="ctCredit">0</b></div>
+      <button id="closeContracts" class="btn ghost small">返回大厅</button>
+    </header>
+    <div class="card">
+      <div class="stashsum" style="margin-bottom:12px">
+        今日委托 <b id="ctDay">—</b> · 完成 <b id="ctDone">0</b> / <b id="ctTotal">3</b> · 待领奖金 <b id="ctReady">¥0</b>
+      </div>
+      <div id="ctList" class="ct-list"></div>
+      <div class="stashnote">每天 0 点换一批（3 份，进度跨局累计）。达标后回大厅按「领取」结算；未领取的委托换日即作废。打得不顺可以花 ¥2,000 重掷一批。</div>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button id="ctClaimAll" class="btn ghost small">全 部 领 取</button>
+        <button id="ctReroll" class="btn ghost small">重 掷 一 批 · ¥2,000</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ══════════ 设置 ══════════ -->
 <div id="settings" class="overlay hidden">
   <div class="frame" style="max-width:720px">
@@ -1127,6 +1176,11 @@
         <label>小地图</label>
         <button id="setMinimap" class="btn ghost small" style="min-width:92px">开</button>
         <span class="setdesc">右上角显示墙体轮廓、撤离点与自己</span>
+      </div>
+      <div class="setrow">
+        <label>成就追踪</label>
+        <button id="setAchHud" class="btn ghost small" style="min-width:92px">开</button>
+        <span class="setdesc">局内右上角显示本局成就进度（击杀 / 致盲 / 集群…）</span>
       </div>
     </div>
     <div class="card saveio">
@@ -1532,31 +1586,119 @@ const RELIC_IDS = Object.keys(RELICS);
    test(run, st)：run = 本局数据（success/kills/relics/blinds/swarmHits/bleedHits/
    silentKills/noArmor/tier），st = SAVE.stats（累计）。 */
 const ACHIEVEMENTS = [
-  { id: 'first_kill', name: '见血', desc: '完成第一次击杀', reward: 500,
+  { id: 'first_kill', name: '见血', desc: '完成第一次击杀', reward: 500, goal: 1, live: 'kills',
     test: (r, st) => st.kills >= 1 },
   { id: 'first_extract', name: '首战告捷', desc: '第一次成功撤离', reward: 2000,
     test: (r) => r.success },
-  { id: 'heavy_haul', name: '满载而归', desc: '单局撤离携带 15 件收集品', reward: 3000,
+  { id: 'heavy_haul', name: '满载而归', desc: '单局撤离携带 15 件收集品', reward: 3000, goal: 15, live: 'relics',
     test: (r) => r.success && r.relics >= 15 },
   { id: 'no_armor', name: '赤裸的勇气', desc: '不穿护甲完成一次撤离', reward: 2500,
     test: (r) => r.success && r.noArmor },
-  { id: 'butcher', name: '屠夫', desc: '单局击杀 20 名敌人', reward: 4000,
+  { id: 'butcher', name: '屠夫', desc: '单局击杀 20 名敌人', reward: 4000, goal: 20, live: 'kills',
     test: (r) => r.kills >= 20 },
-  { id: 'blind_master', name: '致盲大师', desc: '单局致盲 8 名敌人', reward: 3000,
+  { id: 'blind_master', name: '致盲大师', desc: '单局致盲 8 名敌人', reward: 3000, goal: 8, live: 'blinds',
     test: (r) => r.blinds >= 8 },
-  { id: 'swarm_lord', name: '蜂群之主', desc: '单局流荧集群缠住 4 名敌人', reward: 3000,
+  { id: 'swarm_lord', name: '蜂群之主', desc: '单局流荧集群缠住 4 名敌人', reward: 3000, goal: 4, live: 'swarmHits',
     test: (r) => r.swarmHits >= 4 },
-  { id: 'blood_letter', name: '血书', desc: '单局让 10 名敌人流血', reward: 2500,
+  { id: 'blood_letter', name: '血书', desc: '单局让 10 名敌人流血', reward: 2500, goal: 10, live: 'bleedHits',
     test: (r) => r.bleedHits >= 10 },
-  { id: 'silent_edge', name: '无声之刃', desc: '静默潜袭期间单局击杀 3 人', reward: 3500,
+  { id: 'silent_edge', name: '无声之刃', desc: '静默潜袭期间单局击杀 3 人', reward: 3500, goal: 3, live: 'silentKills',
     test: (r) => r.silentKills >= 3 },
-  { id: 'veteran', name: '老练', desc: '累计成功撤离 10 次', reward: 5000,
+  { id: 'veteran', name: '老练', desc: '累计成功撤离 10 次', reward: 5000, goal: 10, live: 'extracts',
     test: (r, st) => st.extracts >= 10 },
-  { id: 'executioner', name: '尸山血海', desc: '累计击杀 200 名敌人', reward: 8000,
+  { id: 'executioner', name: '尸山血海', desc: '累计击杀 200 名敌人', reward: 8000, goal: 200, live: 'totalKills',
     test: (r, st) => st.kills >= 200 },
   { id: 'top_clear', name: '禁区归来', desc: '从顶级图成功撤离', reward: 6000,
     test: (r) => r.success && r.tier === 'top' },
 ];
+
+/* ═══════ 委托：每日三份，进度跨局累计，回大厅领钱 ═══════
+   metric 决定结算时加什么：kills/extracts/relics/value/blinds/swarmHits/
+   bleedHits/silentKills/topExtracts/highExtracts/raids。
+   目标值按 1~3 局设计 —— 一天清完是「多打两把」的量，不是签到。 */
+const CONTRACTS = [
+  { id: 'ct_kill25',  name: '清场行动', desc: '累计击杀 25 名敌人',                    metric: 'kills',        goal: 25,      reward: 3500 },
+  { id: 'ct_kill45',  name: '血债血偿', desc: '累计击杀 45 名敌人',                    metric: 'kills',        goal: 45,      reward: 6000 },
+  { id: 'ct_ext3',    name: '活着回来', desc: '成功撤离 3 次',                         metric: 'extracts',     goal: 3,       reward: 3000 },
+  { id: 'ct_relic12', name: '搬空仓库', desc: '带出 12 件收集品',                      metric: 'relics',       goal: 12,      reward: 3000 },
+  { id: 'ct_value',   name: '大单生意', desc: '带出收集品总估值 ¥40,000',              metric: 'value',        goal: 40000,   reward: 4000, money: 1 },
+  { id: 'ct_blind6',  name: '熄灯',     desc: '致盲 6 名敌人',                          metric: 'blinds',       goal: 6,       reward: 2800 },
+  { id: 'ct_swarm3',  name: '蜂群战术', desc: '流荧集群命中 3 次',                      metric: 'swarmHits',    goal: 3,       reward: 2600 },
+  { id: 'ct_bleed8',  name: '放血',     desc: '让 8 名敌人流血',                        metric: 'bleedHits',    goal: 8,       reward: 2600 },
+  { id: 'ct_silent2', name: '无声清点', desc: '静默潜袭期间击杀 2 人',                  metric: 'silentKills',  goal: 2,       reward: 3200 },
+  { id: 'ct_top1',    name: '禁区一行', desc: '从绝密行动成功撤离 1 次',                metric: 'topExtracts',  goal: 1,       reward: 5000 },
+  { id: 'ct_high1',   name: '机密档案', desc: '从机密或绝密行动成功撤离 1 次',          metric: 'highExtracts', goal: 1,       reward: 3000 },
+  { id: 'ct_raids4',  name: '连续出勤', desc: '完成 4 次行动（无论成败）',              metric: 'raids',        goal: 4,       reward: 2200 },
+];
+const CONTRACT_BY_ID = {};
+for (const c of CONTRACTS) CONTRACT_BY_ID[c.id] = c;
+
+function contractDay() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function hashStr(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+/* 按日期种子洗三份（同一天同一个人每次打开都是同一批） */
+function pickContracts(seedStr, exclude) {
+  let seed = hashStr(seedStr) || 1;
+  const rnd = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
+  const skip = exclude || {};
+  const pool = CONTRACTS.filter(c => !skip[c.id]);
+  const out = [];
+  while (out.length < 3 && pool.length) out.push(pool.splice(Math.floor(rnd() * pool.length), 1)[0]);
+  return out.map(t => ({ id: t.id, prog: 0, done: 0 }));
+}
+
+function ensureContracts() {
+  if (!SAVE.contracts || !Array.isArray(SAVE.contracts.list) || SAVE.contracts.day !== contractDay() || SAVE.contracts.list.length < 3) {
+    SAVE.contracts = { day: contractDay(), list: pickContracts(contractDay()) };
+    saveGame();
+  }
+  return SAVE.contracts;
+}
+
+/* 结算时推进委托：成功与否都算击杀 / 控场，收集品与撤离类只在成功时算 */
+function updateContracts(success) {
+  const C = ensureContracts();
+  const gain = {
+    kills: G.kills | 0,
+    extracts: success ? 1 : 0,
+    relics: success ? relicCount() : 0,
+    value: success ? (G.lootValue | 0) : 0,
+    blinds: G.blinds | 0,
+    swarmHits: G.swarmHits | 0,
+    bleedHits: G.bleedHits | 0,
+    silentKills: G.silentKills | 0,
+    topExtracts: success && G.tier === 'top' ? 1 : 0,
+    highExtracts: success && G.tier !== 'standard' ? 1 : 0,
+    raids: 1,
+  };
+  let doneN = 0;
+  for (const e of C.list) {
+    const t = CONTRACT_BY_ID[e.id];
+    if (!t || e.done) continue;
+    const before = e.prog | 0;
+    const add = gain[t.metric] | 0;
+    if (add > 0) e.prog = Math.min(t.goal, before + add);
+    if (before < t.goal && (e.prog | 0) >= t.goal) doneN++;   // 只在「这一局刚好达标」时提示
+  }
+  saveGame();
+  return doneN;
+}
+
+function contractReadyN() {
+  ensureContracts();
+  let n = 0;
+  for (const e of SAVE.contracts.list) {
+    const t = CONTRACT_BY_ID[e.id];
+    if (t && !e.done && (e.prog | 0) >= t.goal) n++;
+  }
+  return n;
+}
 
 /* 结算时调用：返回本局新解锁的成就列表（并已写入存档、加了奖金） */
 function checkAchievements(run) {
@@ -1571,6 +1713,53 @@ function checkAchievements(run) {
     out.push(a);
   }
   return out;
+}
+
+/* ── 局内成就进度追踪 ──
+   只有带 live 字段（能实时算出来）的成就进追踪面板：
+   击杀 / 收集品 / 致盲 / 集群 / 流血 / 静默击杀 / 累计撤离 / 累计击杀。
+   「撤离成功」这类只能等结算的（首战告捷 / 赤裸的勇气 / 禁区归来）不列。 */
+const ACH_LIVE = {
+  kills:      () => G.kills | 0,
+  relics:     () => relicCount(),
+  blinds:     () => G.blinds | 0,
+  swarmHits:  () => G.swarmHits | 0,
+  bleedHits:  () => G.bleedHits | 0,
+  silentKills:() => G.silentKills | 0,
+  extracts:   () => SAVE.stats.extracts | 0,
+  totalKills: () => (SAVE.stats.kills | 0) + (G.kills | 0),
+};
+
+function achLiveRows() {
+  const out = [];
+  for (const a of ACHIEVEMENTS) {
+    if (!a.live || !a.goal) continue;
+    if (SAVE.achieved && SAVE.achieved[a.id]) continue;
+    const fn = ACH_LIVE[a.live];
+    if (!fn) continue;
+    let v = 0;
+    try { v = Math.max(0, Math.min(a.goal, fn() | 0)); } catch (e) { v = 0; }
+    out.push({ a, v, n: a.goal, r: v / a.goal });
+  }
+  out.sort((x, y) => y.r - x.r);
+  return out;
+}
+
+function achHudOn() {
+  const s = (SAVE && SAVE.settings) ? SAVE.settings : null;
+  return !s || s.achHud == null ? true : !!s.achHud;
+}
+
+/* 每帧（局内）跑一次：某条第一次达标时飘一条提示 —— 奖金仍留到结算发 */
+function updateAchTracker() {
+  if (!G.achReady) G.achReady = {};
+  if (!achHudOn()) return;
+  const rows = achLiveRows();
+  for (const row of rows) {
+    if (row.r < 1 || G.achReady[row.a.id]) continue;
+    G.achReady[row.a.id] = 1;
+    uiToast('成就达成 · ' + row.a.name + ' · 撤离结算发放', 'small');
+  }
 }
 /* ── 收集品占格：按体积感逐件写死成 [宽, 高]，共八档 ——
       1x1 卡片/印章/小零件   2x1 饭盒/水壶/工具   2x2 方箱/仪器
@@ -2118,9 +2307,11 @@ const DEFAULT_SAVE = () => ({
   mods: {},           // 每把枪装了什么：{ 枪id: { 槽位id: 配件id } }
   stats: { raids: 0, extracts: 0, deaths: 0, loot: 0, kills: 0, sold: 0 },
   achieved: {},        // 已解锁成就：{ 成就id: 1 }（奖励在撤离结算时一次性发放）
+  contracts: { day: '', list: [] },   // 每日委托：{ day:'YYYY-MM-DD', list:[{ id, prog, done }] }
+  presets: [null, null, null],        // 整备预设：3 个槽，各存一份装备快照（不含容器内容）
   soldN: {},           // 每件收集品累计卖出的件数（决定市场价衰减）
   /* 设置：音量 / 震动强度 / 粒子密度 都是 0-100，aim 是准星颜色，minimap 是小地图开关 */
-  settings: { vol: 70, shake: 100, fx: 100, aim: '#b4e6ff', minimap: 1 },
+  settings: { vol: 70, shake: 100, fx: 100, aim: '#b4e6ff', minimap: 1, achHud: 1 },
   seenRelics: {},      // 图鉴：曾经带出来过的收集品 { 收集品id: 1 }（卖掉了也算见过）
   codexReward: {},     // 图鉴：已领取的档位奖励 { common: 1, ... }
 });
@@ -2255,13 +2446,30 @@ function loadSave() {
       mods: cleanGunMods(d.mods),
       stats: Object.assign({ raids: 0, extracts: 0, deaths: 0, loot: 0, kills: 0, sold: 0 }, d.stats || {}),
       achieved: Object.assign({}, d.achieved || {}),
+      contracts: cleanContracts(d.contracts),
+      presets: cleanPresets(d.presets),
       soldN: Object.assign({}, d.soldN || {}),
-      settings: Object.assign({ vol: 70, shake: 100, fx: 100, aim: '#b4e6ff', minimap: 1 }, d.settings || {}),
+      settings: Object.assign({ vol: 70, shake: 100, fx: 100, aim: '#b4e6ff', minimap: 1, achHud: 1 }, d.settings || {}),
       seenRelics: Object.assign({}, d.seenRelics || {}),
       codexReward: Object.assign({}, d.codexReward || {}),
     };
     return S;
   } catch (e) { return base; }
+}
+
+/* 委托清洗：未知 id 丢掉，进度夹在 0~目标之间 */
+function cleanContracts(raw) {
+  const out = { day: '', list: [] };
+  if (!raw || typeof raw !== 'object') return out;
+  out.day = typeof raw.day === 'string' ? raw.day : '';
+  if (Array.isArray(raw.list)) {
+    for (const e of raw.list) {
+      const t = e && CONTRACT_BY_ID[e.id];
+      if (!t) continue;
+      out.list.push({ id: t.id, prog: clamp(Math.floor(Number(e.prog) || 0), 0, t.goal), done: e.done ? 1 : 0 });
+    }
+  }
+  return out;
 }
 
 /* 配装清洗：三把枪各自只能放对应类别的枪，而且必须真的拥有。
@@ -2292,6 +2500,38 @@ function cleanLoadout(d, owned) {
     LO.pistol = pick(eq, 'pistol');
   }
   return LO;
+}
+
+/* 整备预设清洗：3 个槽；枪必须认识、甲/弹挂/背包必须还在目录里。
+   槽位重复的枪让副武器空着（一把枪不能同时占两个槽）。 */
+function cleanPresets(raw) {
+  const out = [null, null, null];
+  if (!Array.isArray(raw)) return out;
+  const gun = (id, kind) => {
+    if (!id || !KNOWN_WEAPON_IDS[id]) return null;
+    const isP = !!PISTOL_IDS[id];
+    return kind === 'pistol' ? (isP ? id : null) : (isP ? null : id);
+  };
+  for (let i = 0; i < 3; i++) {
+    const p = raw[i];
+    if (!p || typeof p !== 'object') continue;
+    const g = (p.guns && typeof p.guns === 'object') ? p.guns : {};
+    const primary = gun(g.primary, 'long');
+    let secondary = gun(g.secondary, 'long');
+    if (secondary === primary) secondary = null;
+    const armor = Math.max(0, Math.min(ARMORS.length - 1, Number(p.armor) | 0));
+    const rig = (p.rig && GEAR[p.rig] && GEAR[p.rig].kind === 'rig') ? p.rig : null;
+    const pack = (p.pack && GEAR[p.pack] && GEAR[p.pack].kind === 'pack') ? p.pack : null;
+    out[i] = {
+      name: (typeof p.name === 'string' && p.name) ? p.name.slice(0, 16) : ('预设 ' + (i + 1)),
+      guns: { primary, secondary, pistol: gun(g.pistol, 'pistol') },
+      melee: MELEES[p.melee] ? p.melee : STARTER_MELEE,
+      armor, rig, pack,
+      care: (typeof p.care === 'string') ? p.care : '',
+      at: Number(p.at) || 0,
+    };
+  }
+  return out;
 }
 
 function cleanOwnedMelee(raw) {
@@ -2601,57 +2841,63 @@ const WEAPONS = {
   },
   akm: {
     cat: 'rifle', label: '步枪 · AKM', short: 'AKM', name: 'AKM', code: 'KALASHNIKOV AKM', price: 3600, cal: '762x39',
-    desc: '7.62×39 的老家伙。单发 40 点、两枪就能把小兵按在地上，但后坐大、散布也大 —— 中距离得靠点射，别一直按着。',
-    dmg: 40, rate: 0.118, spread: 0.030, count: 1, mode: 'auto',
+    role: '重击 · 近距', desc: '7.62×39 的老家伙。单发 44 点，全系步枪里单发最重、贴脸 TTK 最短 —— 八发就能把机枪兵按倒；代价是后坐与散布最大、弹道衰减最狠，中距离必须点射，出了三百步就别指望它。',
+    dmg: 44, rate: 0.117, spread: 0.030, count: 1, mode: 'auto',
     bspeed: 1650, mag: 30, reload: 2.3, recoil: 4.6, size: 3.7, reserveMul: 5,
         ads: { spread: 0.52, move: 0.58, time: 0.19 },
     color: '#ff8f5e', range: 1250, knock: 130, sound: 'ak', pierce: 1, noise: 960,
-    bars: { dmg: .55, rate: .70, mag: .60, acc: .72 },
+    fb: { d0: 340, min: 0.72 },
+    bars: { dmg: .66, rate: .68, mag: .60, acc: .72 },
   },
   m4a1: {
     cat: 'rifle', label: '步枪 · M4A1', short: 'M4A1', name: 'M4A1', code: 'COLT M4A1', price: 4000, cal: '556',
-    desc: '全自动主力步枪。射速、精度、手感都在中上，子弹能穿透一名敌人——据点里最稳的一把。',
-    dmg: 33, rate: 0.095, spread: 0.021, count: 1, mode: 'auto',
+    role: '均衡 · 中距', desc: '全自动主力步枪。没有一项是全系第一，但射速、精度、手感、衰减都在中上，子弹还能穿透一名敌人 —— 不知道带什么的时候带它，什么距离都能打。',
+    dmg: 33, rate: 0.100, spread: 0.021, count: 1, mode: 'auto',
     bspeed: 1700, mag: 30, reload: 1.85, recoil: 3.4, size: 3.6, reserveMul: 5,
         ads: { spread: 0.42, move: 0.62, time: 0.18 },
     color: '#c9a3ff', range: 1500, knock: 100, sound: 'rifle', pierce: 1, noise: 900,
-    bars: { dmg: .52, rate: .74, mag: .60, acc: .82 },
+    fb: { d0: 380, min: 0.86 },
+    bars: { dmg: .52, rate: .73, mag: .60, acc: .82 },
   },
   qbz95: {
     cat: 'rifle', label: '步枪 · QBZ-95', short: 'QBZ-95', name: 'QBZ-95', code: 'NORINCO QBZ-95', price: 4400, cal: '58',
-    desc: '无托结构的 5.8mm 制式步枪。重心压在握把后面，抬枪比同价位都快，机匣短、换弹顺手；缺点是加装配件的余地小。',
-    dmg: 32, rate: 0.094, spread: 0.020, count: 1, mode: 'auto',
+    role: '抬枪 · 中远', desc: '无托结构的 5.8mm 制式步枪。抬枪全系最快（0.15s）、换弹顺手，存速好 —— 中远距离几乎不掉伤，是六把步枪里远射最稳的一把；单发只有 32 点，贴脸换血略吃亏，加装配件的余地也小。',
+    dmg: 32, rate: 0.096, spread: 0.020, count: 1, mode: 'auto',
     bspeed: 1800, mag: 30, reload: 1.80, recoil: 3.2, size: 3.4, reserveMul: 5,
         ads: { spread: 0.44, move: 0.64, time: 0.15 },
     color: '#b6f07a', range: 1400, knock: 95, sound: 'rifle', pierce: 1, noise: 880,
-    bars: { dmg: .51, rate: .75, mag: .60, acc: .83 },
+    fb: { d0: 420, min: 0.90 },
+    bars: { dmg: .50, rate: .74, mag: .60, acc: .86 },
   },
   ak12: {
     cat: 'rifle', label: '步枪 · AK-12', short: 'AK-12', name: 'AK-12', code: 'KALASHNIKOV AK-12', price: 4600, cal: '545',
-    desc: '5.45×39 的新一代 AK。射速快、后坐被压得比 AKM 小得多，连续点射很稳；单发只有 30 点，靠弹速和节奏补伤害。',
-    dmg: 30, rate: 0.086, spread: 0.019, count: 1, mode: 'auto',
+    role: '持续 · 压枪', desc: '5.45×39 的新一代 AK。后坐全系最小、连续点射最稳，单发只有 30 点靠弹速和节奏补伤害；打软目标要两枪，换血时靠稳定性把弹着点全糊在一个人身上。',
+    dmg: 30, rate: 0.090, spread: 0.019, count: 1, mode: 'auto',
     bspeed: 1750, mag: 30, reload: 1.90, recoil: 2.9, size: 3.5, reserveMul: 5,
         ads: { spread: 0.42, move: 0.62, time: 0.17 },
     color: '#8fd4ff', range: 1450, knock: 95, sound: 'rifle', pierce: 1, noise: 900,
-    bars: { dmg: .50, rate: .79, mag: .60, acc: .84 },
+    fb: { d0: 360, min: 0.82 },
+    bars: { dmg: .50, rate: .77, mag: .60, acc: .84 },
   },
   qbz192: {
     cat: 'rifle', label: '步枪 · QBZ-192', short: 'QBZ-192', name: 'QBZ-192', code: 'NORINCO QBZ-192', price: 5000, cal: '58',
-    desc: '短管卡宾型。抬枪最快、走位最灵活，室内和拐角最好用；枪管短，出了百米伤害掉得明显，散布也比长管型号大一圈。',
-    dmg: 27, rate: 0.082, spread: 0.026, count: 1, mode: 'auto',
+    role: '贴脸 · 快突', desc: '短管卡宾型。射速全系最高、抬枪最快、走位最灵活，室内和拐角贴脸最凶；枪管太短，两百步外伤害一路掉到七成，弹匣打空之前必须解决战斗。',
+    dmg: 28, rate: 0.077, spread: 0.026, count: 1, mode: 'auto',
     bspeed: 1650, mag: 30, reload: 1.70, recoil: 2.7, size: 3.2, reserveMul: 5,
         ads: { spread: 0.50, move: 0.66, time: 0.13 },
     color: '#f2b8ff', range: 1000, knock: 78, sound: 'rifle', pierce: 1, noise: 860,
-    bars: { dmg: .46, rate: .82, mag: .60, acc: .76 },
+    fb: { d0: 260, min: 0.68 },
+    bars: { dmg: .46, rate: .86, mag: .60, acc: .74 },
   },
   qbz191: {
     cat: 'rifle', label: '步枪 · QBZ-191', short: 'QBZ-191', name: 'QBZ-191', code: 'NORINCO QBZ-191', price: 5400, cal: '58',
-    desc: 'QBZ 三代的长管型。5.8mm 的高初速在这个管长上最吃得开，精度和远距离存速是全系步枪里最好的，代价是抬枪稍慢。',
-    dmg: 34, rate: 0.096, spread: 0.016, count: 1, mode: 'auto',
-    bspeed: 1900, mag: 30, reload: 1.95, recoil: 3.1, size: 3.6, reserveMul: 5,
-        ads: { spread: 0.40, move: 0.62, time: 0.19 },
+    role: '远射 · 精度', desc: 'QBZ 三代的长管型。单发 35 点、散布全系最小、弹道几乎不衰减，是全系唯一能在远距离稳定点掉探头目标的步枪；代价是射速最慢、抬枪最沉，被贴脸时非常吃亏。',
+    dmg: 35, rate: 0.112, spread: 0.015, count: 1, mode: 'auto',
+    bspeed: 1900, mag: 30, reload: 1.95, recoil: 3.2, size: 3.6, reserveMul: 5,
+        ads: { spread: 0.40, move: 0.62, time: 0.20 },
     color: '#7af0d8', range: 1600, knock: 100, sound: 'rifle', pierce: 1, noise: 910,
-    bars: { dmg: .54, rate: .74, mag: .60, acc: .86 },
+    fb: { d0: 460, min: 0.95 },
+    bars: { dmg: .54, rate: .70, mag: .60, acc: .90 },
   },
   sr9: {
     cat: 'dmr', label: '精确射手步枪 · SR9', short: 'SR9', name: 'SR9', code: 'SR-9 DMR', price: 5200, cal: '762',
@@ -4090,6 +4336,7 @@ const Sfx = {
     }
   },
   hit()     { this.noiseBurst(0.07, 2600, 1.6, 0.13); },
+  hitKill() { this.tone(1180, 0.08, 0.10, 'triangle', 720); },
   explode() { this.noiseBurst(0.55, 420, 0.7, 0.45); this.tone(70, 0.42, 0.30, 'sawtooth', 26); },
   hurt()    { this.tone(160, 0.22, 0.24, 'sawtooth', 55); this.noiseBurst(0.18, 600, 1.0, 0.14); },
   pickup()  { this.tone(620, 0.10, 0.13, 'triangle'); setTimeout(() => this.tone(980, 0.12, 0.11, 'triangle'), 65); },
@@ -4364,6 +4611,7 @@ window.addEventListener('keydown', e => {
     else if (G.scene === 'lobby' && !$('loadout').classList.contains('hidden')) closeLoadout();
     else if (G.scene === 'lobby' && !$('maps').classList.contains('hidden')) closeMaps();
     else if (G.scene === 'lobby' && !$('ach').classList.contains('hidden')) closeAchievements();
+    else if (G.scene === 'lobby' && !$('contracts').classList.contains('hidden')) closeContracts();
     else if (G.scene === 'lobby' && !$('codex').classList.contains('hidden')) closeCodex();
   }
   /* Tab：开着就关；没开且在局内才打开 */
@@ -4502,6 +4750,7 @@ const G = {
   blades: [],       // 无名的旋刃飞行器（直掷 / 锁定追踪）
   footprints: [],   // 玩家的脚印（静默潜袭期间不落）
   flashBlind: 0,    // 玩家被闪光闪到的强度（0..1，屏幕白屏遮罩用）
+  hitmark: null,    // 命中确认：{ at: 到期时间, kind: 'hit'|'armor'|'kill' }
   mists: [],        // 蛊的致盲毒雾烟区（不挡视线，只让人瞎）
   gasbombs: [],     // 蛊的瓦斯弹（飞行体，落地 / 撞墙炸开成雾）
   gasT: 0,          // 玩家在毒雾里累计待了多久（满 0.75s 才致盲）
@@ -6512,7 +6761,7 @@ function playerShoot() {
     const ang = P.aim + spread;
     const spd = W.bspeed * rand(0.94, 1.06);
     G.bullets.push({
-      x: mx, y: my, px: mx, py: my,
+      x: mx, y: my, px: mx, py: my, ox: mx, oy: my,
       vx: Math.cos(ang) * spd,
       vy: Math.sin(ang) * spd,
       r: W.size, dmg: W.dmg * T.dmgMul, color: T.color,
@@ -6520,6 +6769,8 @@ function playerShoot() {
       hostile: false,
       /* pen 是弹级，fleshMul 只对 0 级修脚弹生效；cal 只用于飘字/统计 */
       pen: T.lv, fleshMul: T.fleshMul, cal: calId, tier: T.lv,
+      /* fb：这把枪的远距衰减（d0 之后线性掉到 min）；enemy 弹没有这个字段 */
+      fb: W.fb ? { d0: W.fb.d0, d1: W.range, min: W.fb.min } : null,
       pierce: W.pierce || 0,
       hitSet: null,
       knock: W.knock,
@@ -11912,11 +12163,19 @@ function updateFactionWars(dt) {
 function bulletDamage(e, b) {
   const pen = b.pen || 0;
   let dmg = b.dmg;
+  /* 远距衰减：每把步枪有自己的「有效距离」与封底倍率（fb.d0 内满伤，
+     之后线性掉到 fb.min）。只在玩家子弹上有 fb，敌人子弹不受影响。 */
+  if (b.fb && b.ox != null) {
+    const trav = Math.hypot(b.x - b.ox, b.y - b.oy);
+    const span = Math.max(1, (b.fb.d1 || b.fb.d0 * 3) - b.fb.d0);
+    const k = clamp((trav - b.fb.d0) / span, 0, 1);
+    dmg *= 1 - k * (1 - b.fb.min);
+  }
   let ratio = 1;
   if (e.armorHp > 0 && e.armorLv > 0) {
     ratio = penRatio(pen, e.armorLv);
     /* 打甲都会磨耐久：被吃住磨得快（0.6），穿进去磨得慢（0.25） */
-    e.armorHp = Math.max(0, e.armorHp - b.dmg * (ratio > 0 ? 0.25 : 0.6));
+    e.armorHp = Math.max(0, e.armorHp - dmg * (ratio > 0 ? 0.25 : 0.6));
     if (ratio <= 0) e.armorFlash = 1;
     if (e.armorHp <= 0) {
       popup(e.x, e.y - e.r - 32, '护甲被打穿', '#ffd66b', 13);
@@ -12190,6 +12449,7 @@ function updateBullets(dt) {
             if (e.shield > 0 && shieldBlocks(e, b)) {
               b.hitSet.add(e);
               hitShield(e, b.dmg, b.x, b.y, b.vx, b.vy);
+              spawnHitmark('armor');
               G.bullets.splice(i, 1); removed = true;
               break;
             }
@@ -12207,9 +12467,11 @@ function updateBullets(dt) {
                 life: 0.24, r: 2.4, glow: true, drag: 0.9,
               });
               if (Math.random() < 0.22) popup(b.x, b.y - 14, '被 ' + e.armorLv + ' 级甲挡住', '#8fb6d0', 11);
+              spawnHitmark('armor');
               Sfx.hit();
             } else {
               damageEnemy(e, res.dmg, b.vx / len, b.vy / len, b.knock * (res.ratio < 1 ? 0.6 : 1));
+              spawnHitmark(e.alive ? 'hit' : 'kill');
               burst(b.x, b.y, 6, {
                 angle: Math.atan2(b.vy, b.vx) + Math.PI, spread: 0.8,
                 spdMin: 40, spdMax: 220, color: ['#ff3355', '#ff6b81', '#ffffff'],
@@ -17706,6 +17968,58 @@ function drawMinimap() {
   ctx.restore();
 }
 
+/* 局内成就追踪：右上角、小地图正下方（关掉小地图时下移到击杀分下面）。
+   最多四条，按完成度从高到低排；达标那条变绿并标「达成」。 */
+function drawAchTracker() {
+  if (!achHudOn() || !P.alive) return;
+  const rows = achLiveRows();
+  if (!rows.length) return;
+  const show = rows.slice(0, 4);
+  const w = 196, rowH = 21, headH = 17, padB = 7;
+  const h = headH + show.length * rowH + padB;
+  const mmOK = minimapOn() && MINIMAP.cv;
+  const y0 = mmOK ? 18 + (MINIMAP.h || 0) + 12 : 104;
+  const x0 = VW - w - 18;
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(10,16,24,0.66)';
+  drawRoundRect(x0, y0, w, h, 3);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(67,217,245,0.20)';
+  ctx.lineWidth = 1;
+  drawRoundRect(x0, y0, w, h, 3);
+  ctx.stroke();
+
+  ctx.fillStyle = '#4d7a94';
+  ctx.font = '700 9px ui-monospace, Consolas, monospace';
+  ctx.fillText('本局成就', x0 + 8, y0 + 12);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#3f5d72';
+  ctx.fillText(rows.filter(r => r.r >= 1).length + ' 已达成', x0 + w - 8, y0 + 12);
+  ctx.textAlign = 'left';
+
+  let yy = y0 + headH;
+  for (const r of show) {
+    const done = r.r >= 1;
+    ctx.fillStyle = done ? '#8df0b6' : '#bcd9ea';
+    ctx.font = '700 10px ui-monospace, Consolas, monospace';
+    ctx.fillText(r.a.name, x0 + 8, yy + 9);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = done ? '#8df0b6' : '#6f9ab2';
+    ctx.font = '700 9px ui-monospace, Consolas, monospace';
+    ctx.fillText(done ? '达成' : (r.v + '/' + r.n), x0 + w - 8, yy + 9);
+    ctx.textAlign = 'left';
+    /* 细进度条：底槽 + 填充 */
+    const bx = x0 + 8, by = yy + 13, bw = w - 16;
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    drawRoundRect(bx, by, bw, 3, 1.5); ctx.fill();
+    ctx.fillStyle = done ? 'rgba(70,224,138,0.85)' : 'rgba(67,217,245,0.62)';
+    drawRoundRect(bx, by, Math.max(2, bw * clamp(r.r, 0, 1)), 3, 1.5); ctx.fill();
+    yy += rowH;
+  }
+  ctx.restore();
+}
+
 function drawHUD() {
   const mono = 'ui-monospace, "Consolas", "SF Mono", monospace';
 
@@ -18460,6 +18774,13 @@ function drawSkillBar(mono) {
   ctx.textAlign = 'left';
 }
 
+/* 命中确认：打在准星上的四道斜线 —— 白=命中 / 蓝灰=被甲挡住 / 红=击杀。
+   只有玩家子弹会触发；duration 固定 0.24s，越接近结束越淡、越往外张。 */
+function spawnHitmark(kind) {
+  G.hitmark = { at: (G.time || 0) + 0.24, kind: kind || 'hit' };
+  if (kind === 'kill') Sfx.hitKill();
+}
+
 function drawCrosshair(mono) {
   const x = mouse.x, y = mouse.y;
   const w = weaponStats(P.weapon);
@@ -18512,6 +18833,36 @@ function drawCrosshair(mono) {
     ctx.arc(x, y, gap + 12, -Math.PI / 2, -Math.PI / 2 + TAU * prog);
     ctx.stroke();
   }
+
+  /* 命中确认（hitmark）：四道 45° 斜线从内向外张开，击杀变红并多一圈收束环 */
+  const hm = G.hitmark;
+  if (hm && G.time < hm.at) {
+    const p = clamp(1 - (hm.at - G.time) / 0.24, 0, 1);
+    const kill = hm.kind === 'kill';
+    const col = kill ? '#ff5c5c' : (hm.kind === 'armor' ? '#a8c4d8' : '#eef7ff');
+    const a = 1 - p * p;
+    const r0 = 7 + p * 5, r1 = r0 + 7 * (1 - p * 0.45);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(Math.PI / 4);
+    ctx.strokeStyle = col;
+    ctx.globalAlpha = a;
+    ctx.lineWidth = kill ? 3 : 2.2;
+    ctx.beginPath();
+    for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      ctx.moveTo(sx * r0, sy * r0);
+      ctx.lineTo(sx * r1, sy * r1);
+    }
+    ctx.stroke();
+    if (kill) {
+      ctx.globalAlpha = a * 0.45;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.arc(0, 0, r1 + 5, 0, TAU);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
   ctx.restore();
 }
 
@@ -18563,6 +18914,7 @@ function update(dt) {
   updateExtract(dt);
   updateCamera(dt);
   updateFog(dt);
+  updateAchTracker();
 
   // 增援
   G.callCd = Math.max(0, G.callCd - dt);
@@ -19070,6 +19422,7 @@ function render() {
     drawOffscreenMarkers();
     drawHUD();
     drawMinimap();             // 小地图画在 HUD 之上，右上角
+    drawAchTracker();          // 成就进度挂在右上角小地图下面
     drawDebuffOverlay();
     drawKnockOverlay();
     drawDownedOverlay();
@@ -19418,8 +19771,10 @@ function refreshLobby() {
     }
   }
 
+  ensureContracts();
   refreshStashBadge();
   refreshModBadge();
+  refreshContractBadge();
   refreshMapSelect();
 }
 
@@ -19868,6 +20223,107 @@ function closeAchievements() {
   refreshLobby();
 }
 
+/* ── 委托面板 ── */
+function refreshContractBadge() {
+  const b = $('ctBadge');
+  if (!b) return;
+  const n = contractReadyN();
+  if (n > 0) { b.textContent = String(n); b.classList.remove('hidden'); }
+  else b.classList.add('hidden');
+}
+
+function refreshContracts() {
+  const C = ensureContracts();
+  const list = $('ctList');
+  if (!list) return;
+  list.innerHTML = '';
+  let done = 0, ready = 0, readyMoney = 0;
+  C.list.forEach((e, i) => {
+    const t = CONTRACT_BY_ID[e.id];
+    if (!t) return;
+    const prog = Math.min(t.goal, e.prog | 0);
+    const ok = prog >= t.goal;
+    if (e.done) done++;
+    if (ok && !e.done) { ready++; readyMoney += t.reward; }
+    const pct = Math.round(clamp(prog / t.goal, 0, 1) * 100);
+    const progTxt = t.money ? '¥' + fmtMoney(prog) + ' / ¥' + fmtMoney(t.goal) : prog + ' / ' + t.goal;
+    const card = document.createElement('div');
+    card.className = 'ctcard' + (e.done ? ' done' : (ok ? ' ready' : ''));
+    card.innerHTML =
+      '<h5>' + t.name + '<span>+ ¥' + fmtMoney(t.reward) + '</span></h5>' +
+      '<div class="cd">' + t.desc + '</div>' +
+      '<div class="ctbar"><i style="width:' + pct + '%"></i></div>' +
+      '<div class="ctfoot"><span>' + (e.done ? '已领取' : progTxt) + '</span>' +
+      '<button data-i="' + i + '"' + (ok && !e.done ? '' : ' disabled') + '>' + (e.done ? '完成' : '领 取') + '</button></div>';
+    list.appendChild(card);
+  });
+  for (const b of list.querySelectorAll('button[data-i]')) {
+    b.addEventListener('click', () => claimContract(+b.dataset.i));
+  }
+  $('ctCredit').textContent = fmtMoney(SAVE.credits);
+  $('ctDay').textContent = C.day;
+  $('ctDone').textContent = done;
+  $('ctTotal').textContent = C.list.length;
+  $('ctReady').textContent = '¥' + fmtMoney(readyMoney);
+  refreshContractBadge();
+}
+
+function openContracts() {
+  Sfx.init(); Sfx.resume();
+  ensureContracts();
+  $('lobby').classList.add('hidden');
+  $('contracts').classList.remove('hidden');
+  refreshContracts();
+}
+function closeContracts() {
+  $('contracts').classList.add('hidden');
+  $('lobby').classList.remove('hidden');
+  refreshLobby();
+}
+
+function claimContract(i) {
+  const C = ensureContracts();
+  const e = C.list[i];
+  const t = e && CONTRACT_BY_ID[e.id];
+  if (!t || e.done || (e.prog | 0) < t.goal) return;
+  e.done = 1;
+  SAVE.credits += t.reward;
+  saveGame();
+  Sfx.pickup();
+  uiToast('委托完成 · ' + t.name + '　+ ¥' + fmtMoney(t.reward), '');
+  refreshContracts();
+}
+
+function claimAllContracts() {
+  const C = ensureContracts();
+  let n = 0, money = 0;
+  for (const e of C.list) {
+    const t = CONTRACT_BY_ID[e.id];
+    if (!t || e.done || (e.prog | 0) < t.goal) continue;
+    e.done = 1;
+    SAVE.credits += t.reward;
+    n++; money += t.reward;
+  }
+  if (!n) { uiToast('没有可领取的委托', 'small warn'); return; }
+  saveGame();
+  Sfx.pickup();
+  uiToast('领取 ' + n + ' 份委托 · + ¥' + fmtMoney(money), '');
+  refreshContracts();
+}
+
+function rerollContracts() {
+  const COST = 2000;
+  if (SAVE.credits < COST) { uiToast('重掷要 ¥2,000 · 资金不够', 'small warn'); return; }
+  SAVE.credits -= COST;
+  const cur = {};
+  ensureContracts().list.forEach(e => { cur[e.id] = 1; });
+  SAVE.contracts = { day: contractDay(), list: pickContracts(contractDay() + '#' + Date.now(), cur) };
+  saveGame();
+  Sfx.pickup();
+  uiToast('已重掷一批委托 · − ¥' + fmtMoney(COST), 'small');
+  refreshContracts();
+}
+
 /* ══════════ 设置面板 ══════════ */
 const AIM_PRESETS = ['#b4e6ff', '#ffffff', '#63d68a', '#ffcc4d', '#ff7a9c', '#b782ff'];
 
@@ -19893,6 +20349,12 @@ function syncSettingsUI() {
   mm.textContent = s.minimap ? '开' : '关';
   mm.style.color = s.minimap ? '#8df0b6' : '#7f93a6';
   mm.style.borderColor = s.minimap ? 'rgba(141,240,182,.4)' : 'rgba(120,150,175,.3)';
+  const ah = $('setAchHud');
+  if (ah) {
+    ah.textContent = achHudOn() ? '开' : '关';
+    ah.style.color = achHudOn() ? '#8df0b6' : '#7f93a6';
+    ah.style.borderColor = achHudOn() ? 'rgba(141,240,182,.4)' : 'rgba(120,150,175,.3)';
+  }
 
   const row = $('setAimRow');
   row.innerHTML = '';
@@ -19927,6 +20389,11 @@ function initSettingsUI() {
 
   $('setMinimap').addEventListener('click', () => {
     SAVE.settings.minimap = SAVE.settings.minimap ? 0 : 1;
+    saveGame();
+    syncSettingsUI();
+  });
+  $('setAchHud').addEventListener('click', () => {
+    SAVE.settings.achHud = achHudOn() ? 0 : 1;
     saveGame();
     syncSettingsUI();
   });
@@ -20769,6 +21236,7 @@ function weaponSpecs(w) {
   const fireTxt = w.mode === 'auto' ? '全自动' : (w.mode === 'burst' ? '三连点射' : '半自动');
   const C = CALIBERS[w.cal] || CALIBERS['919'];
   const rows = [
+    ['定位', w.role || '—'],
     ['口径', C.short],
     ['单发伤害', w.count > 1 ? per + '<i>(' + w.dmg + '×' + w.count + ')</i>' : String(w.dmg)],
     ['射速', rateTxt],
@@ -20778,6 +21246,7 @@ function weaponSpecs(w) {
     ['备弹', w.reserveMul > 0 ? (w.mag * w.reserveMul) + ' 发' : '—'],
     ['理论 DPS', String(dps)],
     ['射程', String(w.range)],
+    ['远距衰减', w.fb ? (w.fb.d0 + ' 外掉至 ' + Math.round(w.fb.min * 100) + '%') : '无'],
     ['开镜精度', '散布 ×' + adsOf(w).spread.toFixed(2)],
     ['开镜移速', Math.round(adsOf(w).move * 100) + '%'],
   ];
@@ -21911,7 +22380,137 @@ function renderLoadout() {
   }
 
   renderLoStock();
+  renderPresets();
   $('loCredit').textContent = fmtMoney(SAVE.credits);
+}
+
+/* ── 配装预设：只存「装备」，不存弹挂/背包里的东西 ──
+   枪槽 / 近战 / 身上那件甲 / 弹挂 / 背包 / 上次用的药。
+   套用前先查仓库：缺件就整单不执行，避免套一半留个四不像。 */
+function presetSnapshot(i) {
+  const LO = SAVE.loadout || {};
+  const own = id => (id && (SAVE.owned[id] | 0) > 0) ? id : null;
+  return {
+    name: '预设 ' + (i + 1),
+    at: Date.now(),
+    guns: { primary: own(LO.primary), secondary: own(LO.secondary), pistol: own(LO.pistol) },
+    melee: (SAVE.equippedMelee && SAVE.ownedMelee && SAVE.ownedMelee[SAVE.equippedMelee]) ? SAVE.equippedMelee : STARTER_MELEE,
+    armor: (SAVE.wornPiece && SAVE.wornPiece.id) | 0,
+    rig: (SAVE.worn && SAVE.worn.rig) || null,
+    pack: (SAVE.worn && SAVE.worn.pack) || null,
+    care: SAVE.carePick || '',
+  };
+}
+
+function presetMissing(p) {
+  const miss = [];
+  if (!p) return miss;
+  for (const sl of ['primary', 'secondary', 'pistol']) {
+    const id = p.guns && p.guns[sl];
+    if (id && !(SAVE.owned[id] > 0)) miss.push(WEAPONS[id] ? WEAPONS[id].short : id);
+  }
+  if (p.melee && !(SAVE.ownedMelee && SAVE.ownedMelee[p.melee])) miss.push((MELEES[p.melee] || {}).name || p.melee);
+  if (p.armor > 0) {
+    const wornOK = SAVE.wornPiece && SAVE.wornPiece.id === p.armor && SAVE.wornPiece.hp > 0;
+    const stockOK = (SAVE.armorPieces || []).some(a => a.id === p.armor && a.hp > 0);
+    if (!wornOK && !stockOK) miss.push((ARMORS[p.armor] || {}).short || '护甲');
+  }
+  if (p.rig && !((SAVE.gearOwned[p.rig] | 0) > 0) && !(SAVE.worn && SAVE.worn.rig === p.rig)) miss.push(GEAR[p.rig].name);
+  if (p.pack && !((SAVE.gearOwned[p.pack] | 0) > 0) && !(SAVE.worn && SAVE.worn.pack === p.pack)) miss.push(GEAR[p.pack].name);
+  return miss;
+}
+
+function applyPreset(p) {
+  if (!p) return false;
+  if (!SAVE.loadout) SAVE.loadout = { primary: null, secondary: null, pistol: null };
+  if (!SAVE.worn) SAVE.worn = { rig: null, pack: null };
+  if (!Array.isArray(SAVE.armorPieces)) SAVE.armorPieces = [];
+  const miss = presetMissing(p);
+  if (miss.length) { uiToast('预设缺件：' + miss.join(' / '), 'small warn'); return false; }
+
+  const LO = SAVE.loadout;
+  LO.primary = p.guns.primary || null;
+  LO.secondary = p.guns.secondary || null;
+  LO.pistol = p.guns.pistol || null;
+  SAVE.equippedMelee = p.melee || STARTER_MELEE;
+
+  /* 护甲：身上已经是这件就不动；否则去仓库拿一件，旧的那件放回仓库 */
+  if (p.armor > 0) {
+    if (!(SAVE.wornPiece && SAVE.wornPiece.id === p.armor)) {
+      const at = SAVE.armorPieces.findIndex(a => a.id === p.armor && a.hp > 0);
+      if (at >= 0) {
+        const pc = SAVE.armorPieces.splice(at, 1)[0];
+        if (SAVE.wornPiece) SAVE.armorPieces.push(SAVE.wornPiece);
+        SAVE.wornPiece = pc;
+      }
+    }
+  } else if (SAVE.wornPiece) {
+    SAVE.armorPieces.push(SAVE.wornPiece);       // 预设是裸奔：把身上的脱回仓库
+    SAVE.wornPiece = null;
+  }
+
+  if (p.rig) SAVE.worn.rig = p.rig;
+  if (p.pack) SAVE.worn.pack = p.pack;
+  trimCarryToCap();
+  if (p.care) SAVE.carePick = normCareKey(p.care);
+  saveGame();
+  renderLoadout();
+  Sfx.tone(620, 0.05, 0.04, 'square');
+  uiToast('已套用 ' + p.name, 'small');
+  return true;
+}
+
+function presetAction(act, i) {
+  if (!Array.isArray(SAVE.presets)) SAVE.presets = [null, null, null];
+  if (act === 'save') {
+    SAVE.presets[i] = presetSnapshot(i);
+    saveGame();
+    renderPresets();
+    Sfx.tone(520, 0.05, 0.04, 'square');
+    uiToast('当前配装已存入 ' + SAVE.presets[i].name, 'small');
+  } else if (act === 'del') {
+    SAVE.presets[i] = null;
+    saveGame();
+    renderPresets();
+  } else if (act === 'apply') {
+    applyPreset(SAVE.presets[i]);
+  }
+}
+
+function renderPresets() {
+  const box = $('loPresets');
+  if (!box) return;
+  if (!Array.isArray(SAVE.presets)) SAVE.presets = [null, null, null];
+  box.innerHTML = '';
+  for (let i = 0; i < 3; i++) {
+    const p = SAVE.presets[i];
+    const card = document.createElement('div');
+    card.className = 'prcard';
+    if (!p) {
+      card.innerHTML = '<div class="prn">预设 ' + (i + 1) + '</div>' +
+        '<div class="prs">空 · 配好这套再保存</div>' +
+        '<div class="prb"><button data-act="save" data-i="' + i + '">保存当前</button></div>';
+    } else {
+      const gs = [p.guns.primary, p.guns.secondary, p.guns.pistol]
+        .filter(Boolean).map(id => (WEAPONS[id] || {}).short || id).join(' / ') || '空手';
+      const ar = p.armor > 0 && ARMORS[p.armor] ? ARMORS[p.armor].short : '裸奔';
+      const sub = gs + ' · ' + ar + (p.rig ? ' · ' + GEAR[p.rig].name : '');
+      const miss = presetMissing(p);
+      card.innerHTML =
+        '<div class="prn">' + p.name + '</div>' +
+        '<div class="prs" title="' + sub + '">' + sub + '</div>' +
+        (miss.length ? '<div class="prs" style="color:#ffb347">缺：' + miss.join(' · ') + '</div>' : '') +
+        '<div class="prb">' +
+          '<button class="apply" data-act="apply" data-i="' + i + '"' + (miss.length ? ' disabled' : '') + '>套 用</button>' +
+          '<button data-act="save" data-i="' + i + '">覆盖</button>' +
+          '<button data-act="del" data-i="' + i + '">清空</button>' +
+        '</div>';
+    }
+    box.appendChild(card);
+  }
+  for (const b of box.querySelectorAll('button[data-act]')) {
+    b.addEventListener('click', () => presetAction(b.dataset.act, +b.dataset.i));
+  }
 }
 
 /* 一键整备：先把拥有的最好弹挂 / 背包穿上 → 弹药格补满 → 空弹挂格补口径格 →
@@ -22883,6 +23482,8 @@ function startRaid() {
   G.blades = [];
   G.footprints = [];
   G.flashBlind = 0;
+  G.hitmark = null;
+  G.achReady = {};
   BLADE_LOCK.on = false; BLADE_LOCK.prog = 0; BLADE_LOCK.target = null; BLADE_LOCK.behind = false;
   G.gls = [];
   G.magbombs = [];
@@ -23000,6 +23601,7 @@ function endRaid(success) {
     SAVE.stats.extracts++;
     SAVE.stats.loot += G.lootValue;
     SAVE.stats.kills += G.kills;
+    const ctDone = updateContracts(true);
 
     // 收集品进仓库，一分钱没到手 —— 要自己回仓库卖
     const inN = relicCount();
@@ -23073,6 +23675,7 @@ function endRaid(success) {
     for (const arr of allCarryZones()) for (const c of arr) if (c && c.t === 'armor') armorN++;
     rows.push(['护甲带回', armorN ? armorN + ' 件 · 在背包格子里' : '无', armorN ? 'pos' : 'neu']);
     rows.push(['装备状态', '全部保留', 'pos']);
+    if (ctDone) rows.push(['委托完成', ctDone + ' 项 · 回大厅「委托」领取', 'pos']);
 
     Sfx.extract();
     applyAchievements(true);
@@ -23082,6 +23685,7 @@ function endRaid(success) {
   } else {
     SAVE.stats.deaths++;
     SAVE.stats.kills += G.kills;
+    const ctDone = updateContracts(false);
 
     const lostNames = [];
     let lostModN = 0;
@@ -23152,6 +23756,7 @@ function endRaid(success) {
     rows.push(['近战武器', '随身带走 · 唯一保底', 'neu']);
     rows.push(['损失护甲', lostArmor ? lostArmor : '无', lostArmor ? 'neg' : 'neu']);
     rows.push(['损失随身物资', '格子 ×' + lostCarry + (lostReserve ? ' · 备弹 ' + lostReserve + ' 发' : ''), lostCarry ? 'neg' : 'neu']);
+    if (ctDone) rows.push(['委托完成', ctDone + ' 项 · 回大厅「委托」领取', 'pos']);
 
     Sfx.death();
     applyAchievements(false);
@@ -23239,6 +23844,10 @@ $('closeOps').addEventListener('click', closeOperators);
 $('stashBtn').addEventListener('click', openStash);
 $('achBtn').addEventListener('click', openAchievements);
 $('closeAch').addEventListener('click', closeAchievements);
+$('ctBtn').addEventListener('click', openContracts);
+$('closeContracts').addEventListener('click', closeContracts);
+$('ctClaimAll').addEventListener('click', claimAllContracts);
+$('ctReroll').addEventListener('click', rerollContracts);
 $('codexBtn').addEventListener('click', openCodex);
 $('closeCodex').addEventListener('click', closeCodex);
 initSettingsUI();
