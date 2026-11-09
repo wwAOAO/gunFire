@@ -2698,23 +2698,25 @@ const CALIBERS = {
 };
 const CAL_ORDER = ['919', '918', '762x39', '545', '58', '12g', '556', '762', '338'];
 
-/* 0~7 级：颜色 / 伤害倍率 / 价格倍率（价格 = 口径基价 × 倍率 × 每盒发数） */
+/* 0~7 级：颜色 / 肉伤倍率 / 护甲伤害倍率 / 价格倍率（价格 = 口径基价 × 倍率 × 每盒发数）
+   armorMul 只影响「磨护甲耐久」的速率，与肉伤 dmgMul 是两条独立曲线：
+   修脚弹磨甲最差（0.55），顶级穿甲最快（1.38）—— 高弹级是「打到肉」与「磨穿甲」双收益。 */
 const AMMO_TIERS = [
-  { lv:0, key:'rip', name:'RIP 修脚弹', grade:'0 级', color:'#ff7a9c', dmgMul:0.72, fleshMul:1.9, priceMul:0.45,
+  { lv:0, key:'rip', name:'RIP 修脚弹', grade:'0 级', color:'#ff7a9c', dmgMul:0.72, fleshMul:1.9, armorMul:0.55, priceMul:0.45,
     desc:'空尖碎裂弹。一级甲都啃不动，但打无甲目标肉伤接近两倍。' },
-  { lv:1, key:'fmj', name:'白弹', grade:'1 级', color:'#dfe9f2', dmgMul:1.00, fleshMul:1, priceMul:1,
+  { lv:1, key:'fmj', name:'白弹', grade:'1 级', color:'#dfe9f2', dmgMul:1.00, fleshMul:1, armorMul:0.82, priceMul:1,
     desc:'普通全金属被甲弹。压得住 1 级甲，最便宜的通用弹。' },
-  { lv:2, key:'steel', name:'绿弹', grade:'2 级', color:'#63d68a', dmgMul:1.02, fleshMul:1, priceMul:1.75,
+  { lv:2, key:'steel', name:'绿弹', grade:'2 级', color:'#63d68a', dmgMul:1.02, fleshMul:1, armorMul:0.90, priceMul:1.75,
     desc:'钢芯弹。压 2 级甲，打小兵和盾兵够用。' },
-  { lv:3, key:'ap', name:'蓝弹', grade:'3 级', color:'#4fa8ff', dmgMul:1.04, fleshMul:1, priceMul:2.9,
+  { lv:3, key:'ap', name:'蓝弹', grade:'3 级', color:'#4fa8ff', dmgMul:1.04, fleshMul:1, armorMul:1.00, priceMul:2.9,
     desc:'标准穿甲弹。3 级甲正面也能咬进一半伤害。' },
-  { lv:4, key:'apcr', name:'紫弹', grade:'4 级', color:'#b782ff', dmgMul:1.06, fleshMul:1, priceMul:4.6,
+  { lv:4, key:'apcr', name:'紫弹', grade:'4 级', color:'#b782ff', dmgMul:1.06, fleshMul:1, armorMul:1.08, priceMul:4.6,
     desc:'硬芯穿甲。4 级甲及以下全通，机枪兵的重甲开始扛不住。' },
-  { lv:5, key:'tungsten', name:'金弹', grade:'5 级', color:'#ffcc4d', dmgMul:1.08, fleshMul:1, priceMul:7.2,
+  { lv:5, key:'tungsten', name:'金弹', grade:'5 级', color:'#ffcc4d', dmgMul:1.08, fleshMul:1, armorMul:1.16, priceMul:7.2,
     desc:'钨芯穿甲。5 级甲也只剩一半吸收。' },
-  { lv:6, key:'m995', name:'红弹', grade:'6 级', color:'#ff5d5d', dmgMul:1.10, fleshMul:1, priceMul:11,
+  { lv:6, key:'m995', name:'红弹', grade:'6 级', color:'#ff5d5d', dmgMul:1.10, fleshMul:1, armorMul:1.26, priceMul:11,
     desc:'M995 / M61 级军用穿甲，6 级甲正面 50%。' },
-  { lv:7, key:'apex', name:'顶级穿甲', grade:'7 级', color:'#ff2fd0', dmgMul:1.13, fleshMul:1, priceMul:17,
+  { lv:7, key:'apex', name:'顶级穿甲', grade:'7 级', color:'#ff2fd0', dmgMul:1.13, fleshMul:1, armorMul:1.38, priceMul:17,
     desc:'实验性顶级弹。打 6 级甲仍有 75% 肉伤，最贵也最不讲道理。' },
 ];
 const AMMO_LV_MAX = AMMO_TIERS.length - 1;
@@ -2790,12 +2792,17 @@ const WEAPON_CATS = [
   { id: 'sniper',  cn: '狙击枪',       en: 'SNIPER',  trait: '超远一击 · 穿透 3 人' },
 ];
 
+/* ── 两套伤害 ──
+   dmg      = 身体伤害：打裸体、或打穿护甲之后进肉的伤害（决定 TTK 与 DPS）
+   armorDmg = 护甲伤害：每发削掉多少护甲耐久（决定「磨穿重甲」要几发）
+   两者独立：AKM 身体最重但磨甲一般，QBZ-95/191 磨甲最快，霰弹贴脸最疼但啃甲最差。
+   结算见 bulletDamage：穿透时 armorDmg 全额，跳弹只留 65%，再乘弹级 armorMul。 */
 /* mode：auto 扣住连发 / semi 每发都要重新扣扳机 / burst 一次三连点射 */
 const WEAPONS = {
   g17: {
     cat: 'pistol', label: '手枪 · G17', short: 'G17', name: 'G17', code: 'GLOCK 17', price: 700, cal: '919',
     desc: '制式手枪，最便宜的入门枪。17 发弹匣、单发点射，吃 9×19mm 弹 —— 备弹只有 4 个弹匣，打空了要么局内捡，要么出击前在「弹药」页多买两盒。',
-    dmg: 25, rate: 0.21, spread: 0.042, count: 1, mode: 'semi',
+    dmg: 25, armorDmg: 8, rate: 0.21, spread: 0.042, count: 1, mode: 'semi',
     bspeed: 1250, mag: 17, reload: 1.15, recoil: 2.0, size: 3.1, reserveMul: 4,
         ads: { spread: 0.56, move: 0.80, time: 0.12 },
     color: '#ffe08a', range: 900, knock: 55, sound: 'pistol', noise: 620,
@@ -2804,7 +2811,7 @@ const WEAPONS = {
   '93r': {
     cat: 'pistol', label: '手枪 · 93R', short: '93R', name: '93R', code: 'BERETTA 93R', price: 1200, cal: '919',
     desc: '三连发点射手枪。单发不重，但一轮三发刚好放倒小兵；冲锋枪买不起的时候，它是最便宜的爆发。',
-    dmg: 26, rate: 0.44, spread: 0.048, count: 1, mode: 'burst', burst: 3, burstGap: 0.055,
+    dmg: 26, armorDmg: 9, rate: 0.44, spread: 0.048, count: 1, mode: 'burst', burst: 3, burstGap: 0.055,
     bspeed: 1300, mag: 20, reload: 1.25, recoil: 2.2, size: 3.2, reserveMul: 8,
         ads: { spread: 0.55, move: 0.78, time: 0.13 },
     color: '#ffd66b', range: 950, knock: 60, sound: '93r', noise: 640,
@@ -2813,7 +2820,7 @@ const WEAPONS = {
   g18: {
     cat: 'pistol', label: '手枪 · G18', short: 'G18', name: 'G18', code: 'GLOCK 18', price: 2200, cal: '919',
     desc: '全自动手枪。33 发长弹匣，扣住扳机就是一片弹雨，走廊和房间里贴脸极凶；散布与后坐都大，出了十米基本靠运气。',
-    dmg: 17, rate: 0.072, spread: 0.105, count: 1, mode: 'auto',
+    dmg: 17, armorDmg: 5, rate: 0.072, spread: 0.105, count: 1, mode: 'auto',
     bspeed: 1150, mag: 33, reload: 1.55, recoil: 2.8, size: 3.0, reserveMul: 6,
         ads: { spread: 0.70, move: 0.86, time: 0.12 },
     color: '#ffc46b', range: 700, knock: 38, sound: 'g18', noise: 700,
@@ -2822,7 +2829,7 @@ const WEAPONS = {
   bizon: {
     cat: 'smg', label: '冲锋枪 · 野牛', short: '野牛', name: '野牛', code: 'PP-19 BIZON', price: 1400, cal: '918',
     desc: '64 发螺旋弹鼓，一个弹匣能扫穿半个据点，几乎不用为换弹发愁。单发很轻，靠泼水压制。',
-    dmg: 14, rate: 0.065, spread: 0.072, count: 1, mode: 'auto',
+    dmg: 14, armorDmg: 10, rate: 0.065, spread: 0.072, count: 1, mode: 'auto',
     bspeed: 1120, mag: 64, reload: 2.3, recoil: 1.3, size: 2.8, reserveMul: 4,
         ads: { spread: 0.62, move: 0.64, time: 0.16 },
     color: '#8ef2ff', range: 780, knock: 42, sound: 'smg', noise: 560,
@@ -2831,7 +2838,7 @@ const WEAPONS = {
   m870: {
     cat: 'shotgun', label: '霰弹枪 · M870', short: 'M870', name: 'M870', code: 'REMINGTON M870', price: 2400, cal: '12g',
     desc: '泵动霰弹枪，一次糊出 8 枚弹丸。一发打碎盾兵的盾，两发送走重甲。远一点就基本打空。',
-    dmg: 13, rate: 0.85, spread: 0.215, count: 8, mode: 'semi',
+    dmg: 13, armorDmg: 3.5, rate: 0.85, spread: 0.215, count: 8, mode: 'semi',
     bspeed: 1000, mag: 7, reload: 2.6, recoil: 10, size: 3.0, reserveMul: 4,
         ads: { spread: 0.70, move: 0.62, time: 0.22 },
     color: '#ffab5e', range: 520, knock: 170, sound: 'shotgun', noise: 860,
@@ -2840,7 +2847,7 @@ const WEAPONS = {
   akm: {
     cat: 'rifle', label: '步枪 · AKM', short: 'AKM', name: 'AKM', code: 'KALASHNIKOV AKM', price: 3600, cal: '762x39',
     role: '重击 · 近距', desc: '7.62×39 的老家伙。单发 44 点，全系步枪里单发最重、贴脸 TTK 最短 —— 八发就能把机枪兵按倒；代价是后坐与散布最大、弹道衰减最狠，中距离必须点射，出了三百步就别指望它。',
-    dmg: 44, rate: 0.117, spread: 0.030, count: 1, mode: 'auto',
+    dmg: 44, armorDmg: 11, rate: 0.117, spread: 0.030, count: 1, mode: 'auto',
     bspeed: 1650, mag: 30, reload: 2.3, recoil: 4.6, size: 3.7, reserveMul: 5,
         ads: { spread: 0.52, move: 0.58, time: 0.19 },
     color: '#ff8f5e', range: 1250, knock: 130, sound: 'ak', pierce: 1, noise: 960,
@@ -2850,7 +2857,7 @@ const WEAPONS = {
   m4a1: {
     cat: 'rifle', label: '步枪 · M4A1', short: 'M4A1', name: 'M4A1', code: 'COLT M4A1', price: 4000, cal: '556',
     role: '均衡 · 中距', desc: '全自动主力步枪。没有一项是全系第一，但射速、精度、手感、衰减都在中上，子弹还能穿透一名敌人 —— 不知道带什么的时候带它，什么距离都能打。',
-    dmg: 33, rate: 0.100, spread: 0.021, count: 1, mode: 'auto',
+    dmg: 33, armorDmg: 12, rate: 0.100, spread: 0.021, count: 1, mode: 'auto',
     bspeed: 1700, mag: 30, reload: 1.85, recoil: 3.4, size: 3.6, reserveMul: 5,
         ads: { spread: 0.42, move: 0.62, time: 0.18 },
     color: '#c9a3ff', range: 1500, knock: 100, sound: 'rifle', pierce: 1, noise: 900,
@@ -2860,7 +2867,7 @@ const WEAPONS = {
   qbz95: {
     cat: 'rifle', label: '步枪 · QBZ-95', short: 'QBZ-95', name: 'QBZ-95', code: 'NORINCO QBZ-95', price: 4400, cal: '58',
     role: '抬枪 · 中远', desc: '无托结构的 5.8mm 制式步枪。抬枪全系最快（0.15s）、换弹顺手，存速好 —— 中远距离几乎不掉伤，是六把步枪里远射最稳的一把；单发只有 32 点，贴脸换血略吃亏，加装配件的余地也小。',
-    dmg: 32, rate: 0.096, spread: 0.020, count: 1, mode: 'auto',
+    dmg: 32, armorDmg: 15, rate: 0.096, spread: 0.020, count: 1, mode: 'auto',
     bspeed: 1800, mag: 30, reload: 1.80, recoil: 3.2, size: 3.4, reserveMul: 5,
         ads: { spread: 0.44, move: 0.64, time: 0.15 },
     color: '#b6f07a', range: 1400, knock: 95, sound: 'rifle', pierce: 1, noise: 880,
@@ -2870,7 +2877,7 @@ const WEAPONS = {
   ak12: {
     cat: 'rifle', label: '步枪 · AK-12', short: 'AK-12', name: 'AK-12', code: 'KALASHNIKOV AK-12', price: 4600, cal: '545',
     role: '持续 · 压枪', desc: '5.45×39 的新一代 AK。后坐全系最小、连续点射最稳，单发只有 30 点靠弹速和节奏补伤害；打软目标要两枪，换血时靠稳定性把弹着点全糊在一个人身上。',
-    dmg: 30, rate: 0.090, spread: 0.019, count: 1, mode: 'auto',
+    dmg: 30, armorDmg: 13, rate: 0.090, spread: 0.019, count: 1, mode: 'auto',
     bspeed: 1750, mag: 30, reload: 1.90, recoil: 2.9, size: 3.5, reserveMul: 5,
         ads: { spread: 0.42, move: 0.62, time: 0.17 },
     color: '#8fd4ff', range: 1450, knock: 95, sound: 'rifle', pierce: 1, noise: 900,
@@ -2880,7 +2887,7 @@ const WEAPONS = {
   qbz192: {
     cat: 'rifle', label: '步枪 · QBZ-192', short: 'QBZ-192', name: 'QBZ-192', code: 'NORINCO QBZ-192', price: 5000, cal: '58',
     role: '贴脸 · 快突', desc: '短管卡宾型。射速全系最高、抬枪最快、走位最灵活，室内和拐角贴脸最凶；枪管太短，两百步外伤害一路掉到七成，弹匣打空之前必须解决战斗。',
-    dmg: 28, rate: 0.077, spread: 0.026, count: 1, mode: 'auto',
+    dmg: 28, armorDmg: 11, rate: 0.077, spread: 0.026, count: 1, mode: 'auto',
     bspeed: 1650, mag: 30, reload: 1.70, recoil: 2.7, size: 3.2, reserveMul: 5,
         ads: { spread: 0.50, move: 0.66, time: 0.13 },
     color: '#f2b8ff', range: 1000, knock: 78, sound: 'rifle', pierce: 1, noise: 860,
@@ -2890,7 +2897,7 @@ const WEAPONS = {
   qbz191: {
     cat: 'rifle', label: '步枪 · QBZ-191', short: 'QBZ-191', name: 'QBZ-191', code: 'NORINCO QBZ-191', price: 5400, cal: '58',
     role: '远射 · 精度', desc: 'QBZ 三代的长管型。单发 35 点、散布全系最小、弹道几乎不衰减，是全系唯一能在远距离稳定点掉探头目标的步枪；代价是射速最慢、抬枪最沉，被贴脸时非常吃亏。',
-    dmg: 35, rate: 0.112, spread: 0.015, count: 1, mode: 'auto',
+    dmg: 35, armorDmg: 15, rate: 0.112, spread: 0.015, count: 1, mode: 'auto',
     bspeed: 1900, mag: 30, reload: 1.95, recoil: 3.2, size: 3.6, reserveMul: 5,
         ads: { spread: 0.40, move: 0.62, time: 0.20 },
     color: '#7af0d8', range: 1600, knock: 100, sound: 'rifle', pierce: 1, noise: 910,
@@ -2900,7 +2907,7 @@ const WEAPONS = {
   sr9: {
     cat: 'dmr', label: '精确射手步枪 · SR9', short: 'SR9', name: 'SR9', code: 'SR-9 DMR', price: 5200, cal: '762',
     desc: '半自动精确射手步枪。单发 70 点、后坐极轻，两三发一个点射就能清掉远处探头的人。',
-    dmg: 70, rate: 0.33, spread: 0.009, count: 1, mode: 'semi',
+    dmg: 70, armorDmg: 26, rate: 0.33, spread: 0.009, count: 1, mode: 'semi',
     bspeed: 2100, mag: 18, reload: 2.1, recoil: 7, size: 3.8, reserveMul: 5,
         ads: { spread: 0.30, move: 0.55, time: 0.24 },
     color: '#9ef2c8', range: 1900, knock: 150, sound: 'dmr', pierce: 1, noise: 1080,
@@ -2909,7 +2916,7 @@ const WEAPONS = {
   r93: {
     cat: 'sniper', label: '狙击枪 · R93', short: 'R93', name: 'R93', code: 'BLASER R93', price: 6800, cal: '762',
     desc: '栓动狙击枪，吃 7.62×51 全威力弹 —— 和 SR9 共用一盒弹，养起来比大口径便宜一半。单发 310 点，一枪一个重甲兵，子弹能穿三名目标。',
-    dmg: 310, rate: 1.35, spread: 0.003, count: 1, mode: 'semi',
+    dmg: 310, armorDmg: 85, rate: 1.35, spread: 0.003, count: 1, mode: 'semi',
     bspeed: 2800, mag: 5, reload: 2.7, recoil: 16, size: 4.2, reserveMul: 5,
         ads: { spread: 0.18, move: 0.44, time: 0.30 },
     color: '#9fd4ff', range: 2600, knock: 260, sound: 'sniper', pierce: 3, noise: 1250,
@@ -2918,7 +2925,7 @@ const WEAPONS = {
   awm: {
     cat: 'sniper', label: '狙击枪 · AWM', short: 'AWM', name: 'AWM', code: 'ACCURACY INT. AWM', price: 8800, cal: '338',
     desc: '.338 拉普马格南的顶级栓动。单发 400 点，能穿四名目标、隔着大半个图点人 —— 一发白弹就要 ¥25，打空一个弹匣比挨一枪更心疼。',
-    dmg: 400, rate: 1.62, spread: 0.002, count: 1, mode: 'semi',
+    dmg: 400, armorDmg: 110, rate: 1.62, spread: 0.002, count: 1, mode: 'semi',
     bspeed: 2900, mag: 5, reload: 3.0, recoil: 18, size: 4.4, reserveMul: 5,
         ads: { spread: 0.15, move: 0.40, time: 0.33 },
     color: '#e8f4ff', range: 2800, knock: 300, sound: 'sniper', pierce: 4, noise: 1300,
@@ -2979,7 +2986,8 @@ function weaponStats(id) {
     if (!m || m.slot !== s.id || !slotAllowed(wid, s.id)) continue;
     slots[s.id] = mid;
     const e = m.eff || {};
-    if (e.dmg)     st.dmg      *= e.dmg;
+    if (e.dmg)   { st.dmg      *= e.dmg;
+                   st.armorDmg  = (st.armorDmg || 0) * e.dmg; }   // 加伤配件同样放大磨甲
     if (e.spread)  st.spread   *= e.spread;
     if (e.recoil)  st.recoil   *= e.recoil;
     if (e.mag)     st.mag      *= e.mag;
@@ -6801,6 +6809,8 @@ function playerShoot() {
       hostile: false,
       /* pen 是弹级，fleshMul 只对 0 级修脚弹生效；cal 只用于飘字/统计 */
       pen: T.lv, fleshMul: T.fleshMul, cal: calId, tier: T.lv,
+      /* 护甲伤害：来自枪（armorDmg）× 弹级系数（armorMul） */
+      armorDmg: W.armorDmg || 0, armorMul: T.armorMul || 1,
       /* fb：这把枪的远距衰减（d0 之后线性掉到 min）；enemy 弹没有这个字段 */
       fb: W.fb ? { d0: W.fb.d0, d1: W.range, min: W.fb.min } : null,
       pierce: W.pierce || 0,
@@ -12232,8 +12242,10 @@ function bulletDamage(e, b) {
   let ratio = 1;
   if (e.armorHp > 0 && e.armorLv > 0) {
     ratio = penRatio(pen, e.armorLv);
-    /* 打甲都会磨耐久：被吃住磨得快（0.6），穿进去磨得慢（0.25） */
-    e.armorHp = Math.max(0, e.armorHp - dmg * (ratio > 0 ? 0.25 : 0.6));
+    /* 护甲伤害是独立于肉伤的第二套数值：每发削掉多少耐久。
+       穿透（ratio>0）全额结算；被甲吃住（跳弹）只留 65% —— 所以低弹级磨甲明显更慢。 */
+    const ad = (b.armorDmg || 0) * (b.armorMul || 1) * (ratio > 0 ? 1 : 0.65);
+    e.armorHp = Math.max(0, e.armorHp - ad);
     if (ratio <= 0) e.armorFlash = 1;
     if (e.armorHp <= 0) {
       popup(e.x, e.y - e.r - 32, '护甲被打穿', '#ffd66b', 13);
@@ -21369,6 +21381,10 @@ function weaponSpecs(w) {
     ['定位', w.role || '—'],
     ['口径', C.short],
     ['单发伤害', w.count > 1 ? per + '<i>(' + w.dmg + '×' + w.count + ')</i>' : String(w.dmg)],
+    ['护甲伤害', w.armorDmg
+      ? (w.count > 1 ? (w.armorDmg * w.count) + '<i>(' + w.armorDmg + '×' + w.count + ')</i>' : String(w.armorDmg)) +
+        '<i> · 4 级甲约 ' + Math.ceil(93 / (w.armorDmg * w.count)) + ' 发磨穿</i>'
+      : '—'],
     ['射速', rateTxt],
     ['射击方式', fireTxt],
     ['穿透', w.pierce ? w.pierce + ' 人' : '—'],
