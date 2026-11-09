@@ -532,6 +532,7 @@
     background:rgba(8,15,23,.55); min-height:120px;
   }
   .loot-box .lo-cell.bcell { cursor:pointer; }
+  #lootBox.dragover { border-color:#ffd08a; box-shadow:0 0 12px rgba(255,208,138,.22) inset; }
   .loot-box .lo-cell.bcell.ready { cursor:grab; }
   .loot-box .lo-cell.bcell.sel { border-color:#ffd08a; box-shadow:0 0 12px rgba(255,208,138,.28); }
   .loot-pend { margin-top:10px; font-size:11px; font-weight:700; color:#4f7f9f; letter-spacing:.06em; line-height:1.5; }
@@ -1031,7 +1032,6 @@
       </section>
     </div>
   </div>
-  <div id="pkDropZone" class="hidden">⬅ 拖 到 这 里 丢 弃</div>
   <!-- 局内改装窗：右键枪槽弹出 · 标题栏拖动 · Esc 关闭 -->
   <div id="modWin" class="hidden">
     <div id="modWinHead">
@@ -1046,6 +1046,11 @@
     </div>
   </div>
 </div>
+
+<!-- 局内丢弃区：必须挂在 body 层（不能藏在某个 overlay 里）——
+     搜刮界面打开时背包 overlay 是 display:none，藏在里面的丢弃区根本渲染不出来，
+     拖到最右就只会回原位。fixed + z-index:30 压过 overlay(20)，哪个局内面板开着都接得住。 -->
+<div id="pkDropZone" class="hidden">⬅ 拖 到 这 里 丢 弃</div>
 
 <!-- ══════════ 搜刮容器（左边背包 · 右边容器，鼠标拖拽搬运） ══════════ -->
 <div id="loot" class="overlay hidden">
@@ -14400,6 +14405,8 @@ function lootBoxFits(cell) {
 function lootDepositPlace() {
   const L = G.lootPanel;
   if (!L || !PK_UI.held) return;
+  /* 从容器里拿出来的件松手在容器侧 = 取消，原样回箱（别把它转成自己的存放品） */
+  if (PK_UI.fromLoot) return;
   const c = L.crate, held = PK_UI.held;
   const C = containerOf(c.kind);
   const it = cellToLootItem(held);
@@ -14566,7 +14573,7 @@ function lootRender() {
   if (st) {
     st.textContent = left
       ? ('翻出 ' + (lay.list.length - lay.pend) + ' / ' + left + ' 件 · 已拿 ' + L.taken + (lay.pend ? ' · 还在翻…' : ''))
-      : (L.store || L.deposited ? '空 箱 · 可 存 放 物 品' : '已 全 部 收 下 · 可 存 放 物 品');
+      : (canStore ? (L.store || L.deposited ? '空 箱 · 可 存 放 物 品' : '已 全 部 收 下 · 可 存 放 物 品') : '已 全 部 收 下');
   }
 
   /* 左栏：武器 / 护甲 / 弹挂 / 背包槽 —— 箱里翻出的装备拖上来直接穿 */
@@ -14588,6 +14595,7 @@ function lootRender() {
 
   /* 右栏：容器格子（按真实占格拼） */
   const box = $('lootBox');
+  box.__pkPlace = canStore ? lootDepositPlace : null;   // 侧栏兜底目标：缝隙 / 盒边松手也算存入
   box.innerHTML = '';
   if (!lay.list.length) {
     for (let i = 0; i < LOOT_BOX_COLS * 3; i++) {
@@ -14646,8 +14654,8 @@ function lootRender() {
     pd.innerHTML = lay.pend
       ? ('还有 <b>' + lay.pend + '</b> 件没翻出来 · 虚线剪影是它们的轮廓，翻到哪件哪件现形')
       : (left
-        ? '拖到左边入包 · 按 F 收下选中的那件 · 身上的东西也能拖进这里存放 · 拖到屏幕最右丢弃'
-        : '箱子已清空 · 把身上的东西拖进来存放（撤离不带走） · 拖到屏幕最右丢弃');
+        ? '拖到左边入包 · 按 F 收下选中的那件' + (canStore ? ' · 身上的东西也能拖进这里存放' : '') + ' · 拖到屏幕最右丢弃'
+        : (canStore ? '箱子已清空 · 把身上的东西拖进来存放（撤离不带走） · 拖到屏幕最右丢弃' : '已全部拿走 · 拖到屏幕最右丢弃'));
   }
 }
 
@@ -24413,11 +24421,19 @@ function pkDropTargetAt(x, y) {
     const inLoot = $('loot') && $('loot').contains(cell);
     if (inPack || inLoot) return { kind: 'cell', el: cell };
   }
+  /* 搜刮界面右栏整块都能存：松在格缝 / 盒边 / 提示行上也算存进箱子，
+     不必非得精确压在某一个格子上（格缝松手弹回去手感就是「放不进容器」） */
+  const L = G.lootPanel;
+  const box = $('lootBox');
+  if (L && L.crate && !L.pile && !L.gear && box && box.__pkPlace) {
+    const side = el.closest('.lo-lootside');
+    if (side && $('loot').contains(side)) return { kind: 'cell', el: box };
+  }
   return { kind: null, el: null };
 }
 
 function pkHighlight(target) {
-  const prev = document.querySelector('.lo-cell.dragover');
+  const prev = document.querySelector('.lo-cell.dragover, #lootBox.dragover');
   if (prev) prev.classList.remove('dragover');
   if (target && target.el) target.el.classList.add('dragover');
   const dz = $('pkDropZone');
