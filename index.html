@@ -3482,7 +3482,7 @@ const SKILL = {
   /* ── 露娜（侦察）── */
   /* 增强破片手雷：按住左键点引信（5s），松手投出；引信烧完就在手上炸 */
   frag: { dmg: 84, radius: 6 * 18, fuse: 5.0, near: 9 * 18, lob: 18 * 18,
-          speed: 660, selfMul: 0.7, bleed: 2, holdMax: 12 * 18 },
+          speed: 660, selfMul: 0.7, bleed: 2, holdMax: 12 * 18, slide: 0.38, glide: 5.0, slideMin: 26 },
   /* 电击箭矢：射出后落地成 5 米电圈，持续电击 + 减速（骨折）；可反弹一次 */
   arc: { speed: 780, range: 30 * 18, zoneR: 5 * 18, zoneLife: 4.2, tick: 0.42,
          dmg: 9, cripple: 3.5, bounce: 1, healSlow: 5 },
@@ -3521,7 +3521,7 @@ const SKILL = {
      爆点 210 内、面朝爆点（±110°）且视线通畅的敌人被致盲 2.4 秒；
      自己站在同一片光里也会被闪到（屏幕炸白 + 眩晕）。 */
   flash: { speed: 560, range: 15 * 18, radius: 210, blind: 2.4, fuse: 1.5,
-           wallFuse: 0.35, bounce: 0.5, selfMul: 0.55, selfConcuss: 1.1 },
+           wallFuse: 0.35, bounce: 0.5, selfMul: 0.55, selfConcuss: 1.1, glide: 6.5, slideMin: 26 },
   /* 旋刃飞行器：短按直掷（碰墙弹一次，第二次撞墙 / 撞人 / 引信到点爆）；
      长按锁定后追踪，从背后锁定速度快 2.4 倍（lockBehind 越小越快） */
   blade: { launch: 640, speed: 700, range: 26 * 18, radius: 4 * 18, dmg: 46,
@@ -3544,7 +3544,7 @@ const SKILL = {
   /* 致盲毒雾：瓦斯弹落地或撞墙就地扩散，烟区 15 秒。
      敌人必须待在烟里满 0.75 秒才会被致盲（致盲 2.2 秒），离开后还残留 1.2 秒 —— 自己一样吃。 */
   gas: { speed: 520, range: 16 * 18, r: 132, life: 15, grow: 0.6, fade: 2.2,
-         delay: 0.75, blind: 2.2, residual: 1.2, selfMul: 1 },
+         delay: 0.75, blind: 2.2, residual: 1.2, selfMul: 1, maxFuse: 1.6, glide: 8.0, slideMin: 30 },
   /* 肾上腺素激活：增益无人机半径 12.75 米、15 秒；前 10 秒抹掉装备带来的移速 / 开镜惩罚。
      每层强度 +15%，最多 10 层；层数整局保留，倒地 / 阵亡清空。 */
   adr: { r: 12.75 * 18, life: 15, gearClear: 10, linger: 1.6,
@@ -3619,7 +3619,7 @@ const OPERATORS = {
     desc: '眼睛。箭比枪安静，也比枪看得远 —— 被她标上的人，隔着三堵墙也躲不掉下一发。',
     g: {
       name: '增强破片手雷', short: '破片雷', tag: '战术道具', kind: 'frag',
-      desc: '按 G 把雷拿到手上：按住左键开始烧引信（5 秒），松手投出 —— 引信剩多少就飞多久，烧到最后再扔就是瞬爆。右键直接抛出（更远、引信不烧）。引信在手上烧完会炸自己。爆炸半径 6 米、中心 84 伤并挂流血。储备 2 颗，打掉一颗按 40 秒回充。',
+      desc: '按 G 把雷拿到手上：按住左键开始烧引信（5 秒），松手投出 —— 雷飞到准星位置（右键直接抛出更远，超距落在最远处），落地后带惯性往前滑一小段（滑到墙就停），引信到点就炸。引信在手上烧完会炸自己。爆炸半径 6 米、中心 84 伤并挂流血。储备 2 颗，打掉一颗按 40 秒回充。',
       cd: 40, charges: 2,
     },
     v: {
@@ -3694,7 +3694,7 @@ const OPERATORS = {
     desc: '影子。一记闪光掀开房间，旋刃从背后咬上去；被他一刀划开的人血流不止，连包扎都拖半天 —— 等他们缓过来，他已经不在了。',
     g: {
       name: '突破型闪光弹', short: '闪光弹', tag: '战术道具', kind: 'flash',
-      desc: '朝准星抛出一枚突破型闪光弹（最远 15 米）：撞墙 0.35 秒后就地起爆，一直没撞墙则 1.5 秒后自爆。爆点 5.8 米内、面朝爆光的敌人致盲 2.4 秒 —— 致盲期间看不见你、也开不了枪，只会朝记忆里的位置乱走。自己站在爆光里同样会中招（屏幕炸白 + 眩晕）。储备 1 枚，按 40 秒回充。',
+      desc: '朝准星抛出一枚突破型闪光弹（最远 15 米，鼠标超距就落在最远处）：弹罐飞到落点后带着余速惯性滑行一小段；撞墙 0.35 秒后就地起爆，一直没撞墙则 1.5 秒后自爆。爆点 5.8 米内、面朝爆光的敌人致盲 2.4 秒 —— 致盲期间看不见你、也开不了枪，只会朝记忆里的位置乱走。自己站在爆光里同样会中招（屏幕炸白 + 眩晕）。储备 1 枚，按 40 秒回充。',
       cd: 40, charges: 1,
     },
     v: {
@@ -3719,7 +3719,7 @@ const OPERATORS = {
     desc: '队医的另一半：别人靠药，她靠针和雾。无人机把整队的状态顶上去，瓦斯把走廊变成毒气室 —— 被她缠上的敌人，血条会一直往下掉，连上限一起。',
     g: {
       name: '致盲毒雾', short: '毒雾', tag: '战术道具', kind: 'gas',
-      desc: '朝准星抛出一枚瓦斯弹（最远 16 米）：落地或撞上障碍物就地炸开，铺出一片半径 7.3 米的毒雾，持续 15 秒。<b>敌人在雾里待满 0.75 秒才会被致盲</b>（致盲 2.2 秒，期间看不见你、也开不了枪），离开雾区后效果还会残留 1.2 秒 —— 冲进去时便宜，退出来时还得再瞎一会儿。这雾不认人，自己站在里面一样会被致盲。储备 2 枚，按 50 秒回充。',
+      desc: '朝准星抛出一枚瓦斯弹（最远 16 米，鼠标超距就落在最远处）：弹体飞到落点后带惯性滑行一小段，滑停或撞上障碍物就地炸开，铺出一片半径 7.3 米的毒雾，持续 15 秒。<b>敌人在雾里待满 0.75 秒才会被致盲</b>（致盲 2.2 秒，期间看不见你、也开不了枪），离开雾区后效果还会残留 1.2 秒 —— 冲进去时便宜，退出来时还得再瞎一会儿。这雾不认人，自己站在里面一样会被致盲。储备 2 枚，按 50 秒回充。',
       cd: 50, charges: 2,
     },
     v: {
@@ -9357,8 +9357,13 @@ function fragThrow(isLob) {
   const d = clamp(magAimDist() || 120, 70, maxD);
   P.op.lastThrow = d;
   const a = P.aim;
-  const tx = clamp(P.x + Math.cos(a) * d, 24, WORLD.w - 24);
-  const ty = clamp(P.y + Math.sin(a) * d, 24, WORLD.h - 24);
+  let tx = clamp(P.x + Math.cos(a) * d, 24, WORLD.w - 24);
+  let ty = clamp(P.y + Math.sin(a) * d, 24, WORLD.h - 24);
+  /* 落点压在墙里就往回退，别让雷长在水泥里 */
+  for (let t = 0; t < 12 && pointInObstacle(tx, ty); t++) {
+    tx -= Math.cos(a) * 22;
+    ty -= Math.sin(a) * 22;
+  }
   G.frags.push({
     x: P.x, y: P.y, sx: P.x, sy: P.y, tx, ty, t: 0,
     dur: clamp(d / F.speed, 0.12, 0.9),
@@ -9418,10 +9423,34 @@ function updateFrags(dt) {
       if (k >= 1) {
         g.st = 'ground';
         g.h = 0;
+        /* 惯性：落地后带着投掷方向的余速往前蹭，蹭到墙就停，引信继续烧 */
+        const ang = Math.atan2(g.ty - g.sy, g.tx - g.sx);
+        const sp = SKILL.frag.speed * SKILL.frag.slide;
+        g.svx = Math.cos(ang) * sp;
+        g.svy = Math.sin(ang) * sp;
         if (g.fire) { igniteGround(g.x, g.y); G.frags.splice(i, 1); continue; }
       }
     } else {
       g.fuse -= dt;
+      /* 地面滑行：指数衰减，撞墙 / 滑到低速就停 */
+      if (g.svx || g.svy) {
+        const spd = Math.hypot(g.svx, g.svy);
+        const step = spd * dt;
+        const n = Math.max(1, Math.ceil(step / 8));
+        for (let s = 0; s < n; s++) {
+          const dtt = dt / n;
+          const nx = g.x + g.svx * dtt;
+          const ny = g.y + g.svy * dtt;
+          if (nx < 12 || nx > WORLD.w - 12 || ny < 12 || ny > WORLD.h - 12 ||
+              pointInObstacle(nx, g.y) || pointInObstacle(g.x, ny)) {
+            g.svx = 0; g.svy = 0; break;
+          }
+          g.x = nx; g.y = ny;
+        }
+        const k2 = Math.exp(-SKILL.frag.glide * dt);
+        g.svx *= k2; g.svy *= k2;
+        if (Math.hypot(g.svx, g.svy) < SKILL.frag.slideMin) { g.svx = 0; g.svy = 0; }
+      }
       if (g.fuse <= 0) { fragBlast(g.x, g.y, false); G.frags.splice(i, 1); }
     }
   }
@@ -9441,13 +9470,17 @@ function updateFrags(dt) {
 function throwFlash() {
   const F = SKILL.flash;
   const a = P.aim;
-  const want = clamp(magAimDist() || 160, 70, F.range);
+  /* 落点 = 鼠标位置，超出最大投掷距离就落在最大距离处 */
+  const d = clamp(magAimDist() || 160, 70, F.range);
+  const tx = clamp(P.x + Math.cos(a) * d, 12, WORLD.w - 12);
+  const ty = clamp(P.y + Math.sin(a) * d, 12, WORLD.h - 12);
   const mx = P.x + Math.cos(a) * (P.r + 9);
   const my = P.y + Math.sin(a) * (P.r + 9);
   G.flashes.push({
     x: mx, y: my, px: mx, py: my,
     vx: Math.cos(a) * F.speed, vy: Math.sin(a) * F.speed,
-    fuse: Math.min(F.fuse, want / F.speed + 0.45), bounced: 0,
+    tx, ty, arrived: false,
+    fuse: F.fuse, bounced: 0,
     spin: rand(0, TAU), r: 6,
   });
   P.recoil = Math.max(P.recoil, 2.4);
@@ -9485,6 +9518,16 @@ function updateFlashes(dt) {
       f.bounced++;
       f.fuse = Math.min(f.fuse, F.wallFuse);
       Sfx.tone(1500, 0.05, 0.03, 'square', 1200);
+    } else if (!hitWall) {
+      /* 到落点判定（与手炮同款）：贴到落点 9px 内，或这一帧跨过了落点 */
+      if (!f.arrived && Math.hypot(f.tx - f.x, f.ty - f.y) <= 9) f.arrived = true;
+      if (!f.arrived && ((f.tx - f.x) * f.vx + (f.ty - f.y) * f.vy) <= 0) f.arrived = true;
+      /* 到点之后不立刻死：弹体带着余速往前蹭，指数衰减到停 —— 惯性滑行 */
+      if (f.arrived && (f.vx || f.vy)) {
+        const k = Math.exp(-F.glide * dt);
+        f.vx *= k; f.vy *= k;
+        if (Math.hypot(f.vx, f.vy) < F.slideMin) { f.vx = 0; f.vy = 0; }
+      }
     }
 
     if (f.fuse <= 0) { flashBlast(f.x, f.y); G.flashes.splice(i, 1); }
@@ -9875,13 +9918,17 @@ function updateAdrFields(dt) {
 function throwGas() {
   const GS = SKILL.gas;
   const a = P.aim;
-  const want = clamp(magAimDist() || 160, 70, GS.range);
+  /* 落点 = 鼠标位置，超出最大投掷距离就落在最大距离处 */
+  const d = clamp(magAimDist() || 160, 70, GS.range);
+  const tx = clamp(P.x + Math.cos(a) * d, 12, WORLD.w - 12);
+  const ty = clamp(P.y + Math.sin(a) * d, 12, WORLD.h - 12);
   const mx = P.x + Math.cos(a) * (P.r + 9);
   const my = P.y + Math.sin(a) * (P.r + 9);
   G.gasbombs.push({
     x: mx, y: my, px: mx, py: my,
     vx: Math.cos(a) * GS.speed, vy: Math.sin(a) * GS.speed,
-    fuse: Math.min(1.4, want / GS.speed + 0.35), spin: rand(0, TAU),
+    tx, ty, arrived: false,
+    fuse: GS.maxFuse, spin: rand(0, TAU),
   });
   P.recoil = Math.max(P.recoil, 2.2);
   popup(P.x, P.y - 46, '致 盲 毒 雾', '#c8f57a', 12);
@@ -9914,7 +9961,19 @@ function updateGasBombs(dt) {
       b.x = nx; b.y = ny;
     }
     /* 碰到墙 / 地面就放气：几乎立刻炸开成雾 */
-    if (hit) b.fuse = Math.min(b.fuse, 0.22);
+    if (hit) {
+      b.fuse = Math.min(b.fuse, 0.22);
+    } else {
+      /* 到落点判定（与手炮同款）：贴到落点 9px 内，或这一帧跨过了落点 */
+      if (!b.arrived && Math.hypot(b.tx - b.x, b.ty - b.y) <= 9) b.arrived = true;
+      if (!b.arrived && ((b.tx - b.x) * b.vx + (b.ty - b.y) * b.vy) <= 0) b.arrived = true;
+      /* 到点之后带余速惯性滑行，滑停就地炸开成雾 */
+      if (b.arrived && (b.vx || b.vy)) {
+        const k = Math.exp(-GS.glide * dt);
+        b.vx *= k; b.vy *= k;
+        if (Math.hypot(b.vx, b.vy) < GS.slideMin) { b.vx = 0; b.vy = 0; b.fuse = 0; }
+      }
+    }
 
     if (Math.random() < 0.6) {
       addParticle(b.x, b.y, {
