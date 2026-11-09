@@ -109,6 +109,27 @@
 
   .hintline { font-size:11px; color:#3f5d72; margin-top:14px; letter-spacing:.06em; }
 
+  /* ══════════ 设置 / 存档备份 ══════════ */
+  .setrow { display:flex; align-items:center; gap:14px; padding:11px 2px; border-bottom:1px solid rgba(80,140,185,.12); }
+  .setrow:last-child { border-bottom:none; }
+  .setrow > label { flex:0 0 120px; font-size:13px; color:#bcd9ea; letter-spacing:.05em; }
+  .setrow input[type=range] { flex:1; height:4px; -webkit-appearance:none; appearance:none; background:rgba(80,140,185,.25); border-radius:2px; outline:none; }
+  .setrow input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; width:14px; height:14px; border-radius:50%; background:#43d9f5; box-shadow:0 0 12px rgba(67,217,245,.8); cursor:pointer; }
+  .setrow input[type=range]::-moz-range-thumb { width:14px; height:14px; border:none; border-radius:50%; background:#43d9f5; cursor:pointer; }
+  .setval { flex:0 0 44px; text-align:right; font:800 12px ui-monospace,Consolas,monospace; color:#43d9f5; }
+  .setdesc { font-size:11px; color:#456f88; letter-spacing:.03em; }
+  .aimdot { width:24px; height:24px; border-radius:50%; border:2px solid rgba(255,255,255,.14); cursor:pointer; transition:all .12s; }
+  .aimdot.on { border-color:#fff; transform:scale(1.12); }
+  .saveio textarea { width:100%; height:86px; resize:vertical; box-sizing:border-box; background:rgba(8,16,24,.65); border:1px solid rgba(80,140,185,.28); border-radius:3px; color:#9fd8ef; font:600 11px ui-monospace,Consolas,monospace; padding:8px; outline:none; }
+  .saveio textarea:focus { border-color:rgba(67,217,245,.5); }
+
+  /* ══════════ 图鉴 ══════════ */
+  .cdx { padding:8px 10px; border:1px solid rgba(80,140,185,.16); border-radius:3px; background:rgba(10,18,26,.55); display:flex; gap:9px; align-items:center; min-width:0; }
+  .cdx.locked { opacity:.4; filter:grayscale(.7); }
+  .cdx .ic { width:26px; height:26px; flex:0 0 26px; display:grid; place-items:center; border-radius:3px; font:800 13px/1 ui-monospace,Consolas,monospace; background:rgba(255,255,255,.05); }
+  .cdx .nm { font-size:12px; color:#d7e9f5; letter-spacing:.02em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .cdx .pr { font:600 10px ui-monospace,Consolas,monospace; color:#7fb8d6; margin-top:2px; }
+
   /* 简报 */
   .brief { list-style:none; display:flex; flex-direction:column; gap:11px; margin-bottom:22px; }
   .brief li { font-size:13px; color:#93b6cc; display:flex; gap:10px; line-height:1.5; }
@@ -836,9 +857,11 @@
       <button id="gunsmithBtn" class="btn ghost">改 装 台<span id="modBadge" class="cnt hidden">0</span></button>
       <button id="stashBtn" class="btn ghost">仓 库<span id="stashBadge" class="cnt hidden">0</span></button>
       <button id="achBtn" class="btn ghost">成 就<span id="achBadge" class="cnt hidden">0</span></button>
+      <button id="codexBtn" class="btn ghost">图 鉴<span id="codexBadge" class="cnt hidden">0</span></button>
       <button id="loadoutBtn" class="btn ghost">整 备</button>
       <button id="mapBtn" class="btn ghost">地 图</button>
       <div class="stats" id="lobbyStats"></div>
+      <button id="setBtn" class="btn ghost small">设 置</button>
       <button id="resetBtn" class="btn ghost danger small">重置存档</button>
     </footer>
   </div>
@@ -1072,6 +1095,73 @@
   </div>
 </div>
 
+<!-- ══════════ 设置 ══════════ -->
+<div id="settings" class="overlay hidden">
+  <div class="frame" style="max-width:720px">
+    <header class="topbar">
+      <div class="logo" style="font-size:22px">设 置</div>
+      <button id="closeSettings" class="btn ghost small" style="margin-left:auto">返 回</button>
+    </header>
+    <div class="card">
+      <h4>声音与画面</h4>
+      <div class="setrow">
+        <label>音效音量</label>
+        <input type="range" id="setVol" min="0" max="100" step="5">
+        <span class="setval" id="setVolV">70</span>
+      </div>
+      <div class="setrow">
+        <label>屏幕震动</label>
+        <input type="range" id="setShake" min="0" max="100" step="10">
+        <span class="setval" id="setShakeV">100</span>
+      </div>
+      <div class="setrow">
+        <label>粒子密度</label>
+        <input type="range" id="setFx" min="0" max="100" step="10">
+        <span class="setval" id="setFxV">100</span>
+      </div>
+      <div class="setrow">
+        <label>准星颜色</label>
+        <div style="display:flex;gap:10px;flex:1" id="setAimRow"></div>
+      </div>
+      <div class="setrow">
+        <label>小地图</label>
+        <button id="setMinimap" class="btn ghost small" style="min-width:92px">开</button>
+        <span class="setdesc">右上角显示墙体轮廓、撤离点与自己</span>
+      </div>
+    </div>
+    <div class="card saveio">
+      <h4>存档备份</h4>
+      <div class="setdesc" style="line-height:1.8;margin-bottom:8px">存档只存在这台机器的浏览器里，清缓存或换浏览器都会丢。定期「导出」留个底，出事用「导入」找回来。</div>
+      <textarea id="saveText" spellcheck="false" placeholder="点「导出」把存档变成文本；或在上面粘贴一份存档，再点「导入」"></textarea>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;align-items:center">
+        <button id="saveExport" class="btn ghost small">导 出</button>
+        <button id="saveCopy" class="btn ghost small">复 制</button>
+        <button id="saveImport" class="btn ghost small">导 入</button>
+        <span id="saveMsg" class="setdesc" style="margin-left:auto"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ 图鉴 ══════════ -->
+<div id="codex" class="overlay hidden">
+  <div class="frame">
+    <header class="topbar">
+      <div class="logo" style="font-size:22px">图 鉴</div>
+      <div class="wallet"><i>¥</i><b id="codexCredit">0</b></div>
+      <button id="closeCodex" class="btn ghost small">返回大厅</button>
+    </header>
+    <div class="card">
+      <div class="stashsum" style="margin-bottom:10px">
+        已收集 <b id="codexCount">0</b> / <b id="codexTotal">0</b> · 集齐奖励已领 <b id="codexWorth">¥0</b>
+      </div>
+      <div id="codexTabs" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"></div>
+      <div id="codexGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(136px,1fr));gap:8px"></div>
+      <div class="stashnote">带出过就算见到，卖掉也不影响图鉴。每档集齐一次性发奖金；未解锁的只显示轮廓。</div>
+    </div>
+  </div>
+</div>
+
 <!-- ══════════ 地图 ══════════ -->
 <div id="maps" class="overlay hidden">
   <div class="frame narrow">
@@ -1117,6 +1207,7 @@
       <div class="rrow"><span>携带收集品</span><b id="pauseLoot" class="pos">0 件</b></div>
     </div>
     <button id="resumeBtn" class="btn primary">继 续 行 动</button>
+    <button id="pauseSetBtn" class="btn ghost" style="margin-top:10px;width:100%">设 置（音量 / 震动 / 存档）</button>
     <button id="abandonBtn" class="btn ghost danger" style="margin-top:10px;width:100%">放弃行动（视为阵亡）</button>
   </div>
 </div>
@@ -2028,6 +2119,10 @@ const DEFAULT_SAVE = () => ({
   stats: { raids: 0, extracts: 0, deaths: 0, loot: 0, kills: 0, sold: 0 },
   achieved: {},        // 已解锁成就：{ 成就id: 1 }（奖励在撤离结算时一次性发放）
   soldN: {},           // 每件收集品累计卖出的件数（决定市场价衰减）
+  /* 设置：音量 / 震动强度 / 粒子密度 都是 0-100，aim 是准星颜色，minimap 是小地图开关 */
+  settings: { vol: 70, shake: 100, fx: 100, aim: '#b4e6ff', minimap: 1 },
+  seenRelics: {},      // 图鉴：曾经带出来过的收集品 { 收集品id: 1 }（卖掉了也算见过）
+  codexReward: {},     // 图鉴：已领取的档位奖励 { common: 1, ... }
 });
 
 /* 旧存档的武器 id（smg/shotgun/rifle/sniper）迁到具体的枪上。
@@ -2161,6 +2256,9 @@ function loadSave() {
       stats: Object.assign({ raids: 0, extracts: 0, deaths: 0, loot: 0, kills: 0, sold: 0 }, d.stats || {}),
       achieved: Object.assign({}, d.achieved || {}),
       soldN: Object.assign({}, d.soldN || {}),
+      settings: Object.assign({ vol: 70, shake: 100, fx: 100, aim: '#b4e6ff', minimap: 1 }, d.settings || {}),
+      seenRelics: Object.assign({}, d.seenRelics || {}),
+      codexReward: Object.assign({}, d.codexReward || {}),
     };
     return S;
   } catch (e) { return base; }
@@ -3423,6 +3521,7 @@ function mergeCarryOverflow(S, overflow) {
       addAmmoStock(c.cal, c.lv, c.n);
     } else if (c.t === 'relic') {
       SAVE.stash[c.id] = (SAVE.stash[c.id] | 0) + 1;
+      markRelicSeen(c.id);
     } else if (c.t === 'mod') {
       SAVE.modBag[c.id] = Math.min(99, (SAVE.modBag[c.id] | 0) + 1);
     } else if (c.t === 'armor') {
@@ -3902,6 +4001,28 @@ const BOSS_FIRE = { r: 112, life: 4.6, dmg: 7, warm: 1.6, breed: 0.4 };
 /* ══════════════════════════════════════════════════════════
    3. 音频合成
    ══════════════════════════════════════════════════════════ */
+/* ── 设置读取：音量 / 震动 / 粒子 / 准星 / 小地图 ──
+   SAVE 要到 GEAR 表之后才初始化，这里一律 typeof 兜底，避免加载期踩 TDZ。 */
+function settingNum(k, def, lo, hi) {
+  const s = (typeof SAVE !== 'undefined' && SAVE.settings) ? SAVE.settings : null;
+  const v = s && typeof s[k] === 'number' ? s[k] : def;
+  return clamp(v, lo === undefined ? 0 : lo, hi === undefined ? 100 : hi);
+}
+function sfxVol() { return settingNum('vol', 70) / 100 * 0.5; }   // 满档 0.5（原来写死 0.3）
+function shakeMul() { return settingNum('shake', 100) / 100; }
+function fxRate() { return settingNum('fx', 100) / 100; }
+function aimColor() {
+  const s = (typeof SAVE !== 'undefined' && SAVE.settings) ? SAVE.settings : null;
+  return (s && typeof s.aim === 'string' && /^#[0-9a-f]{6}$/i.test(s.aim)) ? s.aim : '#b4e6ff';
+}
+function minimapOn() {
+  const s = (typeof SAVE !== 'undefined' && SAVE.settings) ? SAVE.settings : null;
+  return !s || s.minimap !== 0;
+}
+function applySettings() {
+  if (typeof Sfx !== 'undefined' && Sfx && Sfx.master) Sfx.master.gain.value = sfxVol();
+}
+
 const Sfx = {
   ready: false,
   init() {
@@ -3910,7 +4031,7 @@ const Sfx = {
     if (!AC) return;
     this.ctx = new AC();
     this.master = this.ctx.createGain();
-    this.master.gain.value = 0.3;
+    this.master.gain.value = sfxVol();
     this.master.connect(this.ctx.destination);
     const len = Math.floor(this.ctx.sampleRate * 1.2);
     const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
@@ -4235,6 +4356,7 @@ window.addEventListener('keydown', e => {
   if (k === 'escape') {
     keys[k] = true;
     if (G.modWin) closeModWin();                   // 改装窗最先收
+    else if (!$('settings').classList.contains('hidden')) closeSettings();   // 设置叠在所有东西上面
     else if (G.packOpen) closePackPanel();
     else if (G.scene === 'playing' && G.lootPanel) closeLootPanel();
     else if (G.scene === 'playing') pauseRaid();
@@ -4242,6 +4364,7 @@ window.addEventListener('keydown', e => {
     else if (G.scene === 'lobby' && !$('loadout').classList.contains('hidden')) closeLoadout();
     else if (G.scene === 'lobby' && !$('maps').classList.contains('hidden')) closeMaps();
     else if (G.scene === 'lobby' && !$('ach').classList.contains('hidden')) closeAchievements();
+    else if (G.scene === 'lobby' && !$('codex').classList.contains('hidden')) closeCodex();
   }
   /* Tab：开着就关；没开且在局内才打开 */
   if (k === 'tab' && !e.repeat) {
@@ -5132,6 +5255,10 @@ function exportMapFile() {
    7. 粒子 / 文字
    ══════════════════════════════════════════════════════════ */
 function addParticle(x, y, opt) {
+  /* 粒子密度设置：0 = 全关，低于 100 时按比例抽稀（纯视觉，不影响任何结算） */
+  const fx = fxRate();
+  if (fx <= 0) return;
+  if (fx < 1 && Math.random() > fx) return;
   if (G.particles.length > 900) return;
   G.particles.push({
     x, y,
@@ -5175,7 +5302,7 @@ function addDecal(x, y, r, color, alpha) {
   G.decals.push({ x, y, r, color, a: alpha === undefined ? 0.55 : alpha });
 }
 
-function shake(v) { G.shake = Math.min(34, G.shake + v); }
+function shake(v) { G.shake = Math.min(34, G.shake + v * shakeMul()); }
 
 function uiToast(text, cls) {
   const layer = document.getElementById('toastLayer');
@@ -17492,6 +17619,93 @@ function drawStatusTags(mono) {
   ctx.textAlign = 'left';
 }
 
+/* ── 小地图：墙体是静态的，只在换图时烘一次到离屏 canvas，
+      每帧只叠撤离点 / 已察觉敌人 / 自己 —— 几百个矩形也不会拖慢帧率 ── */
+const MINIMAP = { cv: null, w: 0, h: 0, sig: '' };
+
+function minimapCache() {
+  const wpx = 188;
+  const hpx = Math.max(60, Math.round(wpx * WORLD.h / Math.max(1, WORLD.w)));
+  const sig = WORLD.w + 'x' + WORLD.h + ':' + (G.obstacles ? G.obstacles.length : 0);
+  if (MINIMAP.cv && MINIMAP.sig === sig) return MINIMAP;
+  const cv = document.createElement('canvas');
+  cv.width = wpx; cv.height = hpx;
+  const c = cv.getContext('2d');
+  if (!c) return MINIMAP;
+  c.fillStyle = 'rgba(8,14,20,0.86)';
+  c.fillRect(0, 0, wpx, hpx);
+  const sx = wpx / WORLD.w, sy = hpx / WORLD.h;
+  c.fillStyle = 'rgba(126,180,214,0.30)';
+  for (const o of (G.obstacles || [])) {
+    c.fillRect(o.x * sx, o.y * sy, Math.max(1, o.w * sx), Math.max(1, o.h * sy));
+  }
+  MINIMAP.cv = cv; MINIMAP.w = wpx; MINIMAP.h = hpx; MINIMAP.sig = sig;
+  return MINIMAP;
+}
+
+function drawMinimap() {
+  if (!minimapOn() || !P.alive) return;
+  const mm = minimapCache();
+  if (!mm.cv) return;
+  const pad = 18;
+  const x0 = VW - mm.w - pad, y0 = pad;
+  const sx = mm.w / WORLD.w, sy = mm.h / WORLD.h;
+
+  ctx.save();
+  ctx.drawImage(mm.cv, x0, y0);
+
+  /* 相机视野框 */
+  const vw = VW / ZOOM, vh = VH / ZOOM;
+  ctx.strokeStyle = 'rgba(67,217,245,0.35)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x0 + G.cam.x * sx + 0.5, y0 + G.cam.y * sy + 0.5, vw * sx, vh * sy);
+
+  /* 撤离点 */
+  for (const ex of G.extracts) {
+    const locked = ex.mode === 'emergency' && !G.emergencyOpen;
+    const col = locked ? '#5a7a9a' : ex.mode === 'naked' ? '#ffb347' : ex.mode === 'paid' ? '#ffcc4d' : '#46e08a';
+    const ex0 = x0 + ex.x * sx, ey0 = y0 + ex.y * sy;
+    ctx.fillStyle = col;
+    ctx.globalAlpha = 0.9;
+    ctx.beginPath(); ctx.arc(ex0, ey0, 3.4, 0, TAU); ctx.fill();
+    ctx.globalAlpha = 0.5;
+    ctx.strokeStyle = col; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(ex0, ey0, 6.5, 0, TAU); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  /* 已察觉 / 被标记的敌人（雾里没察觉的不给点，保留潜行空间） */
+  for (const e of G.enemies) {
+    if (!(e.state === 'combat' || e.state === 'alert' || e.mark > 0)) continue;
+    const ex0 = x0 + e.x * sx, ey0 = y0 + e.y * sy;
+    ctx.fillStyle = e.type === 'boss' || e.type === 'director' ? '#ff2d55' : 'rgba(255,120,145,0.9)';
+    const r = e.type === 'boss' || e.type === 'director' ? 3 : 2;
+    ctx.beginPath(); ctx.arc(ex0, ey0, r, 0, TAU); ctx.fill();
+  }
+
+  /* 自己：朝准星方向的三角 */
+  const px = x0 + P.x * sx, py = y0 + P.y * sy;
+  ctx.save();
+  ctx.translate(px, py);
+  ctx.rotate(P.aim);
+  ctx.fillStyle = '#eaf7ff';
+  ctx.beginPath();
+  ctx.moveTo(5.5, 0); ctx.lineTo(-3.5, -3.6); ctx.lineTo(-1.5, 0); ctx.lineTo(-3.5, 3.6);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+
+  /* 外框 + 角标 */
+  ctx.strokeStyle = 'rgba(67,217,245,0.30)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x0 + 0.5, y0 + 0.5, mm.w - 1, mm.h - 1);
+  ctx.fillStyle = 'rgba(120,166,196,0.7)';
+  ctx.font = '600 9px ui-monospace, Consolas, monospace';
+  ctx.textAlign = 'right';
+  ctx.fillText((G.tier === 'standard' ? '' : 'TOP · ') + G.extracts.map(e => e.name).join(' '), x0 + mm.w - 3, y0 + mm.h - 5);
+  ctx.textAlign = 'left';
+  ctx.restore();
+}
+
 function drawHUD() {
   const mono = 'ui-monospace, "Consolas", "SF Mono", monospace';
 
@@ -18254,7 +18468,7 @@ function drawCrosshair(mono) {
   const len = 8 + ads * 3;
 
   ctx.save();
-  ctx.strokeStyle = P.reloading > 0 ? 'rgba(255,214,107,0.8)' : 'rgba(180,230,255,0.9)';
+  ctx.strokeStyle = P.reloading > 0 ? 'rgba(255,214,107,0.8)' : aimColor();
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(x - gap - len, y); ctx.lineTo(x - gap, y);
@@ -18263,8 +18477,10 @@ function drawCrosshair(mono) {
   ctx.moveTo(x, y + gap); ctx.lineTo(x, y + gap + len);
   ctx.stroke();
 
-  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.fillStyle = aimColor();
+  ctx.globalAlpha = 0.9;
   ctx.fillRect(x - 1, y - 1, 2, 2);
+  ctx.globalAlpha = 1;
 
   /* 开镜：细镜环 + 四角括号，越开越亮，像贴着镜筒看 */
   if (ads > 0.02) {
@@ -18853,6 +19069,7 @@ function render() {
   if (G.scene === 'playing' || G.scene === 'paused') {
     drawOffscreenMarkers();
     drawHUD();
+    drawMinimap();             // 小地图画在 HUD 之上，右上角
     drawDebuffOverlay();
     drawKnockOverlay();
     drawDownedOverlay();
@@ -19649,6 +19866,212 @@ function closeAchievements() {
   $('ach').classList.add('hidden');
   $('lobby').classList.remove('hidden');
   refreshLobby();
+}
+
+/* ══════════ 设置面板 ══════════ */
+const AIM_PRESETS = ['#b4e6ff', '#ffffff', '#63d68a', '#ffcc4d', '#ff7a9c', '#b782ff'];
+
+function openSettings() {
+  Sfx.init();
+  G._setFromLobby = (G.scene === 'lobby');
+  if (G._setFromLobby) $('lobby').classList.add('hidden');
+  syncSettingsUI();
+  $('settings').classList.remove('hidden');
+}
+function closeSettings() {
+  $('settings').classList.add('hidden');
+  if (G._setFromLobby) { $('lobby').classList.remove('hidden'); refreshLobby(); }
+  G._setFromLobby = false;
+}
+
+function syncSettingsUI() {
+  const s = SAVE.settings;
+  $('setVol').value = s.vol;      $('setVolV').textContent = s.vol;
+  $('setShake').value = s.shake;  $('setShakeV').textContent = s.shake;
+  $('setFx').value = s.fx;        $('setFxV').textContent = s.fx;
+  const mm = $('setMinimap');
+  mm.textContent = s.minimap ? '开' : '关';
+  mm.style.color = s.minimap ? '#8df0b6' : '#7f93a6';
+  mm.style.borderColor = s.minimap ? 'rgba(141,240,182,.4)' : 'rgba(120,150,175,.3)';
+
+  const row = $('setAimRow');
+  row.innerHTML = '';
+  for (const c of AIM_PRESETS) {
+    const d = document.createElement('div');
+    d.className = 'aimdot' + (String(s.aim).toLowerCase() === c.toLowerCase() ? ' on' : '');
+    d.style.background = c;
+    d.style.color = c;
+    d.title = '准星 ' + c;
+    d.addEventListener('click', () => { s.aim = c; saveGame(); syncSettingsUI(); });
+    row.appendChild(d);
+  }
+  $('saveMsg').textContent = '';
+}
+
+function bindSetSlider(id, key, valId) {
+  const el = $(id);
+  el.addEventListener('input', () => {
+    SAVE.settings[key] = el.value | 0;
+    $(valId).textContent = el.value;
+    applySettings();
+  });
+  el.addEventListener('change', () => saveGame());
+}
+
+function saveMsg(t) { $('saveMsg').textContent = t; }
+
+function initSettingsUI() {
+  bindSetSlider('setVol', 'vol', 'setVolV');
+  bindSetSlider('setShake', 'shake', 'setShakeV');
+  bindSetSlider('setFx', 'fx', 'setFxV');
+
+  $('setMinimap').addEventListener('click', () => {
+    SAVE.settings.minimap = SAVE.settings.minimap ? 0 : 1;
+    saveGame();
+    syncSettingsUI();
+  });
+
+  /* 导出：把 SAVE 原样写成 JSON 文本，玩家自己保存 */
+  $('saveExport').addEventListener('click', () => {
+    $('saveText').value = JSON.stringify(SAVE);
+    saveMsg('已导出 · 复制下来存好');
+  });
+  /* 复制到剪贴板（浏览器不给权限时退化成全选，让玩家手动复制） */
+  $('saveCopy').addEventListener('click', () => {
+    const s = JSON.stringify(SAVE);
+    $('saveText').value = s;
+    const fallback = () => { $('saveText').focus(); $('saveText').select(); saveMsg('复制受限 · 已全选，按 Ctrl+C'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(s).then(() => saveMsg('已复制到剪贴板'), fallback);
+    } else fallback();
+  });
+  /* 导入：校验关键字段后覆盖存档并重新载入 */
+  $('saveImport').addEventListener('click', () => {
+    const raw = ($('saveText').value || '').trim();
+    if (!raw) return saveMsg('先粘贴一份存档文本');
+    let d;
+    try { d = JSON.parse(raw); } catch (e) { return saveMsg('不是合法的存档文本'); }
+    if (!d || typeof d !== 'object' || typeof d.credits !== 'number') return saveMsg('存档内容不对（缺少资金字段）');
+    if (!confirm('导入会覆盖当前存档，确定吗？')) return;
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(d)); }
+    catch (e) { return saveMsg('写入失败：浏览器存储不可用'); }
+    saveMsg('导入成功 · 正在重新载入…');
+    setTimeout(() => location.reload(), 400);
+  });
+
+  $('setBtn').addEventListener('click', openSettings);
+  $('closeSettings').addEventListener('click', closeSettings);
+  $('pauseSetBtn').addEventListener('click', openSettings);
+}
+
+/* ══════════ 图鉴 ══════════ */
+const CODEX_REWARD = { common: 5000, rare: 9000, epic: 15000, legend: 24000, myth: 36000 };
+
+/* 收集品第一次进仓库 = 图鉴点亮（之后卖掉也仍然算见过） */
+function markRelicSeen(id) {
+  if (!id || !RELICS[id]) return;
+  if (SAVE.seenRelics[id]) return;
+  SAVE.seenRelics[id] = 1;
+  checkCodexReward(RELICS[id].q);
+  saveGame();
+}
+
+function codexProgress() {
+  const out = {};
+  for (const q of QUALITY_ORDER) out[q] = { have: 0, total: 0 };
+  for (const id of RELIC_IDS) {
+    const q = RELICS[id].q;
+    if (!out[q]) continue;
+    out[q].total++;
+    if (SAVE.seenRelics[id]) out[q].have++;
+  }
+  return out;
+}
+
+/* 某一档全部见过 → 一次性发奖金（每个档位只发一次） */
+function checkCodexReward(q) {
+  const p = codexProgress()[q];
+  if (!p || p.total === 0 || p.have < p.total || SAVE.codexReward[q]) return;
+  SAVE.codexReward[q] = 1;
+  const bonus = CODEX_REWARD[q] || 0;
+  SAVE.credits += bonus;
+  saveGame();
+  Sfx.loot();
+  setTimeout(() => Sfx.tone(1040, 0.08, 0.22, 'triangle'), 80);
+  uiToast('图鉴集齐 · ' + QUALITY[q].name + '　+ ¥' + fmtMoney(bonus), '');
+}
+
+let codexTab = 'all';
+
+function openCodex() {
+  Sfx.init();
+  $('lobby').classList.add('hidden');
+  $('codex').classList.remove('hidden');
+  codexTab = 'all';
+  refreshCodex();
+}
+function closeCodex() {
+  $('codex').classList.add('hidden');
+  $('lobby').classList.remove('hidden');
+  refreshLobby();
+}
+
+function refreshCodex() {
+  const prog = codexProgress();
+  let totalAll = 0, haveAll = 0, worth = 0;
+  for (const q of QUALITY_ORDER) {
+    totalAll += prog[q].total;
+    haveAll += prog[q].have;
+    if (SAVE.codexReward[q]) worth += CODEX_REWARD[q] || 0;
+  }
+  $('codexCredit').textContent = fmtMoney(SAVE.credits);
+  $('codexCount').textContent = haveAll;
+  $('codexTotal').textContent = totalAll;
+  $('codexWorth').textContent = '¥' + fmtMoney(worth);
+
+  /* 稀有度切换（每档带进度） */
+  const tabs = $('codexTabs');
+  tabs.innerHTML = '';
+  const mkTab = (key, label, col) => {
+    const b = document.createElement('button');
+    b.className = 'btn ghost small';
+    const on = codexTab === key;
+    b.style.borderColor = on ? (col || 'rgba(67,217,245,.7)') : 'rgba(120,150,175,.28)';
+    b.style.color = on ? (col || '#43d9f5') : '#8fa9bd';
+    b.textContent = label;
+    b.addEventListener('click', () => { codexTab = key; refreshCodex(); });
+    tabs.appendChild(b);
+  };
+  mkTab('all', '全部 ' + haveAll + '/' + totalAll, '#43d9f5');
+  for (const q of QUALITY_ORDER) {
+    const Q = QUALITY[q];
+    mkTab(q, Q.name + ' ' + prog[q].have + '/' + prog[q].total, Q.color);
+  }
+
+  /* 网格：已获得的排前面，同状态按价格降序 */
+  const grid = $('codexGrid');
+  grid.innerHTML = '';
+  const list = RELIC_IDS.filter(id => codexTab === 'all' || RELICS[id].q === codexTab);
+  list.sort((a, b) => {
+    const sa = SAVE.seenRelics[a] ? 1 : 0, sb = SAVE.seenRelics[b] ? 1 : 0;
+    if (sa !== sb) return sb - sa;
+    return (RELICS[b].price | 0) - (RELICS[a].price | 0);
+  });
+  for (const id of list) {
+    const r = RELICS[id];
+    const got = !!SAVE.seenRelics[id];
+    const Q = QUALITY[r.q] || QUALITY.common;
+    const d = document.createElement('div');
+    d.className = 'cdx' + (got ? '' : ' locked');
+    d.title = got ? (r.name + ' · ¥' + fmtMoney(r.price) + '\n' + (r.desc || '')) : '未获得';
+    d.innerHTML =
+      '<span class="ic" style="color:' + Q.color + ';background:' + Q.dim + '0.12)">' + (got ? r.icon : '·') + '</span>' +
+      '<span style="min-width:0">' +
+        '<div class="nm"' + (got ? '' : ' style="color:#5e7a8f"') + '>' + (got ? r.name : '未获得') + '</div>' +
+        '<div class="pr" style="color:' + (got ? Q.color : '#3f5d72') + '">' + (got ? '¥' + fmtMoney(r.price) : '???') + ' · ' + Q.name + '</div>' +
+      '</span>';
+    grid.appendChild(d);
+  }
 }
 
 function closeStash() {
@@ -20654,6 +21077,7 @@ function cellToStock(c) {
     addAmmoStock(c.cal, c.lv, c.n | 0);
   } else if (c.t === 'relic') {
     SAVE.stash[c.id] = (SAVE.stash[c.id] | 0) + 1;
+    markRelicSeen(c.id);
   } else if (c.t === 'mod') {
     SAVE.modBag[c.id] = Math.min(99, (SAVE.modBag[c.id] | 0) + 1);
   } else if (c.t === 'armor') {
@@ -22441,6 +22865,9 @@ function startRaid() {
   mouse.pressed = false;        // 大厅里残留的一次按下不要带进出击的第一帧
   G.inExtract = null;
 
+  MINIMAP.cv = null;             // 换图/新局：小地图墙体缓存重烘
+  MINIMAP.sig = '';
+
   G.bullets = [];
   G.enemies = [];
   G.particles = [];
@@ -22581,6 +23008,7 @@ function endRaid(success) {
       const r = RELICS[it.id];
       if (!r) continue;
       SAVE.stash[it.id] = (SAVE.stash[it.id] | 0) + it.n;
+      markRelicSeen(it.id);
       inV += r.price * it.n;
     }
 
@@ -22811,6 +23239,9 @@ $('closeOps').addEventListener('click', closeOperators);
 $('stashBtn').addEventListener('click', openStash);
 $('achBtn').addEventListener('click', openAchievements);
 $('closeAch').addEventListener('click', closeAchievements);
+$('codexBtn').addEventListener('click', openCodex);
+$('closeCodex').addEventListener('click', closeCodex);
+initSettingsUI();
 $('gunsmithBtn').addEventListener('click', () => openGunsmith());
 $('closeGunsmith').addEventListener('click', closeGunsmith);
 $('gsStripBtn').addEventListener('click', () => stripAllMods(gsPick.weapon));
