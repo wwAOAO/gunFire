@@ -6266,6 +6266,23 @@ function fitsAtRun(arr, blocks, i, cell) {
   const b = blkAt(blocks, i);
   return b ? rectFitsAt(arr, b[0], b[1], b[2], i, cell) : false;
 }
+/* 「落点覆盖」锚点搜索：多格物品松手时不必正好压在头格 ——
+   在落点所在隔舱里找一个能整件放下、且矩形覆盖落点格的锚点，
+   有多个取离落点最近的。找不到返回 -1。
+   例：1×3 手术包放进一个 3 格竖舱，落在中间格/底格也能放（锚点自动顶到头格）。 */
+function findFitCovering(arr, blocks, i, cell) {
+  const b = blkAt(blocks, i);
+  if (!b) return -1;
+  const [s, e, C] = b;
+  let best = -1, bestD = Infinity;
+  for (let a = s; a < e; a++) {
+    if (!rectFitsAt(arr, s, e, C, a, cell)) continue;
+    if (!spanIdxs(a, cell, s, e, C).includes(i)) continue;
+    const d = Math.abs(a - i);
+    if (d < bestD) { best = a; bestD = d; }
+  }
+  return best;
+}
 /* 放置：head 落 i，占位标记按矩形铺（blocks 缺省时退回扁平铺，兼容老调用） */
 function placeAtRun(arr, i, cell, blocks) {
   arr[i] = cell;
@@ -23349,9 +23366,13 @@ function pkPlaceInto(arr, i, zone) {
   }
   const cell = heldToCell(held);
   const c = arr[hi];
-  if (!c) {                                          // 空格：必须整个塞进同一隔舱
-    if (!fitsAtRun(arr, blocks, hi, cell)) { uiToast(iszHint(cell), 'small warn'); return; }
-    placeAtRun(arr, hi, cell, blocks);
+  if (!c) {                                          // 空格：整件塞进落点所在隔舱（锚点可自动调整到覆盖落点的位置）
+    let at = hi;
+    if (!fitsAtRun(arr, blocks, hi, cell)) {
+      at = findFitCovering(arr, blocks, hi, cell);   // 落在多格物品的延续区也能放：锚点挪到能整件放下的头格
+      if (at < 0) { uiToast(iszHint(cell), 'small warn'); return; }
+    }
+    placeAtRun(arr, at, cell, blocks);
     PK_UI.held = null;
   } else if (stackInto(held, c, ownedMapLive())) {   // 同弹药合并（补满为止，剩余留在手上）
     if ((held.n | 0) <= 0) PK_UI.held = null;
@@ -23362,7 +23383,8 @@ function pkPlaceInto(arr, i, zone) {
     }
     if (!c.cont) {
       clearSpanAt(arr, hi, blocks);
-      let at = fitsAtRun(arr, blocks, hi, cell) ? hi : findFitRun(arr, blocks, cell);
+      let at = fitsAtRun(arr, blocks, hi, cell) ? hi : findFitCovering(arr, blocks, hi, cell);
+      if (at < 0) at = findFitRun(arr, blocks, cell);
       if (at < 0) { placeAtRun(arr, hi, c, blocks); uiToast(iszHint(cell, cellName(cell)), 'small warn'); return; }
       placeAtRun(arr, at, cell, blocks);
       PK_UI.held = c;
