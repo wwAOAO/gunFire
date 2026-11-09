@@ -2893,7 +2893,7 @@ const SKILL = {
      小兵缠 3 秒、BOSS 2 秒后自己拔掉；上限最低压到 10%（BOSS 50%），
      拔完 6 秒慢慢回满，被扣掉的血也一起还回来。 */
   swarm: { count: 6, speed: 300, range: 55 * 18, life: 22, radius: 42,
-           attach: 3.0, bossAttach: 2.0, ramp: 1.2, recover: 6.0,
+           attach: 3.0, bossAttach: 2.0, ramp: 3.0, bossRamp: 2.0, recover: 6.0,
            capFloor: 0.10, bossCapFloor: 0.50, sightMul: 0.38, fovMul: 0.62, hearMul: 0.22,
            turn: 3.8, retarget: 1.2 },
 };
@@ -9297,7 +9297,7 @@ function updateSwarmDebuff(e, dt) {
   if ((e.swarmT || 0) > 0) {
     e.swarmT -= dt;
     const floor = e.capFloor == null ? SW.capFloor : e.capFloor;
-    const rate = (1 - floor) / SW.ramp;
+    const rate = (1 - floor) / (e.capBoss ? SW.bossRamp : SW.ramp);
     e.capMul = Math.max(floor, (e.capMul == null ? 1 : e.capMul) - rate * dt);
     const cap = e.maxHp * e.capMul;
     if (e.hp > cap) {
