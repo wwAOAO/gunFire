@@ -3068,7 +3068,7 @@ const OPERATORS = {
     },
     x: {
       name: '流荧集群系统', short: '流荧集群', tag: '大招', kind: 'swarm',
-      desc: '放出一群自动寻路的无人机（最远 55 米）：绕开障碍、自己找敌人，路上经过队友先给对方挂一份「肾上腺素」。<b>命中敌人</b>：视野模糊、听力大幅衰减，并持续压低生命上限（最低压到 10%，BOSS 压到 50%）；小兵被缠 3 秒、BOSS 2 秒后会自己动手拔除，<b>拔完 6 秒上限慢慢回满、被扣掉的血也一起还回来</b> —— 不拔就一直被压着打。CD 120 秒。',
+      desc: '放出一群自动寻路的无人机（最远 55 米）：绕开障碍、自己找敌人，路上经过队友先给对方挂一份「肾上腺素」。<b>命中敌人</b>：视野模糊、听力大幅衰减，并持续压低生命上限（最低压到 10%，BOSS 压到 50%）；被缠住的敌人会<b>停火站桩、专心拔除</b>——小兵 3 秒、BOSS 2 秒拔完，<b>拔完 6 秒上限慢慢回满、被扣掉的血也一起还回来</b>。这段时间就是你上前的击杀窗口。CD 120 秒。',
       cd: 120, charges: 1,
     },
     passive: {
@@ -7386,6 +7386,7 @@ function spawnEnemy(type, atX, atY, fac) {
     /* 无名：闪光致盲 / 流血层数 / 重伤（打药与起身变慢）/ 战地包扎进度 */
     blind: 0, bleedN: 0, bleedT: 0, trauma: 0,
     bandaging: false, bandageT: 0, careCd: rand(3, 9),
+    careSeek: 0, careSpotX: 0, careSpotY: 0,   // 包扎前的找掩体阶段（拖着伤往掩体挪）
     /* 近战：wind 抬手预警 / swing 挥击动画 / cd 收招冷却 / lunge 剩余突进 / back 收招后撤 / hit 命中闪光 */
     meleeCd: rand(0.2, 0.9), meleeWind: 0, meleeSwing: 0, meleeAim: 0,
     meleeLunge: 0, meleeBack: 0, meleeHit: 0,
@@ -9240,6 +9241,7 @@ function attachSwarm(e) {
   e.blur = 1;
   e.deaf = 1;
   e.bandaging = false;
+  e.careSeek = 0;
   popup(e.x, e.y - e.r - 26, boss ? '无人机群缠上 · 拔除 2s' : '无人机群缠上 · 拔除 3s', '#c8f57a', 12);
   Sfx.tone(620, 0.12, 0.05, 'square', 380);
   burst(e.x, e.y, 14, {
@@ -9289,6 +9291,22 @@ function updateSwarms(dt) {
       });
     }
   }
+}
+
+/* 包扎找掩体：8 米内找一个「自己能站上去、且挡住玩家视线」的点；找不到返回 null */
+function findCareCover(e) {
+  if (!P.alive) return null;
+  for (let t = 0; t < 30; t++) {
+    const ang = (t / 30) * TAU + rand(0, 0.4);
+    const rr = [60, 100, 144][t % 3];                 // 三圈半径：3.3m / 5.6m / 8m
+    const px = e.x + Math.cos(ang) * rr;
+    const py = e.y + Math.sin(ang) * rr;
+    if (px < e.r + 10 || py < e.r + 10 || px > WORLD.w - e.r - 10 || py > WORLD.h - e.r - 10) continue;
+    if (hitsObstacle(px, py, e.r + 6)) continue;      // 得是自己能站的位置
+    if (losClear(px, py, P.x, P.y)) continue;         // 得挡住玩家的视线（通视的点不要）
+    return { x: px, y: py };
+  }
+  return null;
 }
 
 /* 敌人身上的集群：压上限 / 拔除 / 恢复（每帧在 updateEnemies 里跑） */
@@ -10661,12 +10679,35 @@ function updateEnemies(dt) {
           e.careCd = SKILL.trauma.bandageCd;
         }
       }
+    } else if (e.careSeek > 0) {
+      /* 拖着伤往掩体挪：走到位（或 1.5 秒没走到）就地包扎；被看见 / 被控 / 被致盲就放弃这轮 */
+      if (sees || e.stun > 0 || (e.kd || 0) > 0 || e.blind > 0 || e.hp <= 0) {
+        e.careSeek = 0;
+      } else {
+        e.careSeek -= dt;
+        const cdst = Math.hypot(e.careSpotX - e.x, e.careSpotY - e.y);
+        if (cdst < 24 || e.careSeek <= 0) {
+          e.careSeek = 0;
+          e.bandaging = true;
+          e.bandageSlow = e.trauma > 0 ? SKILL.trauma.healMul : 1;
+          e.bandageT = SKILL.trauma.bandageTime * (e.trauma > 0 ? SKILL.trauma.careMul : 1);
+          popup(e.x, e.y - e.r - 24, e.trauma > 0 ? '重伤 · 包扎拖慢' : '战地包扎', e.trauma > 0 ? '#ff8fa3' : '#8ad3a8', 11);
+        }
+      }
     } else if (e.state !== 'combat' && !sees && e.hp < e.maxHp * 0.55 &&
                e.careCd <= 0 && e.stun <= 0 && (e.kd || 0) <= 0 && e.blind <= 0) {
-      e.bandaging = true;
-      e.bandageSlow = e.trauma > 0 ? SKILL.trauma.healMul : 1;
-      e.bandageT = SKILL.trauma.bandageTime * (e.trauma > 0 ? SKILL.trauma.careMul : 1);
-      popup(e.x, e.y - e.r - 24, e.trauma > 0 ? '重伤 · 包扎拖慢' : '战地包扎', e.trauma > 0 ? '#ff8fa3' : '#8ad3a8', 11);
+      /* 先看看 8 米内有没有能挡住玩家视线的掩体点：有就拖着伤挪过去再包扎，没有就地包扎 */
+      const spot = findCareCover(e);
+      if (spot) {
+        e.careSpotX = spot.x; e.careSpotY = spot.y;
+        e.careSeek = 1.5;
+        popup(e.x, e.y - e.r - 24, e.trauma > 0 ? '重伤 · 拖向掩体' : '找掩体包扎', '#8ad3a8', 10);
+      } else {
+        e.bandaging = true;
+        e.bandageSlow = e.trauma > 0 ? SKILL.trauma.healMul : 1;
+        e.bandageT = SKILL.trauma.bandageTime * (e.trauma > 0 ? SKILL.trauma.careMul : 1);
+        popup(e.x, e.y - e.r - 24, e.trauma > 0 ? '重伤 · 包扎拖慢' : '战地包扎', e.trauma > 0 ? '#ff8fa3' : '#8ad3a8', 11);
+      }
     }
 
     /* ── 安全总监的持续标记：总监盯着你的时候，全体哈夫克都知道你站在哪 ── */
@@ -10738,6 +10779,8 @@ function updateEnemies(dt) {
 
     /* 被三头犬震晕：计时照走（上面统一扣过了），但这一帧不移动、不瞄准、不开枪 */
     if (e.stun > 0) continue;
+    /* 被流荧集群缠住：停火、不瞄准、不追人 —— 站在原地专心拔无人机，拔完才恢复行动 */
+    if ((e.swarmT || 0) > 0) continue;
 
     /* ── 按状态决定移动目标与速度 ── */
     let mvx = 0, mvy = 0, spdMul = 1, faceAim = null;
@@ -10746,6 +10789,12 @@ function updateEnemies(dt) {
     if (e.bandaging) {
       /* 蹲着包扎：原地不动、也不还击（掉血或被他看见就打断） */
       mvx = 0; mvy = 0;
+    } else if (e.careSeek > 0) {
+      /* 拖着伤往掩体挪：目标就是掩体点，不还击 */
+      const cdx = e.careSpotX - e.x, cdy = e.careSpotY - e.y;
+      const cl = Math.hypot(cdx, cdy) || 1;
+      mvx = cdx / cl; mvy = cdy / cl;
+      spdMul = 0.85;
     } else if (e.state === 'patrol') {
       // 在驻点附近游荡，走到就驻足张望（BOSS 只在很小的圈子里踱步）
       e.patrolT -= dt;
@@ -11411,7 +11460,6 @@ function updateEnemies(dt) {
     let spd = e.speed * spdMul * (e.stagger > 0 ? 0.25 : 1);
     if (e.cripple > 0) spd *= 0.6;                        // 被炸断腿：一瘸一拐
     if (e.blind > 0) spd *= 0.5;                          // 被闪光晃到：摸着墙走
-    if ((e.swarmT || 0) > 0) spd *= 0.45;                 // 被流荧集群缠住：一边跑一边扯无人机
     if (e.type === 'runner') {
       // 点射时半蹲着走，打完继续撒腿冲
       if (e.ptN > 0) spd *= 0.5;
