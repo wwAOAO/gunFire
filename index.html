@@ -735,6 +735,7 @@
     background:var(--qb,rgba(157,178,196,.1)); cursor:default;
   }
   .bchip b { font-weight:800; font-variant-numeric:tabular-nums; }
+  .bchip.off { opacity:.38; border-style:dashed; }   /* 与当前枪不兼容的配件 */
 
   .gs-foot { display:flex; gap:8px; margin-top:auto; padding-top:12px; }
   .gs-foot .btn { flex:1; }
@@ -789,6 +790,19 @@
   .ops-wrap { display:grid; grid-template-columns:270px 1fr; gap:14px; align-items:stretch; flex:1; min-height:0; }
   #ops .frame { min-height:calc(100vh - 48px); }   /* 内容少也撑满一屏，消除底部大块空白 */
   .ops-list { display:flex; flex-direction:column; gap:8px; min-height:0; }
+  /* 干员分组标题：三角洲式分类摆放 —— 每个定位一条色带 */
+  .ops-grouphd {
+    display:flex; align-items:baseline; gap:8px; margin-top:6px; padding:0 2px 4px;
+    border-bottom:1px solid rgba(80,140,185,.18);
+  }
+  .ops-grouphd:first-child { margin-top:0; }
+  .ops-grouphd b { font-size:12px; letter-spacing:.3em; color:#eaf7ff; font-weight:800; }
+  .ops-grouphd span { font-size:9px; letter-spacing:.24em; color:#5d87a3; font-weight:600; }
+  .ops-grouphd i { margin-left:auto; font-size:9.5px; font-style:normal; color:#4f7d99; letter-spacing:.06em; }
+  .ops-grouphd[data-rc="assault"]  { border-color:rgba(255,138,76,.4); }  .ops-grouphd[data-rc="assault"] b { color:#ffc9a3; }
+  .ops-grouphd[data-rc="recon"]    { border-color:rgba(67,217,245,.4); }  .ops-grouphd[data-rc="recon"] b { color:#a8ecff; }
+  .ops-grouphd[data-rc="support"]  { border-color:rgba(110,231,183,.4); } .ops-grouphd[data-rc="support"] b { color:#baf3d9; }
+  .ops-grouphd[data-rc="engineer"] { border-color:rgba(255,204,77,.4); }  .ops-grouphd[data-rc="engineer"] b { color:#ffe3a0; }
   .ops-detail { min-height:0; }
   .ops-card {
     display:flex; gap:10px; align-items:center; padding:10px;
@@ -1598,6 +1612,123 @@ const RELIC_EXT = [
 for (const [id, q, icon, name, price, desc] of RELIC_EXT) {
   RELICS[id] = { q, z: id[0] === 'd' ? 'dam' : 'space', icon, name, price, desc };
 }
+
+/* ═══════ 扩展收集品 · 第二批：坝区 53 件 + 航天 53 件（总目录凑满 300） ═══════
+   紧凑表同 RELIC_EXT：[id, 品质, 图标, 名称, 价格, 描述] */
+const RELIC_EXT2 = [
+  /* ── 坝区第二批 ── */
+  ['d_bottle','common','瓶','旧汽水瓶',170,'汽水厂早就关了，瓶子还印着当年的厂徽。'],
+  ['d_charcoal','common','炭','木炭袋',180,'半袋烧剩的木炭，冬天还能派上用场。'],
+  ['d_umbrella','common','伞','断骨雨伞',190,'伞面补了三次，骨架断了两根。'],
+  ['d_fanblade','common','叶','吊扇叶片',200,'食堂吊扇拆下来的叶片，灰厚得能种菜。'],
+  ['d_gasket','common','圈','橡胶垫圈包',210,'耐油橡胶垫圈一包，规格全。'],
+  ['d_mirror','common','镜','裂镜框',220,'木框镜子裂成蛛网，照人还能认出来。'],
+  ['d_kettle','common','壶','烧水铝壶',230,'壶底一层厚水垢，把手换了三次铁丝。'],
+  ['d_tube_old','common','管','电子管',240,'收音机里的电子管，玻璃壳还透亮。'],
+  ['d_broom','common','帚','竹扫帚',250,'坝区门房用的老扫帚，竹条磨秃了一半。'],
+  ['d_chalk','common','笔','粉笔盒',260,'半盒粉笔，当班记录都写在黑板上。'],
+  ['d_padlock','common','锁','锈挂锁',270,'钥匙早丢了，锁梁还咬得死紧。'],
+  ['d_scale','common','秤','弹簧台秤',280,'菜市场淘汰的台秤，指针还会动。'],
+  ['d_mug','common','缸','搪瓷缸子',290,'缸身印着「安全生产」，磕掉几块瓷。'],
+  ['d_oillamp','common','灯','煤油灯',300,'灯罩熏黑了，油壶里还有半两油。'],
+  ['d_toolbag','common','袋','帆布工具袋',310,'袋底磨穿了一个洞，工具倒剩三件。'],
+  ['d_pail','common','桶','铁皮提桶',320,'桶底锈穿了，提手还结实。'],
+  ['d_thermo','common','计','老温度计',330,'水银柱卡在半截，外壳黄铜的。'],
+  ['d_hook','common','钩','起重吊钩',340,'吊钩磨出亮茬，钩身上打着吨位钢印。'],
+  ['d_sealring','common','垫','紫铜密封垫',350,'退过火的紫铜垫，软得能掐出印。'],
+  ['d_banner','common','旗','褪色锦旗',360,'「防洪标兵」四个字，红布晒成了粉色。'],
+  ['d_trans','rare','芯','变压器铁芯',920,'硅钢片叠的铁芯，漆包线拆下来就是钱。'],
+  ['d_dynamo','rare','机','老式发电机转子',980,'转子还能转，铜绕组完好。'],
+  ['d_turbineblade','rare','轮','水轮机叶片',1040,'冲刷得只剩刃口的叶片，钢口极好。'],
+  ['d_winch','rare','绞','卷扬机绞盘',1100,'钢丝绳缠得整整齐齐，刹车片还厚。'],
+  ['d_theodolite','rare','仪','老式经纬仪',1160,'黄铜镜筒，三脚架缺一条腿。'],
+  ['d_gasflask','rare','炔','乙炔气瓶',1220,'瓶身检验钢印齐全，阀门封着铅。'],
+  ['d_ammoseal','rare','盒','密封弹药盒',1280,'锡皮内衬，盒盖上的封条没揭。'],
+  ['d_flarekit','rare','火','信号弹组',1340,'三发信号弹，防潮筒完好。'],
+  ['d_fieldradio','rare','步','军用步话机',1400,'皮盒磨白了，天线还能拉出三节。'],
+  ['d_coldbox','rare','冷','胰岛素冷藏盒',1460,'内外胆完好，冰袋早就化了。'],
+  ['d_medbag','rare','医','军用急救包',1520,'止血带和磺胺粉都还在，过期十二年。'],
+  ['d_sandbox','rare','盘','军用沙盘残件',1580,'坝区的地形模型，缺了东南角。'],
+  ['d_smokecarton','rare','烟','走私香烟箱',1640,'整条没开封的老烟，牌子早就绝版。'],
+  ['d_signalamp','rare','灯','防水信号灯',1700,'玻璃罩没裂，灯座触点还亮。'],
+  ['d_leadbelt','rare','铅','潜水配重铅带',1760,'五块铅块串在帆布带上，沉手。'],
+  ['d_genset','rare','电','手摇发电机',1820,'摇柄还能转，输出端子发烫。'],
+  ['d_acceptfile','rare','书','工程验收报告',1880,'一册验收签字，盖着二十几个红章。'],
+  ['d_yuancoin','rare','银','袁大头银元',2460,'边齿完好，吹一口气还有回音。'],
+  ['d_shaft','epic','轴','水轮机组主轴',3400,'两米长的锻钢主轴，轴瓦磨损均匀。'],
+  ['d_exciter','epic','励','备用励磁机',3600,'励磁机整流子完好，碳刷换过新的。'],
+  ['d_turfmap','epic','图','赤霄地盘划分图',3800,'手绘的势力范围，每个码头都标了价。'],
+  ['d_helmwheel','epic','舵','巡逻艇舵轮',4000,'柚木舵轮，握把上有一圈刀痕。'],
+  ['d_bronzesafe','epic','箱','铜皮保险柜',4200,'柜门焊死了，锁芯被人钻断在里面。'],
+  ['d_miltrans','epic','变','军用变压器',4400,'油浸变压器，铭牌打了军字号。'],
+  ['d_paintcan','epic','光','荧光涂料罐',4600,'罐底结块的夜光涂料，黑暗里还在亮。'],
+  ['d_craneboom','epic','臂','起重机液压臂',4800,'整段液压臂，密封圈老化渗油。'],
+  ['d_warbadge','epic','徽','赤霄督战徽章',5000,'铁皮烤漆的徽章，背面刻着督战令编号。'],
+  ['d_towerscope','epic','望','哨塔望远镜',5600,'军用双筒镜，镜片没长霉。'],
+  ['d_tigerfu','legend','符','赤霄虎符',11400,'铜虎一分为二，合缝处对得上齿口。'],
+  ['d_floodkey','legend','钥','泄洪闸主钥匙',12200,'三公斤的黄铜钥匙，齿口深得像锯子。'],
+  ['d_stonerub','legend','拓','坝基石刻拓片',13400,'整卷拓片，碑文里提到「永不开闸」。'],
+  ['d_jeepmotor','legend','引','军用越野车发动机',16000,'整台 V8 发动机，缸体还带着机油味。'],
+  ['d_trident','myth','戟','镇坝三叉戟',32000,'三米长的仪仗戟，叉尖淬过火，传说开闸的人要举着它走完全程。'],
+
+  /* ── 航天第二批 ── */
+  ['s_washer','common','垫','精密垫片盒',170,'厚度从 0.1 到 1.0 全套，格子里码得整齐。'],
+  ['s_nametag','common','牌','航天铭牌',180,'设备铭牌，编号末尾带着「HVK」。'],
+  ['s_qrlabel','common','签','二维码标签贴',190,'一版打印的资产标签，扫码全是乱码。'],
+  ['s_snapclip','common','卡','弹性卡箍',200,'不锈钢快装卡箍，一捏就锁死。'],
+  ['s_drypack','common','燥','干燥剂罐',210,'变色硅胶半罐，还能再烘一次。'],
+  ['s_magmat','common','磁','磁性工具垫',220,'零件吸在上面一颗都跑不掉。'],
+  ['s_spencil','common','笔','太空铅笔',230,'不用墨水的按压铅笔，笔芯是石墨圈。'],
+  ['s_latexglove','common','套','洁净手套',240,'无尘车间的一次性手套，还剩半盒。'],
+  ['s_esdbrush','common','刷','防静电毛刷',250,'刷毛软得像羽毛，扫电路板专用。'],
+  ['s_tapeline','common','尺','军规卷尺',260,'刻度是公制与英寸双排，外壳钢制。'],
+  ['s_sampletube','common','管','试样管',270,'带旋盖的玻璃试样管，管壁刻着刻度。'],
+  ['s_cabletie','common','带','线束扎带',280,'航天级扎带，拉断不脱扣。'],
+  ['s_dustcover','common','罩','防尘罩',290,'定制的设备防尘罩，四个角都有松紧口。'],
+  ['s_thermogauge','common','温','舱温计',300,'量程 -60℃ 到 80℃，指针还活着。'],
+  ['s_caphat','common','帽','洁净帽',310,'无尘车间的隔离帽，帽檐印着批次。'],
+  ['s_flask','common','瓶','采样瓶',320,'棕色避光采样瓶，瓶口封蜡完好。'],
+  ['s_logbook','common','本','实验记录本',330,'方格纸写满公式，最后一页画着火箭。'],
+  ['s_coilwire','common','圈','漆包线圈',340,'绕得极齐的漆包线，线径只有头发丝粗。'],
+  ['s_springkit','common','簧','精密弹簧组',350,'一盒不同劲度的弹簧，连卡簧都有。'],
+  ['s_foilfilm','common','箔','屏蔽箔片',360,'铝箔覆膜的屏蔽片，折痕都是直的。'],
+  ['s_thrustport','rare','口','姿控推力器',960,'巴掌大的推力器，喷口烧蚀纹清晰。'],
+  ['s_beaconlamp','rare','灯','信标灯组',1020,'四颗高频闪灯，透镜没老化。'],
+  ['s_ablator','rare','蚀','烧蚀防热材料',1080,'蜂窝填充的烧蚀层，切面像蜂巢饼干。'],
+  ['s_gyroscope2','rare','陀','备份陀螺仪',1140,'机械陀螺，转子启动还有嗡鸣。'],
+  ['s_solenoid','rare','阀','高压电磁阀',1200,'通电「咔」一声就吸合，密封没漏。'],
+  ['s_dishseg','rare','面','抛物面天线段',1260,'一段抛物面反射板，焦点馈源还在。'],
+  ['s_proptank','rare','罐','推进剂取样罐',1320,'双层真空罐，罐身结着白霜。'],
+  ['s_weldhead','rare','焊','自动焊枪头',1380,'轨道焊枪头，钨极只磨掉一半。'],
+  ['s_opticsgrp','rare','组','光学镜组',1440,'三片胶合的镜组，膜层泛蓝紫。'],
+  ['s_solbat','rare','池','太阳能蓄电池',1500,'镍氢电池组，容量还剩七成。'],
+  ['s_moonsoil','rare','壤','月壤模拟样本',1560,'密封罐里的模拟月壤，灰色像水泥粉。'],
+  ['s_harness','rare','束','线束总成',1620,'几百根线编成的线束，每根都有编号。'],
+  ['s_meterpump','rare','泵','微型计量泵',1680,'隔膜计量泵，流量标定牌没撕。'],
+  ['s_crewtag','rare','牌','乘组名牌',1740,'飞行乘组的金属名牌，背面刻着任务代号。'],
+  ['s_porthole','rare','窗','舷窗玻璃',1800,'双层密封的舷窗玻璃，边缘有烧蚀痕。'],
+  ['s_tempsensor','rare','感','温度传感器阵列',1860,'一片阵列式传感器，焊点均匀得像印刷的。'],
+  ['s_canopy','rare','伞','降落伞伞衣',1920,'折叠整齐的主伞衣，伞绳一根没乱。'],
+  ['s_dockprobe','rare','探','对接探头',1980,'对接机构的伸缩探头，行程还很顺。'],
+  ['s_injector','epic','注','发动机喷注器',3500,'几百个喷孔的黄铜盘，孔距用放大镜才看得清。'],
+  ['s_heatex','epic','换','换热器芯体',3700,'翅片密得像书页，通道里没有一点积垢。'],
+  ['s_gncunit','epic','制','制导导航控制机',3900,'整台 GNC 控制机，接插件都盖着防尘帽。'],
+  ['s_pdu','epic','电','电源分配单元',4100,'军规配电单元，每一路都带保险。'],
+  ['s_gearbox','epic','轮','展开机构齿轮箱',4300,'太阳翼的齿轮箱，润滑脂还是新的。'],
+  ['s_mirrorblank','epic','坯','大型主镜坯',4500,'半人高的镜坯，表面还没抛光。'],
+  ['s_hptank','epic','瓶','高压气瓶',4700,'钛合金气瓶，水压试验标签没过期。'],
+  ['s_radpcb','epic','板','抗辐射主板',4900,'整块三模冗余主板，芯片全部 triples 锁定。'],
+  ['s_payloadrack','epic','柜','科学载荷柜',5100,'一柜子的实验模块，标签全是代号。'],
+  ['s_dsprobe','epic','探','深空探测器部件',5400,'探测器的遥测舱段，太阳翼接口还在。'],
+  ['s_centerstage','legend','级','火箭中央级段',11200,'整段中央级结构，焊接环缝像艺术品。'],
+  ['s_codeline','legend','码','发射授权码本',12000,'牛皮纸包着的码本，页码用打孔机编的。'],
+  ['s_payloadbay','legend','舱','保密载荷舱',13400,'整只载荷舱，舱门上贴着三道封条。'],
+  ['s_acsset','legend','姿','轨道器姿态控制总成',16200,'整套姿态控制总成，飞轮还能自由转。'],
+  ['s_padconsole','myth','台','发射工位总控台',31000,'整个发射工位的大脑，按钮上的防尘盖一个没少。'],
+];
+for (const [id, q, icon, name, price, desc] of RELIC_EXT2) {
+  RELICS[id] = { q, z: id[0] === 'd' ? 'dam' : 'space', icon, name, price, desc };
+}
 const RELIC_IDS = Object.keys(RELICS);
 
 /* ═══════ 成就：结算时逐条判定，解锁即发奖金（只发一次） ═══════
@@ -1628,6 +1759,85 @@ const ACHIEVEMENTS = [
     test: (r, st) => st.kills >= 200 },
   { id: 'top_clear', name: '禁区归来', desc: '从顶级图成功撤离', reward: 6000,
     test: (r) => r.success && r.tier === 'top' },
+
+  /* ── 扩编成就（共 50 条）：击杀 / 撤离 / 收集 / 买卖 / 折腾史 / 图鉴 / 枪匠 ── */
+  { id: 'ach_kill35', name: '火力覆盖', desc: '单局击杀 35 名敌人', reward: 5500, goal: 35, live: 'kills',
+    test: (r) => r.kills >= 35 },
+  { id: 'ach_kill50', name: '无人生还', desc: '单局击杀 50 名敌人', reward: 9000, goal: 50, live: 'kills',
+    test: (r) => r.kills >= 50 },
+  { id: 'ach_ext25', name: '常客', desc: '累计成功撤离 25 次', reward: 7000, goal: 25, live: 'extracts',
+    test: (r, st) => st.extracts >= 25 },
+  { id: 'ach_ext50', name: '回家专家', desc: '累计成功撤离 50 次', reward: 12000, goal: 50, live: 'extracts',
+    test: (r, st) => st.extracts >= 50 },
+  { id: 'ach_ext100', name: '百战老兵', desc: '累计成功撤离 100 次', reward: 25000, goal: 100, live: 'extracts',
+    test: (r, st) => st.extracts >= 100 },
+  { id: 'ach_kill500', name: '百人斩', desc: '累计击杀 500 名敌人', reward: 12000, goal: 500, live: 'totalKills',
+    test: (r, st) => st.kills >= 500 },
+  { id: 'ach_kill1000', name: '千杀之人', desc: '累计击杀 1000 名敌人', reward: 25000, goal: 1000, live: 'totalKills',
+    test: (r, st) => st.kills >= 1000 },
+  { id: 'ach_kill2000', name: '活着的传说', desc: '累计击杀 2000 名敌人', reward: 40000, goal: 2000, live: 'totalKills',
+    test: (r, st) => st.kills >= 2000 },
+  { id: 'ach_ghost', name: '幽灵行动', desc: '一枪不放完成一次撤离（击杀 0）', reward: 4000,
+    test: (r) => r.success && r.kills === 0 },
+  { id: 'ach_blind15', name: '灯全熄了', desc: '单局致盲 15 名敌人', reward: 4800, goal: 15, live: 'blinds',
+    test: (r) => r.blinds >= 15 },
+  { id: 'ach_swarm8', name: '蜂潮', desc: '单局流荧集群缠住 8 名敌人', reward: 4500, goal: 8, live: 'swarmHits',
+    test: (r) => r.swarmHits >= 8 },
+  { id: 'ach_bleed20', name: '放血师', desc: '单局让 20 名敌人流血', reward: 4500, goal: 20, live: 'bleedHits',
+    test: (r) => r.bleedHits >= 20 },
+  { id: 'ach_silent6', name: '死寂', desc: '静默潜袭期间单局击杀 6 人', reward: 5200, goal: 6, live: 'silentKills',
+    test: (r) => r.silentKills >= 6 },
+  { id: 'ach_rel20', name: '搬家公司', desc: '单局撤离携带 20 件收集品', reward: 4200, goal: 20, live: 'relics',
+    test: (r) => r.success && r.relics >= 20 },
+  { id: 'ach_rel40', name: '移动仓库', desc: '单局撤离携带 40 件收集品', reward: 8000, goal: 40, live: 'relics',
+    test: (r) => r.success && r.relics >= 40 },
+  { id: 'ach_rel100', name: '囤货成瘾', desc: '累计带出 100 件收集品', reward: 6000,
+    test: (r, st) => (st.relics | 0) >= 100 },
+  { id: 'ach_rel500', name: '物流大亨', desc: '累计带出 500 件收集品', reward: 20000,
+    test: (r, st) => (st.relics | 0) >= 500 },
+  { id: 'ach_blind100', name: '暗影施法者', desc: '累计致盲 100 名敌人', reward: 8000,
+    test: (r, st) => (st.blinds | 0) >= 100 },
+  { id: 'ach_bleed200', name: '血债累累', desc: '累计让 200 名敌人流血', reward: 8000,
+    test: (r, st) => (st.bleed | 0) >= 200 },
+  { id: 'ach_value40k', name: '大单', desc: '单局撤离携带收集品估值 ¥40,000', reward: 5000, goal: 40000, live: 'value',
+    test: (r) => r.success && (r.value | 0) >= 40000 },
+  { id: 'ach_value100k', name: '天价包裹', desc: '单局撤离携带收集品估值 ¥100,000', reward: 12000, goal: 100000, live: 'value',
+    test: (r) => r.success && (r.value | 0) >= 100000 },
+  { id: 'ach_loot500k', name: '身家清白', desc: '累计撤离战利品估值 ¥500,000', reward: 10000,
+    test: (r, st) => (st.loot | 0) >= 500000 },
+  { id: 'ach_sold100k', name: '销冠', desc: '累计卖出 ¥100,000 的货', reward: 6000,
+    test: (r, st) => (st.sold | 0) >= 100000 },
+  { id: 'ach_sold1m', name: '黑市红人', desc: '累计卖出 ¥1,000,000 的货', reward: 18000,
+    test: (r, st) => (st.sold | 0) >= 1000000 },
+  { id: 'ach_die10', name: '学费交满', desc: '累计阵亡 10 次', reward: 1500,
+    test: (r, st) => (st.deaths | 0) >= 10 },
+  { id: 'ach_raid100', name: '全勤标兵', desc: '累计出勤 100 次行动', reward: 8000,
+    test: (r, st) => (st.raids | 0) >= 100 },
+  { id: 'ach_secret10', name: '高机密', desc: '从机密或绝密行动撤离 10 次', reward: 10000,
+    test: (r, st) => (st.secret | 0) >= 10 },
+  { id: 'ach_top5', name: '禁区熟客', desc: '从绝密行动撤离 5 次', reward: 12000,
+    test: (r, st) => (st.top | 0) >= 5 },
+  { id: 'ach_noarmor3', name: '裸奔三次', desc: '不穿护甲成功撤离 3 次', reward: 5000,
+    test: (r, st) => (st.noArmor | 0) >= 3 },
+  { id: 'ach_stash20', name: '囤积癖', desc: '仓库同时囤着 20 种收集品', reward: 4000,
+    test: () => Object.keys(SAVE.stash || {}).length >= 20 },
+  { id: 'ach_stash10w', name: '压仓之宝', desc: '仓库囤货总估值达 ¥100,000', reward: 6000,
+    test: () => { let v = 0; for (const id in (SAVE.stash || {})) { const rr = RELICS[id]; if (rr) v += rr.price * (SAVE.stash[id] | 0); } return v >= 100000; } },
+  { id: 'ach_codex50', name: '半个行家', desc: '图鉴收录 50 种收集品', reward: 5000,
+    test: () => Object.keys(SAVE.seenRelics || {}).filter(id => RELICS[id]).length >= 50 },
+  { id: 'ach_codex150', name: '鉴定专家', desc: '图鉴收录 150 种收集品', reward: 15000,
+    test: () => Object.keys(SAVE.seenRelics || {}).filter(id => RELICS[id]).length >= 150 },
+  { id: 'ach_codexall', name: '坝区百科', desc: '图鉴收录全部收集品', reward: 60000,
+    test: () => Object.keys(SAVE.seenRelics || {}).filter(id => RELICS[id]).length >= RELIC_IDS.length },
+  { id: 'ach_mod20', name: '枪匠学徒', desc: '配件库存达到 20 件', reward: 3500,
+    test: () => { let n = 0; for (const id in (SAVE.modBag || {})) n += SAVE.modBag[id] | 0; return n >= 20; } },
+  { id: 'ach_modkind15', name: '配件收藏家', desc: '配件库收过 15 种不同配件', reward: 4000,
+    test: () => Object.keys(SAVE.modBag || {}).filter(id => MODS[id]).length >= 15 },
+  { id: 'ach_fullmod', name: '武装到牙齿', desc: '任意一把枪装满全部改装槽', reward: 5000,
+    test: () => Object.keys(SAVE.mods || {}).some(wid => KNOWN_WEAPON_IDS[wid] &&
+      Object.keys(SAVE.mods[wid]).length >= modSlotTotal(wid) && modSlotTotal(wid) > 0) },
+  { id: 'ach_rich', name: '坝区首富', desc: '资金达到 ¥200,000', reward: 8000,
+    test: () => (SAVE.credits | 0) >= 200000 },
 ];
 
 /* ═══════ 委托：每日三份，进度跨局累计，回大厅领钱 ═══════
@@ -1740,6 +1950,7 @@ function checkAchievements(run) {
 const ACH_LIVE = {
   kills:      () => G.kills | 0,
   relics:     () => relicCount(),
+  value:      () => G.lootValue | 0,
   blinds:     () => G.blinds | 0,
   swarmHits:  () => G.swarmHits | 0,
   bleedHits:  () => G.bleedHits | 0,
@@ -1853,6 +2064,15 @@ const RELIC_GRID = {
   d_pipe: [1, 4], s_alu: [1, 4], s_rope: [1, 4],
   d_prop: [1, 4], d_oxygen: [1, 4], s_seal: [1, 4], s_iridium: [1, 4],
   d_barrel: [1, 4], d_fuelrod: [1, 4], d_sword: [1, 4],
+
+  /* ── 第二批收集品的大件占格：神话 3x3 / 传说 3x2，史诗偶有 2x2 ── */
+  d_trident: [3, 3], s_padconsole: [3, 3],
+  d_tigerfu: [1, 1], d_floodkey: [1, 1], s_codeline: [1, 1],
+  d_jeepmotor: [3, 2], d_shaft: [1, 4], d_stonerub: [2, 2], d_bronzesafe: [2, 2],
+  d_towerscope: [2, 1], d_turbineblade: [1, 3], d_winch: [2, 2], d_trans: [2, 1],
+  s_centerstage: [3, 2], s_acsset: [3, 2], s_payloadbay: [2, 2], s_mirrorblank: [2, 2],
+  s_canopy: [2, 2], s_harness: [2, 1], s_hptank: [1, 3], s_dishseg: [2, 1],
+  d_banner: [2, 1], d_yuancoin: [1, 1], s_crewtag: [1, 1], s_moonsoil: [1, 1],
 };
 function relicShape(id) {
   const s = RELIC_GRID[id] || [1, 1];
@@ -2039,6 +2259,73 @@ const MOD_EXT = [
 for (const [id, slot, q, name, icon, price, desc, eff] of MOD_EXT) {
   MODS[id] = { slot, q, z: id[0] === 'd' ? 'dam' : 'space', name, icon, price, desc, eff };
 }
+
+/* ═══════ 扩展配件 · 第二批：22 件通用 + 8 件专属 ═══════
+   紧凑表：[id, 槽位, 品质, 名称, 图标, 价格, 描述, 效果, 适用类目(可省), 专属枪(可省)]
+   fit   = 武器类目白名单（省略 = 全类目通用）—— 不是所有枪都能装同一种配件
+   guns  = 专属枪 id 列表（写了 guns 就只有这几把枪能装） */
+const MOD_EXT2 = [
+  /* ── 通用新配件（带类目适配） ── */
+  ['d_mz_brake2','muzzle','rare','双室制退器','双',1650,'两室开孔把后坐分成两口气泄掉，比单室温和得多。', { recoil: 0.84, noise: 1.08 }, ['rifle','dmr','lmg','sniper']],
+  ['d_mz_poly','muzzle','common','聚合消音管','聚',900,'塑料壳的便宜消音管，声音小一半，动能也小一半。', { noise: 0.6, dmg: 0.94 }, ['smg','pistol']],
+  ['d_op_ring','optic','common','微光准星','芒',500,'一圈发光的荧光准星，抬枪时眼睛不用重新找点。', { adsTime: 0.92, spread: 0.98 }],
+  ['d_op_6x','optic','epic','六倍镜','六',3600,'六倍放大的精确镜，八百米外看得见帽徽；抬枪慢得像换弹。', { adsSpread: 0.58, adsTime: 1.4, adsMove: 0.86 }, ['dmr','sniper']],
+  ['d_gr_angled','grip','rare','斜角前握','斜',1550,'四十五度斜握把，手腕不吃劲，长点射手感极顺。', { recoil: 0.86, adsTime: 0.96 }, ['rifle','smg','shotgun','lmg']],
+  ['d_gr_thumb','grip','common','拇指止滑套','指',420,'握把上套一圈防滑纹，手汗多的人有福了。', { adsTime: 0.95, recoil: 0.97 }, ['pistol','smg']],
+  ['d_mg_plus','mag','common','加厚弹匣簧','簧',640,'换一根硬一点的托弹簧，容量涨一成半，供弹更稳。', { mag: 1.15, reload: 1.04 }, ['pistol','smg','rifle']],
+  ['d_mg_drum2','mag','epic','野战弹鼓','鼓',3300,'七十五发的野战弹鼓，火力断档这个词跟你无缘。', { mag: 1.4, reload: 1.2, move: 0.97 }, ['smg','rifle','lmg']],
+  ['d_st_skel','stock','rare','骨架折叠托','骨',1600,'钢架骨架托，折起来是一根小棍，展开抵肩也扎实。', { move: 1.04, recoil: 0.93 }, ['rifle','smg','dmr']],
+  ['d_st_ball','stock','epic','平衡配重托','衡',3000,'托尾灌了配重铅，整枪重心后移，抬枪稳得像端着秤。', { recoil: 0.82, adsSpread: 0.95, move: 0.96 }, ['dmr','sniper']],
+  ['s_mz_rail','muzzle','epic','消焰制退一体','合',3800,'制退孔与消焰槽开在同一节枪口件上，军工厂的抠门杰作。', { recoil: 0.78, noise: 0.95 }, ['rifle','lmg','dmr']],
+  ['s_op_eco','optic','epic','轻量无框镜','无',2800,'无边框镜片只有一层玻璃，抬枪快得像没装镜。', { adsTime: 0.8, adsSpread: 0.94 }, ['smg','rifle','pistol']],
+  ['s_gr_hybrid','grip','epic','复合斜握把','复',2900,'斜握加阻尼垫的复合设计，压枪和腰射两头都占。', { recoil: 0.82, spread: 0.94 }, ['rifle','smg']],
+  ['s_mg_cask','mag','epic','备用弹匣袋','袋',3100,'枪托侧面挂两个满弹匣，换弹时手不用往腰上摸。', { reload: 0.78, move: 0.98 }],
+  ['s_st_ergo','stock','epic','人机工学托','工',3050,'托底角度照着几百份士兵问卷调的，肩感无可挑剔。', { adsTime: 0.85, recoil: 0.9, spread: 0.96 }, ['rifle','dmr','smg']],
+  ['s_mz_hush','muzzle','rare','微声管','微',2000,'蜂巢式内壁吃掉大部分声压，代价是弹速。', { noise: 0.5, dmg: 0.95, range: 0.95 }, ['smg','pistol']],
+  ['s_op_cqh','optic','rare','快瞄镜','快',1900,'为大窗口近距离交火设计的快瞄镜，抬枪快、视野阔。', { adsTime: 0.78, adsSpread: 1.04 }, ['pistol','smg','shotgun']],
+  ['d_gr_rod','grip','rare','铝合金握把','铝',1500,'整根铝棒铣出来的握把，轻且不变形。', { recoil: 0.87, move: 1.01 }, ['rifle','lmg','dmr']],
+  ['d_mg_mark','mag','rare','刻度弹匣','刻',1750,'弹匣侧面开观察孔，还剩几发一眼扫出来，换弹时机掐得准。', { reload: 0.9, mag: 1.05 }, ['rifle','dmr','sniper']],
+  ['d_st_recoil','stock','rare','减震托底板','减',1700,'聚氨酯托底夹层，重枪的 kickoff 被垫掉一截。', { recoil: 0.85, adsMove: 0.97 }, ['shotgun','lmg','rifle']],
+  ['s_mg_chain','mag','epic','弹链转换器','链',4200,'把弹匣枪改成弹链供弹的军改套件，厂里只给重枪班组配。', { mag: 1.6, reload: 0.9, move: 0.95 }, ['lmg']],
+  ['s_gr_claw','grip','legend','机械稳定爪','爪',6900,'哈夫克为总监卫队的重枪手定制的伺服稳定爪，后坐被机械臂按在原地。', { recoil: 0.6, adsSpread: 0.88 }, ['lmg']],
+
+  /* ── 专属配件（guns 指定枪，别家装不上） ── */
+  ['d_ak_dust','optic','rare','AK 侧轨镜桥','桥',1850,'卡在 AK 系机匣侧面的镜桥，装完依旧留着那个经典导轨间隙。', { adsSpread: 0.88, adsTime: 0.98 }, null, ['akm','ak12','rpk']],
+  ['d_asval_int','muzzle','epic','一体式微声枪口','默',3600,'AS 与 SR-3M 的原厂微声枪口，与消音短枪管一体加工，声压低到只剩机械音。', { noise: 0.32, dmg: 1.0, bspeed: 0.98 }, null, ['asval','sr3m']],
+  ['d_bull_kit','stock','epic','无托缓冲组件','托',2900,'无托结构的贴腮与缓冲垫整套，后坐直接顶进肩窝里，抬枪也顺了。', { recoil: 0.85, adsTime: 0.9 }, null, ['qbz95','qbz192','aug']],
+  ['d_pistol_comp','muzzle','rare','手枪补偿器','枪',1400,'巴掌小的手枪补偿器，开一枪手腕少歪一次。', { recoil: 0.82, noise: 1.05 }, null, ['g17','93r','g18']],
+  ['d_sg_port','muzzle','epic','霰弹散热护套','套',3100,'枪管外的散热护套带 M24 式通风孔，连喷两管不烫手，霰弹收束更紧。', { spread: 0.88, dmg: 1.02, move: 0.98 }, null, ['m870']],
+  ['d_sniper_bipod','grip','legend','狙击重型两脚架','架',6200,'狙击枪专用的液压阻尼两脚架，架住之后枪几乎长在地上。', { recoil: 0.55, adsSpread: 0.85, adsMove: 0.9 }, ['sniper']],
+  ['d_lmg_sled','stock','epic','供弹手稳定托','托',3400,'机枪手专用的宽大稳定托，蹲下压制时枪身稳得像焊在掩体上。', { recoil: 0.8, move: 1.03 }, ['lmg']],
+  ['s_director_kit','optic','legend','「总监」瞄准组件','督',8800,'安全总监的护卫队用顶级瞄具组件：自动归零、弹道补偿，只匹配最大的那支反器材枪。', { adsSpread: 0.45, adsTime: 1.1, spread: 0.92 }, ['sniper'], ['awm']],
+];
+for (const [id, slot, q, name, icon, price, desc, eff, fit, guns] of MOD_EXT2) {
+  MODS[id] = { slot, q, z: id[0] === 'd' ? 'dam' : 'space', name, icon, price, desc, eff };
+  if (fit) MODS[id].fit = fit;
+  if (guns) MODS[id].guns = guns;
+}
+
+/* 老配件补类目适配：倍率越高的镜 / 弹鼓 / 脚架越不该人手一个 */
+const MOD_FIT = {
+  scope4x: ['rifle', 'dmr', 'sniper', 'lmg'],
+  thermal: ['rifle', 'dmr', 'sniper', 'lmg'],
+  s_op_var: ['rifle', 'dmr', 'sniper', 'lmg'],
+  d_op_long: ['sniper', 'dmr'],
+  d_op_night: ['rifle', 'dmr', 'sniper', 'smg'],
+  d_op_prism: ['rifle', 'dmr', 'smg'],
+  drummag: ['smg', 'lmg'],
+  s_mg_lightdrum: ['smg', 'lmg'],
+  d_gr_bipod: ['dmr', 'sniper', 'lmg'],
+  barrel: ['rifle', 'dmr', 'sniper', 'lmg'],
+  comp: ['pistol', 'smg', 'rifle', 'dmr', 'lmg'],
+  quickmag: ['pistol', 'smg', 'rifle', 'dmr'],
+  d_mg_clamp: ['pistol', 'smg', 'rifle'],
+  s_mg_twin: ['smg', 'rifle', 'lmg'],
+  heavy: ['rifle', 'dmr', 'sniper', 'lmg'],
+  tactic: ['rifle', 'dmr', 'smg'],
+  carstock: ['rifle', 'smg', 'dmr'],
+};
+for (const k in MOD_FIT) if (MODS[k]) MODS[k].fit = MOD_FIT[k];
 
 /* ══════════════════════════════════════════════════════════
    1. 存档
@@ -2323,7 +2610,9 @@ const DEFAULT_SAVE = () => ({
   stash: {},          // 仓库里的收集品：{ 收集品id: 数量 }
   modBag: {},         // 配件库存：{ 配件id: 数量 }
   mods: {},           // 每把枪装了什么：{ 枪id: { 槽位id: 配件id } }
-  stats: { raids: 0, extracts: 0, deaths: 0, loot: 0, kills: 0, sold: 0 },
+  stats: { raids: 0, extracts: 0, deaths: 0, loot: 0, kills: 0, sold: 0,
+           relics: 0, blinds: 0, swarm: 0, bleed: 0, silent: 0,
+           secret: 0, top: 0, noArmor: 0 },
   achieved: {},        // 已解锁成就：{ 成就id: 1 }（奖励在撤离结算时一次性发放）
   contracts: { day: '', list: [] },   // 每日委托：{ day:'YYYY-MM-DD', list:[{ id, prog, done }] }
   presets: [null, null, null],        // 整备预设：3 个槽，各存一份装备快照（不含容器内容）
@@ -2462,7 +2751,8 @@ function loadSave() {
       stash: cleanStash(d.stash),
       modBag: cleanModBag(d.modBag),
       mods: cleanGunMods(d.mods),
-      stats: Object.assign({ raids: 0, extracts: 0, deaths: 0, loot: 0, kills: 0, sold: 0 }, d.stats || {}),
+      stats: Object.assign({ raids: 0, extracts: 0, deaths: 0, loot: 0, kills: 0, sold: 0,
+        relics: 0, blinds: 0, swarm: 0, bleed: 0, silent: 0, secret: 0, top: 0, noArmor: 0 }, d.stats || {}),
       achieved: Object.assign({}, d.achieved || {}),
       contracts: cleanContracts(d.contracts),
       presets: cleanPresets(d.presets),
@@ -2670,7 +2960,7 @@ function cleanGunMods(raw) {
     for (const s of MOD_SLOTS) {
       const mid = src[s.id];
       const m = mid && MODS[mid];
-      if (m && m.slot === s.id && slotAllowed(wid, s.id)) gun[s.id] = mid;
+      if (m && m.slot === s.id && slotAllowed(wid, s.id) && modAllowed(wid, mid)) gun[s.id] = mid;
     }
     if (Object.keys(gun).length) out[wid] = gun;
   }
@@ -2681,6 +2971,28 @@ function cleanGunMods(raw) {
 function slotAllowed(wid, slotId) {
   if (slotId === 'stock' && PISTOL_IDS[wid]) return false;
   return true;
+}
+
+/* 配件兼容性：不是所有枪都能装同一种配件。
+   · fit  = 武器类目白名单（rifle/smg/dmr/sniper/lmg/shotgun/pistol）
+   · guns = 专属枪 id 白名单（AK 侧轨只有 AK 系装得上，总监瞄具只有 AWM 配）
+   两张表都没写 = 全枪通用。 */
+function modAllowed(wid, mid) {
+  const m = MODS[mid], w = WEAPONS[wid];
+  if (!m || !w) return false;
+  if (!slotAllowed(wid, m.slot)) return false;
+  if (m.guns && !m.guns.includes(wid)) return false;
+  if (m.fit && !m.fit.includes(w.cat)) return false;
+  return true;
+}
+/* 为什么装不上：给改装台一句人话 */
+function modBanReason(wid, mid) {
+  const m = MODS[mid], w = WEAPONS[wid];
+  if (!m || !w) return '不适用';
+  if (m.guns && !m.guns.includes(wid)) return '专属配件';
+  if (m.fit && !m.fit.includes(w.cat)) return weaponCatOf(w).cn + '不可用';
+  if (!slotAllowed(wid, m.slot)) return '无此槽位';
+  return '不适用';
 }
 
 
@@ -20336,33 +20648,50 @@ function closeOperators() {
   refreshLobby();
 }
 
+/* 干员分类分组：类似三角洲的干员页 —— 按定位分组摆放，组内按 OP_ORDER 顺序 */
+const ROLE_GROUPS = [
+  { rc: 'assault',  cn: '突击', en: 'ASSAULT',  trait: '破口 · 压制' },
+  { rc: 'recon',    cn: '侦察', en: 'RECON',    trait: '标记 · 情报' },
+  { rc: 'support',  cn: '支援', en: 'SUPPORT',  trait: '治疗 · 掩护' },
+  { rc: 'engineer', cn: '工程', en: 'ENGINEER', trait: '工事 · 爆破' },
+];
+
 function renderOpsPanel() {
   const list = $('opsList');
   const det = $('opsDetail');
   if (!list || !det) return;
   list.innerHTML = '';
 
-  for (const id of OP_ORDER) {
-    const o = OPERATORS[id];
-    if (!o) continue;
-    const el = document.createElement('div');
-    const rc = roleClassOf(o.role);
-    el.className = 'ops-card' + (SAVE.operator === id ? ' on' : '');
-    el.dataset.rc = rc;
-    el.innerHTML =
-      '<div class="opavatar">' + o.name.slice(-1) + '</div>' +
-      '<div style="min-width:0"><b>' + o.name + '</b>' +
-      '<span class="role">' + o.role + ' · ' + o.en + '</span></div>' +
-      '<span class="rolebadge ' + rc + '">' + o.role + '</span>';
-    el.addEventListener('click', () => {
-      if (SAVE.operator === id) return;
-      SAVE.operator = id;
-      saveGame();
-      uiToast('出战干员 · ' + o.name, 'small');
-      renderOpsPanel();
-      renderOpBar();
-    });
-    list.appendChild(el);
+  for (const g of ROLE_GROUPS) {
+    const ids = OP_ORDER.filter(id => OPERATORS[id] && roleClassOf(OPERATORS[id].role) === g.rc);
+    if (!ids.length) continue;
+    const hd = document.createElement('div');
+    hd.className = 'ops-grouphd';
+    hd.dataset.rc = g.rc;
+    hd.innerHTML = '<b>' + g.cn + '</b><span>' + g.en + '</span>' +
+      '<i>' + g.trait + ' · ' + ids.length + ' 名</i>';
+    list.appendChild(hd);
+    for (const id of ids) {
+      const o = OPERATORS[id];
+      const el = document.createElement('div');
+      const rc = roleClassOf(o.role);
+      el.className = 'ops-card' + (SAVE.operator === id ? ' on' : '');
+      el.dataset.rc = rc;
+      el.innerHTML =
+        '<div class="opavatar">' + o.name.slice(-1) + '</div>' +
+        '<div style="min-width:0"><b>' + o.name + '</b>' +
+        '<span class="role">' + o.role + ' · ' + o.en + '</span></div>' +
+        '<span class="rolebadge ' + rc + '">' + o.role + '</span>';
+      el.addEventListener('click', () => {
+        if (SAVE.operator === id) return;
+        SAVE.operator = id;
+        saveGame();
+        uiToast('出战干员 · ' + o.name, 'small');
+        renderOpsPanel();
+        renderOpBar();
+      });
+      list.appendChild(el);
+    }
   }
 
   const op = opDef() || OPERATORS[OP_ORDER[0]];
@@ -20646,19 +20975,27 @@ function refreshGunsmith() {
   }
   $('gsSlotName').textContent = MOD_SLOTS.find(s => s.id === gsPick.slot).cn;
 
-  /* ── 中：当前槽位的配件候选 ── */
+  /* ── 中：当前槽位的配件候选（只列当前枪装得上的；不兼容的进配件库也装不上） ── */
   const box = $('gsModList');
   box.innerHTML = '';
   const cur = (SAVE.mods[wid] || {})[gsPick.slot];
-  const cand = Object.keys(MODS)
-    .filter(id => MODS[id].slot === gsPick.slot)
+  const allCand = Object.keys(MODS).filter(id => MODS[id].slot === gsPick.slot);
+  const cand = allCand.filter(id => modAllowed(wid, id))
     .sort((a, b) => QUALITY_ORDER.indexOf(MODS[a].q) - QUALITY_ORDER.indexOf(MODS[b].q));
+  const banN = allCand.length - cand.length;
 
   if (!slotAllowed(wid, gsPick.slot)) {
     box.innerHTML = '<div class="gs-empty">手枪没有这个槽位<br>换一把长枪再改</div>';
   } else if (!cand.length) {
     box.innerHTML = '<div class="gs-empty">这个槽位还没有可用的配件</div>';
   } else {
+    if (banN > 0) {
+      const note = document.createElement('div');
+      note.className = 'gs-empty';
+      note.style.cssText = 'padding:5px 8px;font-size:10px';
+      note.textContent = '已隐藏 ' + banN + ' 件与 ' + w.short + ' 不兼容的配件（类目不符或专属配件）';
+      box.appendChild(note);
+    }
     for (const id of cand) {
       const m = MODS[id];
       const Q = QUALITY[m.q];
@@ -20734,11 +21071,13 @@ function refreshGunsmith() {
     for (const id of bagIds) {
       const m = MODS[id];
       const Q = QUALITY[m.q];
+      const okGun = !gsPick.weapon || modAllowed(gsPick.weapon, id);
       const el = document.createElement('span');
-      el.className = 'bchip';
+      el.className = 'bchip' + (okGun ? '' : ' off');
       el.style.setProperty('--q', Q.color);
       el.style.setProperty('--qb', Q.dim + '0.12)');
-      el.title = m.name + ' · ' + Q.name + ' · ' + m.desc;
+      el.title = (okGun ? '✓ ' + WEAPONS[gsPick.weapon].short + ' 可用 · ' : '✗ 不适用当前枪 · ') +
+        m.name + ' · ' + Q.name + ' · ' + m.desc;
       el.innerHTML = m.icon + ' <b>×' + (SAVE.modBag[id] | 0) + '</b>';
       bag.appendChild(el);
     }
@@ -20762,6 +21101,7 @@ const GS_STATS = [
 function equipMod(wid, slot, mid) {
   const m = MODS[mid];
   if (!m || m.slot !== slot || !slotAllowed(wid, slot)) return;
+  if (!modAllowed(wid, mid)) { uiToast(w.short + ' 装不上 ' + m.name + '（' + modBanReason(wid, mid) + '）', 'small warn'); return; }
   if ((SAVE.modBag[mid] | 0) <= 0) { uiToast('这件配件没有库存', 'small warn'); return; }
 
   SAVE.mods[wid] = SAVE.mods[wid] || {};
@@ -24318,6 +24658,7 @@ function endRaid(success) {
       success,
       kills: G.kills | 0,
       relics: relicCount(),
+      value: G.lootValue | 0,
       blinds: G.blinds | 0,
       swarmHits: G.swarmHits | 0,
       bleedHits: G.bleedHits | 0,
@@ -24338,6 +24679,11 @@ function endRaid(success) {
     SAVE.stats.extracts++;
     SAVE.stats.loot += G.lootValue;
     SAVE.stats.kills += G.kills;
+    /* 累计型成就的账本：撤离才计收集品 / 档位 / 裸奔；控场成败都计 */
+    SAVE.stats.relics = (SAVE.stats.relics | 0) + relicCount();
+    if (G.tier !== 'standard') SAVE.stats.secret = (SAVE.stats.secret | 0) + 1;
+    if (G.tier === 'top') SAVE.stats.top = (SAVE.stats.top | 0) + 1;
+    if (!(P.armorLv > 0)) SAVE.stats.noArmor = (SAVE.stats.noArmor | 0) + 1;
     const ctDone = updateContracts(true);
 
     // 收集品进仓库，一分钱没到手 —— 要自己回仓库卖
@@ -24422,6 +24768,11 @@ function endRaid(success) {
   } else {
     SAVE.stats.deaths++;
     SAVE.stats.kills += G.kills;
+    /* 控场类累计账本：阵亡也照记 —— 打过就算数 */
+    SAVE.stats.blinds = (SAVE.stats.blinds | 0) + (G.blinds | 0);
+    SAVE.stats.swarm = (SAVE.stats.swarm | 0) + (G.swarmHits | 0);
+    SAVE.stats.bleed = (SAVE.stats.bleed | 0) + (G.bleedHits | 0);
+    SAVE.stats.silent = (SAVE.stats.silent | 0) + (G.silentKills | 0);
     const ctDone = updateContracts(false);
 
     const lostNames = [];
