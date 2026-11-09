@@ -22758,19 +22758,21 @@ function renderLoadout() {
           }
           const cell = heldToCell(LO_UI.held);
           const c2 = arr[hi];
-          if (!c2) {                                  // 空位：整个塞进同一隔舱
+          if (!c2) {                                  // 空位：整件塞进落点所在隔舱（锚点可自动调整，见 findFitCovering）
+            let at = hi;
             if (!fitsAtRun(arr, blocks, hi, cell)) {
-              uiToast(iszHint(cell), 'small warn');
-              return;
+              at = findFitCovering(arr, blocks, hi, cell);
+              if (at < 0) { uiToast(iszHint(cell), 'small warn'); return; }
             }
-            placeAtRun(arr, hi, cell, blocks);
+            placeAtRun(arr, at, cell, blocks);
             loSetHeld(null);
           } else if (stackInto(LO_UI.held, c2, SAVE.owned)) {    // 同弹药合并
             if (LO_UI.held.n <= 0) loSetHeld(null);
             else loSetHeld(LO_UI.held);
           } else if (!c2.cont) {                      // 交换 / 换位
             clearSpanAt(arr, hi, blocks);
-            const at = fitsAtRun(arr, blocks, hi, cell) ? hi : findFitRun(arr, blocks, cell);
+            const cov = fitsAtRun(arr, blocks, hi, cell) ? hi : findFitCovering(arr, blocks, hi, cell);
+            const at = cov >= 0 ? cov : findFitRun(arr, blocks, cell);
             if (at < 0) { placeAtRun(arr, hi, c2, blocks); uiToast(iszHint(cell, cellName(cell)), 'small warn'); return; }
             placeAtRun(arr, at, cell, blocks);
             loSetHeld(c2);
