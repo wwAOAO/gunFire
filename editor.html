@@ -188,6 +188,7 @@
     <label>难度<select id="inTier">
       <option value="standard">普通 · 原始数值</option>
       <option value="secret">机密 · 敌人更硬、战利品加码</option>
+      <option value="top">绝密 · 哈夫克精锐、战利品顶级</option>
     </select></label>
     <div class="row2">
       <label>宽<input type="number" id="inW" min="1600" max="6000" step="100" value="3000"></label>
@@ -316,6 +317,14 @@
 const MAP_KEY = 'neonpurge_map_v1';
 const MAP_FORMAT = 'neonpurge-map';
 const MAP_VERSION = 1;
+
+/* 外部文本 → HTML 的唯一出口：导入地图里的撤离点名等字符串必须先转义。
+   能直接用 textContent 的地方优先用 textContent。 */
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
 const DEFAULT_SQUAD = ['runner', 'runner', 'shooter', 'runner', 'brute', 'runner',
                        'shooter', 'sniper', 'runner', 'rocket', 'brute', 'flamer',
                        'shooter', 'runner', 'cryo', 'cryoT', 'cryoS', 'nader'];
@@ -1184,7 +1193,7 @@ function syncInputs() {
   document.getElementById('inName').value = map.name;
   document.getElementById('inW').value = map.w;
   document.getElementById('inH').value = map.h;
-  document.getElementById('inTier').value = map.tier === 'secret' ? 'secret' : 'standard';
+  document.getElementById('inTier').value = map.tier === 'top' ? 'top' : (map.tier === 'secret' ? 'secret' : 'standard');
   document.getElementById('mapTitle').textContent = map.name + '  ·  ' + map.w + '×' + map.h;
   document.title = map.name + ' · 地图编辑器';
 }
@@ -1238,7 +1247,7 @@ function syncSel() {
       : o.type === 'flamer' ? '<br>喷火兵会贴到近处喷火，火舌穿不过墙'
       : '<br>小兵个头小、跑得快，边冲边点射')
     : '';
-  info.innerHTML = '<b>' + label + '</b>' + suffix + (sel.kind === 'extract' ? ' ' + (o.name || '') : '') +
+  info.innerHTML = '<b>' + esc(label) + '</b>' + esc(suffix) + (sel.kind === 'extract' ? ' ' + esc(o.name || '') : '') +
                    ' · 拖动可移动，方向键微调' + hint;
 
   box.classList.add('on');
@@ -1267,7 +1276,7 @@ function updateStats() {
     ['尺寸', map.w + '×' + map.h],
   ];
   document.getElementById('stats').innerHTML = items.map(i =>
-    '<div class="stat"><span>' + i[0] + '</span><b>' + i[1] + '</b></div>').join('');
+    '<div class="stat"><span>' + esc(i[0]) + '</span><b>' + esc(i[1]) + '</b></div>').join('');
   document.getElementById('unitSummary').textContent = unitSummary();
 
   // 容器种类分布
@@ -1319,7 +1328,7 @@ function updateChecks() {
   }
 
   document.getElementById('checks').innerHTML = rows.map(r =>
-    '<div class="' + r[0] + '">' + (r[0] === 'ok' ? '· ' : '· ') + r[1] + '</div>').join('');
+    '<div class="' + esc(r[0]) + '">' + (r[0] === 'ok' ? '· ' : '· ') + esc(r[1]) + '</div>').join('');
 }
 
 function refresh() {
@@ -1339,9 +1348,11 @@ document.getElementById('inName').addEventListener('input', e => {
 
 document.getElementById('inTier').addEventListener('change', e => {
   pushUndo();
-  map.tier = e.target.value === 'secret' ? 'secret' : 'standard';
+  const tier = e.target.value;
+  map.tier = tier === 'top' ? 'top' : (tier === 'secret' ? 'secret' : 'standard');
   refresh();
-  toast(map.tier === 'secret' ? '已设为机密难度：敌人更硬、战利品更好' : '已设为普通难度');
+  toast(map.tier === 'top' ? '已设为绝密难度：哈夫克精锐、战利品顶级'
+        : map.tier === 'secret' ? '已设为机密难度：敌人更硬、战利品更好' : '已设为普通难度');
 });
 
 function applySize() {
@@ -1629,7 +1640,7 @@ function payload() {
   return {
     format: MAP_FORMAT, version: MAP_VERSION,
     name: map.name.slice(0, 24), w: map.w, h: map.h,
-    tier: map.tier === 'secret' ? 'secret' : undefined,
+    tier: (map.tier === 'secret' || map.tier === 'top') ? map.tier : undefined,
     spawns: map.spawns.map(s => ({ x: Math.round(s.x), y: Math.round(s.y) })),
     obstacles: map.obstacles.map(o => ({ x: Math.round(o.x), y: Math.round(o.y), w: Math.round(o.w), h: Math.round(o.h) })),
     crates: map.crates.map(c => ({ x: Math.round(c.x), y: Math.round(c.y), t: c.t || undefined })),
@@ -1688,8 +1699,8 @@ function importText(text, fname) {
   const next = emptyMap(w, h);
   next.name = (typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim()
               : (fname ? fname.replace(/\.json$/i, '') : '导入地图')).slice(0, 24);
-  /* 机密地图的标记要跟着走，否则改完存回去就降级成普通难度了 */
-  next.tier = raw.tier === 'secret' ? 'secret' : 'standard';
+  /* 难度标记要跟着走（机密 / 绝密），否则改完存回去就降级成普通难度了 */
+  next.tier = raw.tier === 'top' ? 'top' : (raw.tier === 'secret' ? 'secret' : 'standard');
 
   const push = (arr, item) => { if (arr.length < 320) arr.push(item); };
 
