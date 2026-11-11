@@ -12,12 +12,39 @@ const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d', { alpha: false });
 let DPR = 1, VW = 0, VH = 0;
 /* 相机缩放：<1 = 镜头拉远，一屏装下更多世界，屏幕上的位移整体变小。
-   0.85 让视野变成 1/0.85 ≈ 1.18 倍宽，所有「屏幕速度」降 15%，角色 32px → 27px。
+   1.0 = 原生比例，角色 32px —— 士兵的头盔 / 背心 / 枪械剪影细节在这个尺寸下才读得出来。
    只改世界→屏幕的映射：射程、弹速、AI 距离这些世界内比例一个都不动。 */
-const ZOOM = 0.85;
+const ZOOM = 1.0;
 
 const WORLD = { w: 3000, h: 2200 };
 const TAU = Math.PI * 2;
+
+/* ═══════ 地表材质分区 ═══════
+   地图 JSON 的 regions 只给了名字和矩形，地面材质就按**区域名关键词**推：
+   河谷 / 坡地 / 游客中心是草地，军营 / 水泥厂 / 货场 / 管道是裸土，其余（坝体、厂区、
+   行政区、变电站）是混凝土铺装。名字里一个关键词都没命中的区域，以及所有区域之外的
+   空隙，一律走 pave —— 那些空隙本来就是厂区里的铺装空地，不是荒野。
+   新地图加区域时不用改代码：区域名带上「草 / 坡 / 林 / 河」这类词就会自动变成草地。 */
+const TERRAIN_RULES = [
+  ['草',   'grass'], ['坡',   'grass'], ['林',   'grass'], ['绿',   'grass'],
+  ['河',   'grass'], ['游客', 'grass'], ['公园', 'grass'],
+  ['军营', 'dirt'],  ['水泥', 'dirt'],  ['货场', 'dirt'],  ['管道', 'dirt'],
+  ['工地', 'dirt'],  ['废墟', 'dirt'],
+  ['机库', 'plate'], ['坪',   'plate'], ['钢',   'plate'],
+];
+/* 区域名 → 地表类型；没命中就是混凝土 */
+function terrainForRegion(name) {
+  const n = String(name || '');
+  for (let i = 0; i < TERRAIN_RULES.length; i++) {
+    if (n.indexOf(TERRAIN_RULES[i][0]) >= 0) return TERRAIN_RULES[i][1];
+  }
+  return 'pave';
+}
+/* 航天基地：没有 regions，基底就是整片混凝土机坪，再按大格哈希摊上钢板铺装。
+   「清一色的地板，但有点铁皮」—— 铁皮是点缀，不是换底。 */
+function terrainIsSpaceBase() {
+  return /航天/.test(String((typeof G !== 'undefined' && G && G.mapName) || ''));
+}
 
 /* 外部文本 → HTML 的唯一出口：地图 JSON / 存档文件由玩家导入，其中的名称
    必须转义后才能拼进 innerHTML，否则 <svg onload=...> 之类会直接执行。
@@ -64,8 +91,11 @@ const GRADE_COLORS = { '白': '#dfe9f2', '绿': '#63d68a', '蓝': '#4fa8ff', '�
 const gradeColor = g => GRADE_COLORS[g] || '#cfe6f2';
 
 /* ── 物资容器 ──
-   地图上的搜刮点不再只有一种补给箱。六种容器外观、体积、
-   翻找耗时和货色都不一样：
+   地图上的搜刮点不再只有一种补给箱。八种容器外观、体积、
+   翻找耗时和货色都不一样，而且收集品有主题偏好：
+     武器箱偏军械件、医疗箱偏医疗件、文件柜偏情报件、陈列柜偏贵重件，
+     补给箱 / 保险柜照旧出全目录（保险柜仍是品质最高的出货点）。
+     主题箱也能直抽大红（mythChance），概率统一压得比保险柜低。
      speed 是翻找耗时倍率（>1 更慢，越慢的箱子越肥）
      n     是货物件数区间
      weight 是随机生成 / 老地图没写 t 时的抽取权重
@@ -106,6 +136,18 @@ const CONTAINERS = {
     color: '#ff5c7a', dim: 'rgba(255,92,122,', body: '#2a1820',
     r: 21, w: 26, h: 28, speed: 1.55, n: [2, 3], weight: 8, loud: 540,
     hint: '最慢最肥：高品质货与史诗配件，开柜很响',
+  },
+  docs: {
+    id: 'docs', name: '文件柜', en: 'FILE CABINET', tag: '档案',
+    color: '#8fd6a0', dim: 'rgba(143,214,160,', body: '#18261e',
+    r: 19, w: 26, h: 30, speed: 0.95, n: [2, 3], weight: 12, loud: 90,
+    hint: '情报与文件：账本 / 图纸 / 密钥 / 数据 · 偶尔压着大红',
+  },
+  lux: {
+    id: 'lux', name: '陈列柜', en: 'DISPLAY CASE', tag: '贵重',
+    color: '#ffd166', dim: 'rgba(255,209,102,', body: '#2b1e2e',
+    r: 20, w: 30, h: 24, speed: 1.30, n: [1, 2], weight: 7, loud: 320,
+    hint: '贵重品专柜：珠宝 / 古董 / 硬通货 · 动静不小，大红比保险柜难出',
   },
 };
 const CONTAINER_IDS = Object.keys(CONTAINERS);
@@ -460,7 +502,62 @@ const RELIC_EXT2 = [
 for (const [id, q, icon, name, price, desc] of RELIC_EXT2) {
   RELICS[id] = { q, z: id[0] === 'd' ? 'dam' : 'space', icon, name, price, desc };
 }
+
+/* ═══════ 医疗类收集品：医疗箱的主题货（不带 z，两张图都出） ═══════
+   主题掉落之前目录里医疗件几乎空白，这里补一批撑起医疗箱的货色。 */
+const RELIC_MED = [
+  ['m_bandage',   'common', '绷', '军用绷带卷',       220,  '急救标准品，卷得整整齐齐，一包十条。'],
+  ['m_iodine',    'common', '碘', '碘酒小瓶',         250,  '棕玻璃小瓶，瓶口缠着的棉线还是湿的。'],
+  ['m_sulfa',     'common', '粉', '磺胺粉罐',         290,  '战地消炎粉，标签上的年份很有历史感。'],
+  ['m_tourniquet','common', '带', '旋压式止血带',     320,  '卡扣还灵，旋杆上全是使用刻痕。'],
+  ['m_plasma',    'rare',   '浆', '战地血浆包',       1250, '干血浆，温水化开就能用，冷链断过一次。'],
+  ['m_morphine',  'rare',   '注', '吗啡自动注射剂',   1580, '三针装，针帽上有前任主人的牙印。'],
+  ['m_triage',    'rare',   '册', '战地分诊手册',     1420, '扉页写着「先救能跑的」，页边写满批注。'],
+  ['m_surgkit',   'epic',   '械', '军医手术器械箱',   4300, '整箱不锈钢器械，消毒指示条还没变色。'],
+  ['m_serumbox',  'epic',   '清', '低温血清箱',       4900, '续航还剩四小时，箱缝里冒着白气。'],
+  ['m_medcode',   'legend', '典', '军医规程 · 加密版', 13600, '全套战场救治规程，附录页被撕走了两页。'],
+];
+for (const [id, q, icon, name, price, desc] of RELIC_MED) {
+  RELICS[id] = { q, icon, name, price, desc };   // 不写 z：两张图都出
+}
+
+/* ═══════ 贵重类补批：陈列柜的主题货（不带 z，两图都出） ═══════
+   贵重类原本只有 myth/epic/common 档，补 rare 与 legend 各两件，
+   让陈列柜在任何品质段都能出「珠宝古董」而不是兜底杂货。 */
+const RELIC_LUX = [
+  ['v_jade',   'rare',   '镯', '翡翠手镯',   1150,  '满绿正圈口，棉絮藏在内侧，懂行的照样抢。'],
+  ['v_pearl',  'rare',   '链', '南洋珍珠链', 1300,  '三十七颗珠子，光泽还在线，扣头是后配的。'],
+  ['v_brooch', 'legend', '钻', '钻石胸针',   12200, '老式镶嵌，主石两克拉，Partition 上有拍卖编号。'],
+  ['v_screen', 'legend', '玉', '玉雕插屏',   14600, '整块山料雕的山水插屏，底座是紫檀的。'],
+];
+for (const [id, q, icon, name, price, desc] of RELIC_LUX) {
+  RELICS[id] = { q, icon, name, price, desc };   // 不写 z：两张图都出
+}
+
 const RELIC_IDS = Object.keys(RELICS);
+
+/* ═══════ 收集品主题分类 ═══════
+   容器出货按主题偏好过滤池子：武器箱偏军械(mil)、医疗箱偏医疗(med)、
+   文件柜偏情报(intel)、陈列柜偏贵重(val)。按名字关键词归类，先到先得，
+   个别两可的用 OVERRIDE 点名；其余归 misc（杂项，任何箱子都可能带）。 */
+const RELIC_CAT_RULES = [
+  ['med',   /药剂|药品|医|绷|血清|血浆|手术|急救|疫苗|消毒|纱布|碘|磺胺|担架|病历|输液|针剂|急诊|血袋|生命维持|应急|止血/],
+  ['val',   /鎏金|冠|冕|玉|钻|珠|宝|琥珀|蜜蜡|化石|龙涎|原石|翡翠|水晶|黄金|水银|怀表|星盘/],
+  ['intel', /账|图纸|加密|密码|密钥|绝密|机密|档|文件|记录|日志|笔记|名单|名录|硬盘|磁带|终端|地图|印章?|证|数据|电台|对讲|电话|通讯|权限|坐标|清单|手册|规程|黑匣子/],
+  ['mil',   /枪|弹|军|雷|炮|甲|夜视|瞄|狙|械|防弹|榴|坦克|装甲|工兵|战|武|刀|毒剂|哨/],
+];
+const RELIC_CAT_OVERRIDE = {
+  africaheart: 'val', oceantear: 'val', tsarchest: 'val', goldcrown: 'val',
+  jadeboulder: 'val', amberblock: 'val', ammonite: 'val', ambergris: 'val',
+  starlabe: 'val', d_sunken: 'val', d_gold: 'val', d_mercury: 'val', d_watch: 'val',
+};
+function relicCat(id) {
+  if (RELIC_CAT_OVERRIDE[id]) return RELIC_CAT_OVERRIDE[id];
+  const r = RELICS[id];
+  if (!r) return 'misc';
+  for (const [cat, re] of RELIC_CAT_RULES) if (re.test(r.name)) return cat;
+  return 'misc';
+}
 
 /* ═══════ 成就：结算时逐条判定，解锁即发奖金（只发一次） ═══════
    test(run, st)：run = 本局数据（success/kills/relics/blinds/swarmHits/bleedHits/
@@ -1080,6 +1177,7 @@ for (const k in MOD_FIT) if (MODS[k]) MODS[k].fit = MOD_FIT[k];
 /* ══════════════════════════════════════════════════════════
    1. 存档
    ══════════════════════════════════════════════════════════ */
+/* key 里的 neonpurge 是旧名，故意不改：换 key 等于清空所有老玩家的存档 */
 const SAVE_KEY = 'neonpurge_extract_v1';
 
 /* 携行装备全量 key 表 —— 必须定义在 loadSave() 执行（let SAVE = loadSave()）之前，
@@ -1140,6 +1238,53 @@ const SHAPES = {
   surg_simple: [1, 1], surg_tactical: [2, 1], surg_dek: [3, 1],
 };
 
+/* ═══════ 配件占格：按体积分四档 ═══════
+   小件 1x1（1 格）—— 单格小零件：小瞄具 / 小握把 / 民用小弹匣 / 折叠托 / 消焰器
+   中件 2x1（2 格）—— 一整块机构或一个短组件：消音器 / 常规瞄具 / 扩容弹匣 / 战术托 / 制退环
+   长件 3x1（3 格）—— 一根管、一条轨、一付架：枪管 / 倍镜 / 抑制器 / 两脚架 / 弹链 / 供弹托
+   鼓件 2x2（4 格）—— 只有弹鼓这种又粗又圆的东西：三种鼓（哈夫克 / 轻量 / 野战）
+   3x1 是弹挂最主流的舱形（blocks 里 [3,1] 遍地都是），长件横着正好卡进一格；
+   进不去就自动躺倒成 1x3，竖舱也吃得下。
+   口袋是 5 个独立的单格舱，所以中件以上的配件塞不进裤兜，只能进弹挂或背包 ——
+   搜到一根长枪管就得腾地方，这是配件该有的运输成本。
+   新增配件请往这四张表里挑一档，否则会落到 cellSize 的「1 格」兜底。 */
+const MOD_FOOT = [
+  [1, 1, [
+    'd_mz_flash', 'd_mz_poly', 'd_mz_brake2', 'd_pistol_comp', 's_mz_ti',
+    'd_op_iron', 'd_op_ring', 's_op_micro', 'reddot', 's_op_cqh',
+    'd_gr_rag', 'd_gr_thumb', 's_gr_carbon', 'lgrip', 'd_gr_rod', 'd_gr_rubber',
+    'd_mg_tin', 'lightmag', 's_mg_twin', 'd_mg_plus', 'd_mg_quick', 's_mg_well', 'd_mg_mark',
+    'd_st_wood', 'folding', 's_st_frame', 'd_st_cheek', 'd_st_skel',
+  ]],
+  [2, 1, [
+    'supp', 'd_mz_can', 's_mz_hush', 'comp', 'd_mz_hammer', 's_mz_rail', 'd_sg_port', 'brake_s',
+    'holo', 's_op_holo2', 'd_op_prism', 's_op_eco', 'd_ak_dust',
+    'vgrip', 's_gr_alu', 'd_gr_angled', 's_gr_hybrid', 'laser', 'hygrip', 's_gr_mag',
+    'extmag', 'quickmag', 'd_mg_clamp', 's_mg_cask',
+    'heavy', 'tactic', 'carstock', 'd_st_pad', 's_st_pneu', 's_st_tel',
+    'd_st_ball', 's_st_ergo', 'd_st_recoil', 'd_bull_kit',
+    's_mz_em',
+  ]],
+  [3, 1, [
+    /* 枪管：长过枪身的整根管 */
+    'barrel', 'mk4_auto',
+    /* 消音 / 抑制：一整节管件 */
+    'supp_s', 's_mz_supp', 'd_asval_int',
+    /* 倍镜：一条带筒身的光学轨 */
+    'scope4x', 'd_op_6x', 'thermal', 'd_op_night', 'd_op_long', 's_op_var', 's_op_quantum',
+    's_director_kit',
+    /* 架：折起来是一根横杆 */
+    'd_gr_bipod', 'd_sniper_bipod', 's_gr_claw',
+    /* 供弹：弹链箱与宽稳定托 */
+    's_mg_chain', 'd_lmg_sled',
+  ]],
+  [2, 2, [
+    /* 只剩弹鼓：又粗又圆，横竖都占两格 */
+    'drummag', 's_mg_lightdrum', 'd_mg_drum2',
+  ]],
+];
+for (const [w, h, ids] of MOD_FOOT) for (const id of ids) SHAPES[id] = [w, h];
+
 
 /* 基准枪：只在「查不到 id」时给数值表兜底，不代表玩家拥有它。
    G17 现在是一把要花钱买的手枪，不再白送、也不再自动塞进手枪槽。 */
@@ -1177,37 +1322,37 @@ const STARTER_MELEE = 'knife_tactical';
    perk：move 挂水不减速 / cure 开始回血即治伤口 + 止痛。 */
 const MEDKITS = {
   inject_s: {
-    name: '简易注射器', short: '简易针', code: 'SIMPLE INJECTOR',
+    name: '简易注射器', short: '简易针', icon: '针', code: 'SIMPLE INJECTOR',
     grade: '白', dur: 30, hps: 5, wind: 3.5, price: 50, color: '#7fe3a8', size: 0.55,
     desc: '30 点耐久，5 血/秒，启动 3.5s。读条按缺口补时（缺 30 血要读 3.5+6=9.5s）。便宜、随身，扎一针先止血。',
     perk: '',
   },
   inject_m: {
-    name: '强效注射器', short: '强效针', code: 'COMBAT INJECTOR',
-    grade: '绿', dur: 60, hps: 12, wind: 3, price: 100, color: '#46e08a', size: 0.62,
+    name: '强效注射器', short: '强效针', icon: '剂', code: 'COMBAT INJECTOR',
+    grade: '绿', dur: 60, hps: 12, wind: 3, price: 100, color: '#74a35c', size: 0.62,
     desc: '60 点耐久，12 血/秒，启动 3s。缺 60 血读 3+5=8s，打架首选：单段读条最短。',
     perk: '',
   },
   kit_vehicle: {
-    name: '车载急救包', short: '车载包', code: 'VEHICLE FIRST AID',
+    name: '车载急救包', short: '车载包', icon: '包', code: 'VEHICLE FIRST AID',
     grade: '白', dur: 90, hps: 6, wind: 5, price: 20, color: '#58c4d8', size: 0.82,
     desc: '90 点耐久，6 血/秒，启动 5s。回血最慢（缺 90 血要读 5+15=20s），但挂水时走路不减速——被追着撤的时候唯一能边走边灌的一支。',
     perk: 'move',
   },
   kit_field: {
-    name: '野战急救包', short: '野战包', code: 'FIELD TRAUMA KIT',
+    name: '野战急救包', short: '野战包', icon: '救', code: 'FIELD TRAUMA KIT',
     grade: '蓝', dur: 220, hps: 20, wind: 6, price: 300, color: '#9ef2c8', size: 1.02,
     desc: '220 点耐久，20 血/秒，启动 6s（最长的启动）。缺 100 血读 6+5=11s，一支顶好几条命，配着掩体用。',
     perk: '',
   },
   box_outdoor: {
-    name: '户外医疗箱', short: '户外箱', code: 'OUTDOOR MED BOX',
+    name: '户外医疗箱', short: '户外箱', icon: '箱', code: 'OUTDOOR MED BOX',
     grade: '紫', dur: 350, hps: 20, wind: 4, price: 500, color: '#7fd4ff', size: 1.32,
     desc: '350 点耐久，20 血/秒，启动 4s。缺 100 血读 4+5=9s；开箱即处理伤口、注射止痛剂（30 秒减伤 10%），还带止血敷料：起效时一把压住全部流血层，每压 1 层额外烧 12 点耐久。',
     perk: 'cure', pain: 30,
   },
   box_battle: {
-    name: '战地医疗箱', short: '战地箱', code: 'BATTLEFIELD MED CRATE',
+    name: '战地医疗箱', short: '战地箱', icon: '医', code: 'BATTLEFIELD MED CRATE',
     grade: '金', dur: 800, hps: 30, wind: 3.5, price: 800, color: '#ffd66b', size: 1.66,
     desc: '800 点耐久，30 血/秒，启动 3.5s。缺 80 血读 3.5+3=6.5s、缺 100 血读 3.5+4=7.5s；治伤口 + 60 秒止痛，还带战地止血钳：起效时一把压住全部流血层，每压 1 层额外烧 12 点耐久。一支撑满一个据点。',
     perk: 'cure', pain: 60,
@@ -1237,11 +1382,11 @@ const STOPS = {
   pain_release: {
     name: '缓释止痛片', short: '缓释片', code: 'SUSTAINED RELEASE',
     grade: '白', uses: 1, sec: 4, price: 50, pain: 200, color: '#e8eef4',
-    desc: '1 次。含服后药效慢慢铺开，200 秒里受伤 -10%，臂折的负面被压住、贯穿伤黑边淡下去。压不住流血。',
+    desc: '1 次。含服后药效慢慢铺开，200 秒里受伤 -10%，臂折的负面被压住、腿伤减速减半（能拖着腿跑）、贯穿伤黑边淡下去。骨头还得手术接，压不住流血。',
   },
   pain_antibio: {
     name: '瓶装抗生素', short: '抗生素', code: 'BOTTLED ANTIBIOTICS',
-    grade: '绿', uses: 3, sec: 4, price: 80, pain: 240, color: '#46e08a',
+    grade: '绿', uses: 3, sec: 4, price: 80, pain: 240, color: '#74a35c',
     desc: '3 次。抗生素把炎症压下去，疼痛跟着退：单次 240 秒止痛。一瓶三片，一片一片吃。',
   },
   pain_dve: {
@@ -1265,7 +1410,7 @@ const SURGERIES = {
   },
   surg_tactical: {
     name: '战术快拆手术包', short: '战术手术', code: 'TACTICAL SURGERY KIT',
-    grade: '绿', uses: 4, sec: 7, price: 150, color: '#46e08a',
+    grade: '绿', uses: 4, sec: 7, price: 150, color: '#74a35c',
     desc: '4 次 · 单次读条 7 秒。预拆封的快取器械，摊开就能动刀，适合边打边处理。',
   },
   surg_dek: {
@@ -1279,10 +1424,10 @@ const SURG_ORDER = ['surg_simple', 'surg_tactical', 'surg_dek'];
 /* ── 创伤 debuff 的数值 ──
    流血：每层每秒扣血，但锁 1 血，不会自己流死。
    贯穿伤：每层 -10% 血量上限，黑边 + 视野发糊；止痛只屏蔽视觉。
-   骨折：手术包才治得了；手臂的负面止痛能压住，腿的不行。 */
+   骨折：手术包才治得了；手臂的负面止痛能压住，腿的减速减半（能拖着腿跑）。 */
 const DEBUFF = {
   baseHp: 100,
-  bleedMax: 6, bleedDps: 0.9, bleedLock: 1,
+  bleedMax: 3, bleedDps: 0.9, bleedLock: 1,   /* 流血最多叠 3 层（叠满 2.7 血/秒） */
   redMax: 2, redHp: 0.10,
   weakHp: 0.20,
   armAds: 1.6, armReload: 1.35, armHeal: 1.3, armSpread: 1.35,
@@ -1346,6 +1491,10 @@ const DEFAULT_SAVE = () => ({
      穿上 = 从仓库拿出一件；阵亡丢的是身上这件，仓库里的还在。 */
   armorPieces: [],
   wornPiece: null,
+  /* 头盔：和护甲并行的第二个防具槽，没有耐久条。helmetOwned { 头盔 id: 件数 }（头上那顶也算在件数里），
+     wornHelmet 是头上这顶。阵亡丢头上这顶（件数减一），撤离原样保留。 */
+  helmetOwned: {},
+  wornHelmet: null,
   /* 甲修包库存：n 是没开封的份数，left 是当前拆开那份的剩余点数 */
   repairs: {},
   /* 出击配装：主武器 / 副武器（都只能放长枪）/ 手枪。空槽是 null */
@@ -1380,8 +1529,9 @@ const DEFAULT_SAVE = () => ({
   contracts: { day: '', list: [] },   // 每日委托：{ day:'YYYY-MM-DD', list:[{ id, prog, done }] }
   presets: [null, null, null],        // 整备预设：3 个槽，各存一份装备快照（不含容器内容）
   soldN: {},           // 每件收集品累计卖出的件数（决定市场价衰减）
-  /* 设置：音量 / 震动强度 / 粒子密度 都是 0-100，aim 是准星颜色 */
-  settings: { vol: 70, shake: 100, fx: 100, aim: '#b4e6ff' },
+  /* 设置：音量 / 震动强度 / 粒子密度 都是 0-100，aim 是准星颜色，
+     gfx 是画质档（2 高 / 1 均衡 / 0 流畅），掉帧时游戏会自己往下调 */
+  settings: { vol: 70, shake: 100, fx: 100, aim: '#b4e6ff', gfx: 2 },
   seenRelics: {},      // 图鉴：曾经带出来过的收集品 { 收集品id: 1 }（卖掉了也算见过）
   codexReward: {},     // 图鉴：已领取的档位奖励 { common: 1, ... }
 });
@@ -1491,12 +1641,15 @@ function loadSave() {
     const owned = migrateWeaponIds(Object.assign({}, DEFAULT_SAVE().owned, d.owned || {}));
     const gear = cleanGearOwned(d.gearOwned);
     const AR = cleanArmor(d);
+    const HM = cleanHelmets(d);
     const S = {
       credits: typeof d.credits === 'number' ? d.credits : base.credits,
       operator: OP_IDS[d.operator] ? d.operator : base.operator,
       owned: owned,
       armorPieces: AR.pieces,
       wornPiece: AR.worn,
+      helmetOwned: HM.owned,
+      wornHelmet: HM.worn,
       loadout: cleanLoadout(d, owned),
       ownedMelee: cleanOwnedMelee(d.ownedMelee),
       equippedMelee: MELEES[d.equippedMelee] ? d.equippedMelee : STARTER_MELEE,
@@ -1520,7 +1673,7 @@ function loadSave() {
       contracts: cleanContracts(d.contracts),
       presets: cleanPresets(d.presets),
       soldN: Object.assign({}, d.soldN || {}),
-      settings: Object.assign({ vol: 70, shake: 100, fx: 100, aim: '#b4e6ff' }, d.settings || {}),
+      settings: Object.assign({ vol: 70, shake: 100, fx: 100, aim: '#b4e6ff', gfx: 2 }, d.settings || {}),
       seenRelics: Object.assign({}, d.seenRelics || {}),
       codexReward: Object.assign({}, d.codexReward || {}),
     };
@@ -1772,33 +1925,33 @@ function modBanReason(wid, mid) {
    这张表必须排在 loadSave 之前 —— 老档清洗要用它。
    ══════════════════════════════════════════════════════════ */
 const CALIBERS = {
-  '919': { id:'919', name:'9×19mm 帕拉贝鲁姆', short:'9×19', full:'9×19mm', box:50, base:4,
+  '919': { id:'919', name:'9×19mm 帕拉贝鲁姆', short:'9×19', full:'9×19mm', tag:'9×19', box:50, base:4,
            desc:'最通用的手枪弹，G17 / 93R / G18 共用。只上架到 4 级紫弹。' },
-  '918': { id:'918', name:'9×18mm 马卡洛夫', short:'9×18', full:'9×18mm', box:50, base:3,
+  '918': { id:'918', name:'9×18mm 马卡洛夫', short:'9×18', full:'9×18mm', tag:'9×18', box:50, base:3,
            desc:'野牛冲锋枪的螺旋弹鼓装的就是它，便宜量大。只上架到 4 级紫弹。' },
-  '762x39': { id:'762x39', name:'7.62×39mm 苏制中间威力弹', short:'7.62×39', full:'7.62×39mm', box:30, base:6,
+  '762x39': { id:'762x39', name:'7.62×39mm 苏制中间威力弹', short:'7.62×39', full:'7.62×39mm', tag:'7.62×39', box:30, base:6,
            desc:'AKM 的短弹：弹头重、存速低，近距离一发顶两发，出了两百米掉得厉害。最高上架 5 级金弹。' },
-  '545': { id:'545', name:'5.45×39mm 苏制小口径弹', short:'5.45×39', full:'5.45×39mm', box:30, base:6,
+  '545': { id:'545', name:'5.45×39mm 苏制小口径弹', short:'5.45×39', full:'5.45×39mm', tag:'5.45', box:30, base:6,
            desc:'AK-12 的小口径弹：弹道平、后坐小，靠射速和连发精度吃饭。最高上架 5 级金弹。' },
-  '58': { id:'58', name:'5.8×42mm 国造步枪弹', short:'5.8×42', full:'5.8×42mm', box:30, base:8,
+  '58': { id:'58', name:'5.8×42mm 国造步枪弹', short:'5.8×42', full:'5.8×42mm', tag:'5.8', box:30, base:8,
            desc:'QBZ 系列的制式弹：初速高、弹形细长，远距离存速比 5.45 更稳。最高上架 5 级金弹。' },
-  '12g': { id:'12g', name:'12 号霰弹', short:'12Ga', full:'12 Gauge', box:25, base:9,
+  '12g': { id:'12g', name:'12 号霰弹', short:'12Ga', full:'12 Gauge', tag:'12G', box:25, base:9,
            desc:'M870 一次喷 8 枚弹丸，每颗单独结算。只上架到 4 级紫弹。' },
-  '556': { id:'556', name:'5.56×45mm NATO', short:'5.56×45', full:'5.56×45mm', box:30, base:7,
+  '556': { id:'556', name:'5.56×45mm NATO', short:'5.56×45', full:'5.56×45mm', tag:'5.56', box:30, base:7,
            desc:'M4A1 的制式步枪弹，穿甲与手感最均衡。最高上架 5 级金弹。' },
-  '762': { id:'762', name:'7.62×51mm NATO', short:'7.62×51', full:'7.62×51mm', box:20, base:12,
+  '762': { id:'762', name:'7.62×51mm NATO', short:'7.62×51', full:'7.62×51mm', tag:'7.62×51', box:20, base:12,
            desc:'全威力步枪弹：SR9 拿它打半自动，R93 拿它拉栓，同一盒弹喂两把枪。不卖白弹绿弹，上架从蓝弹起步，最高 6 级红弹。' },
-  '762x54': { id:'762x54', name:'7.62×54mmR 莫辛-纳甘凸缘弹', short:'7.62×54R', full:'7.62×54mmR', box:20, base:13,
+  '762x54': { id:'762x54', name:'7.62×54mmR 莫辛-纳甘凸缘弹', short:'7.62×54R', full:'7.62×54mmR', tag:'7.62R', box:20, base:13,
            desc:'俄制凸缘全威力弹：PKM 的弹链和 SVD 的弹匣装的是同一盒，弹壳底部带一圈凸缘，上膛比 NATO 弹粗暴。不卖白弹绿弹，上架从蓝弹起步，最高 6 级红弹。' },
-  '338': { id:'338', name:'.338 Lapua Magnum', short:'.338 LM', full:'.338 Lapua Magnum', box:10, base:25,
+  '338': { id:'338', name:'.338 Lapua Magnum', short:'.338 LM', full:'.338 Lapua Magnum', tag:'.338', box:10, base:25,
            desc:'AWM 的远程重弹，一发就是一笔钱。全游戏唯一上架 7 级顶级弹的口径，而且只卖高级弹：5 级金弹起步，6 级红弹、7 级顶级弹。' },
-  '9x39': { id:'9x39', name:'9×39mm 亚音速穿甲弹', short:'9×39', full:'9×39mm SP-6', box:20, base:12,
+  '9x39': { id:'9x39', name:'9×39mm 亚音速穿甲弹', short:'9×39', full:'9×39mm SP-6', tag:'9×39', box:20, base:12,
            desc:'AS VAL / SR-3M 的专用重弹：弹头又重又硬，弹级天生偏向穿甲，近距离一发顶 5.56 一发半；代价是亚音速，弹道衰减全步枪系最狠。最高上架 6 级红弹。' },
-  '300blk': { id:'300blk', name:'.300 BLK 亚音速弹', short:'.300 BLK', full:'.300 AAC Blackout', box:20, base:9,
+  '300blk': { id:'300blk', name:'.300 BLK 亚音速弹', short:'.300 BLK', full:'.300 AAC Blackout', tag:'.300', box:20, base:9,
            desc:'MCX 的模块化口径：重弹头中等穿透，开火动静比小口径步枪小一截，配消音器几乎贴脸才听得见。最高上架 5 级金弹。' },
-  '46': { id:'46', name:'4.6×30mm PDW 弹', short:'4.6×30', full:'4.6×30mm', box:40, base:6,
+  '46': { id:'46', name:'4.6×30mm PDW 弹', short:'4.6×30', full:'4.6×30mm', tag:'4.6', box:40, base:6,
            desc:'MP7 专属的个人防卫弹：又小又快，穿甲是冲锋枪口径里最好的，打肉偏软。只上架到 4 级紫弹。' },
-  '45acp': { id:'45acp', name:'.45 ACP 柯尔特自动手枪弹', short:'.45 ACP', full:'.45 ACP', box:25, base:6,
+  '45acp': { id:'45acp', name:'.45 ACP 柯尔特自动手枪弹', short:'.45 ACP', full:'.45 ACP', tag:'.45', box:25, base:6,
            desc:'汤姆逊 / Vector 的大口径手枪弹：弹头重、停顿感强，打无甲目标一发顶 9×19 一发半；穿甲一般，只上架到 4 级紫弹。' },
 };
 const CAL_ORDER = ['919', '918', '45acp', '46', '762x39', '545', '58', '9x39', '12g', '556', '300blk', '762', '762x54', '338'];
@@ -1952,7 +2105,7 @@ const WEAPONS = {
     dmg: 14, armorDmg: 10, rate: 0.065, spread: 0.072, count: 1, mode: 'auto',
     bspeed: 1120, mag: 64, reload: 2.3, recoil: 1.3, size: 2.8, reserveMul: 4,
         ads: { spread: 0.62, move: 0.64, time: 0.16 },
-    color: '#8ef2ff', range: 780, knock: 42, sound: 'smg', noise: 560,
+    color: '#e6e0c9', range: 780, knock: 42, sound: 'smg', noise: 560,
     bars: { dmg: .28, rate: .96, mag: 1.0, acc: .40 },
   },
   m870: {
@@ -2501,6 +2654,58 @@ function rollArmorId(lv) {
   return pool.length ? pick(pool).id : 0;
 }
 
+/* ── 头盔：和护甲并行的第二个防具槽。护甲管「身子」，头盔管「脑子 + 耳朵」。
+   lv      头盔等级（1-3），只是一个档位标识，不影响减伤强度；
+   drLv/dr 「几级及以下的子弹」吃多少平减 —— 只对子弹生效（pen 0 的爆炸 / 近战 / 火 / 冻不吃），
+           高一级的弹照旧打穿，所以 3 级头在绝密局里几乎只是块铁皮；
+   hear    拾音范围增量：+0.10 = 听敌人脚步的范围放大 10%，负数是隔音变差；
+   quiet   降噪：自己发出的动静（脚步 / 枪声 / 搜刮）传播半径 ×(1-quiet)，越静越难被人摸到位置；
+   aim     开镜时间惩罚（adsTime ×(1+aim)）；move 移速惩罚（走速 ×(1-move)）。
+   头盔不磨耐久：挡不挡得住只看等级，阵亡会丢 —— 它卖的是「信息」，不是「厚度」。 */
+const HELMETS = [
+  { id: 0, name: '不戴头盔', short: '无头盔', lv: 0, drLv: 0, dr: 0, hear: 0, quiet: 0, quietName: '—', aim: 0, move: 0, price: 0,
+    desc: '脑袋光着：耳朵是原装的，听得见多远就是多远。' },
+  /* ── 1 级头：只有耳朵，没有防护 ── */
+  { id: 1, name: '户外棒球帽', short: '棒球帽', lv: 1, drLv: 0, dr: 0, hear: 0.10, quiet: 0.04, quietName: '低', aim: 0, move: 0, price: 600,
+    desc: '帽檐压住顶光，反而听得更清：拾音范围 +10%，自己动静小 4%（警戒涨慢 12%、方位偏 ±28px）。没有任何防护 —— 子弹照样从布上穿过去。' },
+  /* ── 2 级头：挡 1-2 级弹 ── */
+  { id: 2, name: '复古摩托头盔', short: '摩托盔', lv: 2, drLv: 2, dr: 0.10, hear: -0.05, quiet: 0.10, quietName: '中', aim: 0, move: 0, price: 2400,
+    desc: '玻璃钢外壳垫着一层海绵：2 级及以下子弹伤害 -10%，自己动静小 10%（警戒涨慢 30%、方位偏 ±70px）。代价是闷 —— 拾音范围 -5%。' },
+  /* ── 3 级头：挡 1-3 级弹，两件取向相反：厚 vs 听得远 ── */
+  { id: 3, name: '防暴头盔', short: '防暴盔', lv: 3, drLv: 3, dr: 0.12, hear: -0.05, quiet: 0.10, quietName: '中', aim: 0.03, move: 0.01, price: 5200,
+    desc: '带面罩的全罩式防暴盔：3 级及以下子弹伤害 -12%，全表最厚。自己动静小 10%（警戒涨慢 30%、方位偏 ±70px），代价是抬枪 -3%、走位 -1%、拾音 -5%。' },
+  { id: 4, name: 'MC201 防弹头盔', short: 'MC201', lv: 3, drLv: 3, dr: 0.10, hear: 0.20, quiet: 0.10, quietName: '中', aim: 0.01, move: 0.01, price: 6800,
+    desc: '带电子拾音模块的战术盔：拾音范围 +20%（断层式领先），3 级及以下子弹伤害 -10%，自己动静小 10%（警戒涨慢 30%、方位偏 ±70px）。防护比防暴盔薄两格，但戴上它你能先听见别人。' },
+  /* ── 4 级头：能挡 4 级弹，视野开始成为代价 / 卖点 ── */
+  { id: 5, name: 'MHS 战术头盔', short: 'MHS', lv: 4, drLv: 4, dr: 0.10, hear: 0.30, quiet: 0.10, quietName: '中', aim: 0.03, move: 0.01, fov: 1.00, fovName: '持平', price: 9200,
+    desc: '模块化战术盔：4 级及以下子弹伤害 -10%，拾音范围 +30%（第二好），自己动静小 10%（警戒涨慢 30%、方位偏 ±70px）。抬枪 -3%、走位 -1%，视野不赔不赚。' },
+  { id: 6, name: 'D6 战术头盔', short: 'D6', lv: 4, drLv: 4, dr: 0.25, hear: -0.10, quiet: 0.18, quietName: '高', aim: 0.06, move: 0.04, fov: 0.82, fovName: '下降 高', price: 17500,
+    desc: '全封闭重型盔：4 级及以下子弹伤害 -25%，全表最厚；自己动静小 18%（警戒涨慢 54%、方位偏 ±126px）。代价是闷罐子 —— 拾音 -10%、视野收窄 18%、抬枪 -6%、走位 -4%。' },
+  { id: 7, name: 'DICH 训练头盔', short: 'DICH', lv: 4, drLv: 4, dr: 0.03, hear: 0.50, quiet: 0.18, quietName: '高', aim: 0, move: 0.02, fov: 1.15, fovName: '上升 中', price: 9800,
+    desc: '开放式训练盔：几乎不防弹（-3%），但耳朵是全表最强 —— 拾音 +50%、自己动静小 18%、视野宽 15%。走位 -2%，抬枪无惩罚。适合当「眼睛」，别当盾牌。' },
+  { id: 8, name: 'GT1 战术头盔', short: 'GT1', lv: 4, drLv: 4, dr: 0.12, hear: 0.20, quiet: 0.10, quietName: '中', aim: 0.04, move: 0.04, fov: 1.08, fovName: '上升 低', price: 13500,
+    desc: '带侧轨的通用战术盔：4 级及以下子弹伤害 -12%，拾音 +20%、动静小 10%、视野宽 8%。抬枪 -4%、走位 -4% —— 样样都行，样样都不极致。' },
+];
+function helmetOf(id) { return HELMETS[id | 0] || HELMETS[0]; }
+/* 拾音倍率：+20% → 听力半径 1.2 倍；-5% → 0.95 */
+function helmetHearMul(h) { return Math.max(0.3, 1 + ((h && h.hear) || 0)); }
+/* 降噪：自己发出的动静打几折（0.90 = 少传 10%） */
+function helmetNoiseMul(h) { return Math.max(0.4, 1 - ((h && h.quiet) || 0)); }
+/* 降噪不只是「传得近」，还让敌人「听着软、方位糊」 —— 两个系数就是手感旋钮：
+   HELMET_QUIET_HARD：警戒硬度削减。quiet 0.10 → ×(1-0.30)=0.70，警戒条涨慢三成；
+   HELMET_QUIET_BLUR：方位误差半径（px）。quiet 0.10 → 敌人猜的落点偏离 ±70px。 */
+const HELMET_QUIET_HARD = 3.0;
+const HELMET_QUIET_BLUR = 700;
+/* 视野：头盔改的是「视锥半角倍率」（fov） —— 主视野等比缩放，余光只吃 60%，
+   否则 84° 的余光一放大就顶到屁股后面去了。 */
+const HELMET_FOV_EDGE_K = 0.6;
+/* 视野标签：只有不是 1 倍时才出现（商店 / 整备 / 仓库 / 大厅简报共用） */
+function helmetFovTag(h) {
+  const f = (h && h.fov) || 1;
+  if (Math.abs(f - 1) < 0.001) return '';
+  return ' · 视野 ' + (f > 1 ? '+' : '') + Math.round((f - 1) * 100) + '%';
+}
+
 /* ── 甲修包：修护甲用的消耗品，跟医疗包一样有耐久（点数）。
    恢复量 = 消耗点数 × 甲的维修效率（1 点修几耐久）；上限损耗 = 恢复量 × 甲的耐久损耗率。
    capLv：能修的最高甲级 —— 蓝修 1-3 级，紫修 1-4，金修 1-5，红修全甲。 ── */
@@ -2531,6 +2736,76 @@ const REPAIRS = {
   },
 };
 const REPAIR_ORDER = ['repair_b', 'repair_p', 'repair_g', 'repair_r'];
+
+/* ═══════════ 行动门票 ═══════════
+   机密/绝密先掏钱再进场：高收入图把「风险投资」前置，正好对准
+   高手这种不阵亡、免缴隐形水槽的人群。阵亡门票不退。 */
+const ENTRY_FEE = { standard: 0, secret: 8000, top: 20000 };
+function entryFeeOf(tier) { return ENTRY_FEE[tier] | 0; }
+
+/* ═══════════ 武器磨损与保养 ═══════════
+   把「买枪」这个一次性大水槽变成持续水槽。磨损记在枪型上（同款多把共用，
+   简化：保养一次全款清零）；近战刀不在 GUN_SLOTS 里，永不磨损 —— 保底不收钱。
+   数值 rationale：满磨保养 = 枪价 25%（serviceK 0.0025 × 100 磨损），
+   普通图 100/8 ≈ 12 局磨满 → 每局均摊 ≈ 枪价 2%，机密 3%，绝密 4%。
+   [PLACEHOLDER] 磨损速率与哑火率未经 playtest；验证路径：毕业期每局
+   保养支出应落在枪价 2~4%，哑火要烦到想保养、不至于摔键盘。 */
+const GUN_WEAR = {
+  perRaid: { standard: 8, secret: 12, top: 16 },
+  serviceK: 0.0025,   // 每 1 点磨损收枪价的 0.25%
+  jam: 0.12,          // 磨满 100 后每发哑火概率
+  spreadK: 0.35,      // 磨满时散布 ×1.35，按磨损线性插值
+};
+function gunWearOf(id) { return Math.max(0, Math.min(100, (SAVE.gunWear && SAVE.gunWear[id]) | 0)); }
+function gunWearAdd(id, n) {
+  if (!WEAPONS[id]) return;
+  if (!SAVE.gunWear) SAVE.gunWear = {};
+  SAVE.gunWear[id] = gunWearOf(id) + Math.max(0, n);
+}
+function gunServiceCost(id) { return Math.round(WEAPONS[id].price * GUN_WEAR.serviceK * gunWearOf(id)); }
+function gunSpreadMul(id) { return 1 + (gunWearOf(id) / 100) * GUN_WEAR.spreadK; }
+
+/* ═══════════ 黑市轮售 ═══════════
+   每天按日期种子刷 3 件限量货（同一天打开几次都是同一批）。
+   定位：自愿水槽 —— 批量顶级弹药九折 + 限量红甲修，给毕业期的富余资金一个出口。
+   [PLACEHOLDER] 货池宽度与九折未经验证；验证路径：毕业期玩家若从不光顾
+   说明定价不对味，若每天都清空说明池子太窄。 */
+function ensureBlackMarket() {
+  const day = contractDay();
+  if (SAVE.blackMarket && SAVE.blackMarket.day === day &&
+      Array.isArray(SAVE.blackMarket.items)) return SAVE.blackMarket;
+  const pool = [];
+  /* 手上有枪的口径：整车顶级弹（3 盒捆装九折）—— 量大、单发便宜，诱导大额消费 */
+  for (const cal of CAL_ORDER) {
+    if (!WEAPON_ORDER.some(id => SAVE.owned[id] && calOfWeapon(id) === cal)) continue;
+    let lv = -1;
+    for (let i = AMMO_LV_MAX; i >= 0; i--) if (calHasTier(cal, i)) { lv = i; break; }
+    if (lv < 1) continue;                       // 只有修脚弹的口径不上桌
+    const C = CALIBERS[cal], T = ammoTier(lv);
+    pool.push({
+      t: 'ammo', cal, lv, n: C.box * 3, stock: 1,
+      name: C.short + ' ' + T.grade + '弹 ×' + (C.box * 3) + ' 发',
+      desc: '黑市整车弹：3 盒捆装，单价九折。出门前最后一次补货的机会。',
+      price: Math.round(ammoPrice(cal, lv) * 3 * 0.9),
+      color: T.color,
+    });
+  }
+  /* 甲修包三件套：军火库常年有售，黑市版限量但不加价 —— 限量本身就是稀缺。
+     三档全进池子，保证就算玩家只有一把枪，货池也 ≥ 3 件（每天固定上 3 件）。 */
+  for (const rid of ['repair_r', 'repair_g', 'repair_p']) {
+    const R = REPAIRS[rid];
+    if (R) pool.push({ t: 'repair', id: rid, stock: 2, name: R.name, desc: R.desc, price: R.price, color: R.color });
+  }
+  /* 按日期种子洗牌取 3 件 */
+  let seed = hashStr('bm-' + day) || 1;
+  const rnd = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
+  const items = [];
+  const p = pool.slice();
+  while (items.length < 3 && p.length) items.push(p.splice(Math.floor(rnd() * p.length), 1)[0]);
+  SAVE.blackMarket = { day, items };
+  saveGame();
+  return SAVE.blackMarket;
+}
 
 /* ══════════════════════════════════════════════════════════
    干员
@@ -2670,7 +2945,7 @@ const OPERATORS = {
     },
     x: {
       name: '动力外骨骼', short: '外骨骼', tag: '大招', kind: 'exo',
-      desc: '外骨骼撑起 25 秒：移速 +22%、滑铲更远更快，免疫骨折、腿断了也能跑。期间每击倒一名敌人延长 5 秒，并回 30 血、回满体力。冷却从启动那刻开始算。',
+      desc: '外骨骼撑起 25 秒：移速 +22%、滑铲更远更快，免疫骨折、腿断了也能跑。期间每击倒一名敌人延长 5 秒，并快速回复 30 血、回满体力（约 1.5 秒灌完，不是瞬间跳满）。冷却从启动那刻开始算。',
       cd: 90, dur: 25, killExtend: 5, killHeal: 30,
     },
     passive: {
@@ -2855,7 +3130,8 @@ const GEAR = {
         物品占格查 SHAPES 表（宽×高）：手枪 2、冲锋枪 3x2、短身步枪 4x2、标准步枪 / 精确射手 / 轻机枪 5x2、
         M870 4x2、狙击 5~7 横条，
         手术包 1~3 格，甲修包 2~4 格，护甲按等级（3 级 3x2 / 4 级 4x2 / 5·6 级 5x2），
-        弹挂 2x2、背包 2x2（金红 3x2）
+        弹挂 2x2、背包 2x2（金红 3x2），
+        配件按体积四档（见 MOD_FOOT）：小件 1x1 / 中件 2x1 / 长件 3x1 / 弹鼓 2x2（4 格）
         —— 必须整个塞进同一个隔舱的连续空格里。
         ads / spd = 瞄准速度 / 移动速度 修正（负数为惩罚，百分比）── */
   dar:      { name: 'DAR突击手胸挂',   kind: 'rig', cap: 24, price: 16000, q: '金', color: '#ffcc4d', ads: -5, spd: -1,
@@ -3075,7 +3351,10 @@ function cellValidBase(c) {
     const left = Number(c.left);
     return { t: 'repair', id: c.id, left: clamp(left > 0.01 ? left : REPAIRS[c.id].dur, 0, REPAIRS[c.id].dur) };
   }
-  if (c.t === 'stop' && STOPS[c.id]) return { t: 'stop', id: c.id };
+  if (c.t === 'stop' && STOPS[c.id]) {           // 瓶装类：n 是格子里剩几片（老档没有 = 1）
+    const cap = Math.max(1, (STOPS[c.id].uses | 0) || 1);
+    return { t: 'stop', id: c.id, n: clamp(Math.floor(Number(c.n)) || 1, 1, cap) };
+  }
   if (c.t === 'surg' && SURGERIES[c.id]) {
     return { t: 'surg', id: c.id, uses: clamp(Math.floor(Number(c.uses)) || 0, 0, SURGERIES[c.id].uses) };
   }
@@ -3115,7 +3394,7 @@ function mergeCarryOverflow(S, overflow) {
       const s = S.repairs[c.id] || (S.repairs[c.id] = { n: 0, left: 0 });
       s.n = Math.min(99, (s.n | 0) + 1);
     } else if (c.t === 'stop') {
-      S.stops[c.id] = Math.min(99, ((S.stops[c.id] | 0) + 1));
+      S.stops[c.id] = Math.min(99, ((S.stops[c.id] | 0) + ((c.n | 0) || 1)));
     } else if (c.t === 'surg') {
       const s = S.surgs[c.id] || (S.surgs[c.id] = { uses: 0 });
       s.uses = Math.min(SURGERIES[c.id].uses, (s.uses | 0) + c.uses);
@@ -3253,6 +3532,22 @@ function cleanArmor(d) {
   }
   if (worn && !(ARMORS[worn.id] && ARMORS[worn.id].lv >= 1)) worn = null;
   return { pieces, worn };
+}
+
+/* 头盔清算：只认表里存在的 id（0 = 不戴），件数夹在 0-9；头上那顶不在库存里就当没戴 */
+function cleanHelmets(d) {
+  const owned = {};
+  const raw = d && d.helmetOwned;
+  if (raw && typeof raw === 'object') {
+    for (const k in raw) {
+      const id = k | 0;
+      const n = Math.min(9, Math.max(0, Math.floor(Number(raw[k])) || 0));
+      if (HELMETS[id] && HELMETS[id].lv > 0 && n > 0) owned[id] = n;
+    }
+  }
+  let worn = d ? (d.wornHelmet | 0) : 0;
+  if (!worn || !HELMETS[worn] || HELMETS[worn].lv <= 0 || !owned[worn]) worn = null;
+  return { owned, worn };
 }
 
 /* loadSave 阶段只留原始结构 —— 数据表（WEAPON_ORDER 等）在这之后才初始化，
@@ -3470,8 +3765,8 @@ const SECRET = {
             cryo: 1.2, cryoT: 1.15, cryoS: 1.25, nader: 1.15 },
   shield: 140,          // 盾兵的盾，普通是 120
   playerInvuln: 0.30,   // 玩家挨打后的无敌帧，普通是 0.55（围攻才开始有压力）
-  firstWave: 60,        // 首波增援
-  gapBase: 45, gapK: 2, gapMin: 28,
+  firstWave: 72,        // 首波增援
+  gapBase: 56, gapK: 2.6, gapMin: 34,
   bossWave: 4,          // 第 4 波带赤霄
   loot: {
     relicCommon: 0.42,  // 普通货权重 ×0.42
@@ -3501,7 +3796,7 @@ const TOP = {
   penAdd: 2,            // 敌人子弹弹级 +2
   shieldMul: 1.15,
   playerInvuln: 0.26,
-  firstWave: 42, gapBase: 38, gapK: 2, gapMin: 24,
+  firstWave: 52, gapBase: 46, gapK: 2.4, gapMin: 28,
   bossWave: 3,
   loot: {
     relicCommon: 0.30, relicRare: 1.15, relicHigh: 2.20, relicTop: 3.80,
@@ -3510,14 +3805,39 @@ const TOP = {
   },
 };
 function lootTable() { return isTop() ? TOP.loot : (isSecret() ? SECRET.loot : null); }
+/* ── 警戒传播与增援：一次「看见」能惊动多大一片，以及谁能真的追上来 ──
+   老实现里 enterCombat 一次就把 520px 内所有人喊成 alert，被喊的人再去喊它周围
+   440px 的人，三跳下去 ≈1300px —— 半张图的守军都会拎着枪朝你走，看着就像
+   「一个人看见 = 全图 AI 来抓我」。现在拆成五道闸：
+     ① 喊话只传 maxHop 跳，首跳 hopR，逐跳收缩 hopDecay；
+     ② chaseR 硬闸：离发现点超过这个距离的人根本进不了追杀，只在原地犯疑；
+     ③ maxResponders：这一轮已经有多少人在扑你，凑满了剩下的人就当没听见；
+     ④ giveUpR：追出去这么远还没再咬住，就放弃回防；
+     ⑤ 增援不再「喊一声就到」：先挂 ETA（backupEta），到点才从集结点进场。 */
+const ALERT = {
+  hopR: 330,             // 首跳喊话半径（原 520）
+  hopDecay: 70,          // 每多传一跳收缩多少
+  maxHop: 2,             // 连锁深度（原 3）
+  chaseR: 700,           // 硬闸：离发现点超过这个距离 → 不进战斗
+  giveUpR: 1150,         // 追到这个距离之外还没咬住 → 放弃回防
+  maxResponders: 8,      // 同一轮在场追兵上限（在打你的 + 被喊来正在赶的）
+  markR: 900,            // 安全总监的坐标共享半径（原来是无差别全场）
+  waveAwareR: 860,       // 增援波只对这个范围内的警报有反应，远了照常巡逻
+  backupEta: [22, 32],   // 呼叫增援的抵达时间（秒）—— 无线电要时间
+  backupCd: 26,          // 两次呼叫之间的最小间隔
+  backupMax: 2,          // 同时最多几批增援在路上
+  backupMinDist: 300,    // 增援集结点离玩家至少这么远（不许贴脸刷出来）
+};
+
 /* 增援节奏：普通慢、机密紧、绝密更紧 */
+
 function firstReinforceDelay() {
-  return isTop() ? TOP.firstWave : (isSecret() ? SECRET.firstWave : 90);
+  return isTop() ? TOP.firstWave : (isSecret() ? SECRET.firstWave : 115);
 }
 function reinforceGap(wave) {
   if (isTop()) return Math.max(TOP.gapMin, TOP.gapBase - wave * TOP.gapK);
   return isSecret() ? Math.max(SECRET.gapMin, SECRET.gapBase - wave * SECRET.gapK)
-                    : Math.max(30, 55 - wave * 2.5);
+                    : Math.max(40, 76 - wave * 3);
 }
 function bossWaveNo() {
   return isTop() ? TOP.bossWave : (isSecret() ? SECRET.bossWave : 5);
@@ -3578,7 +3898,7 @@ const BOSS_NAME = '赤霄';
    ══════════════════════════════════════════════════════════ */
 const FACTIONS = {
   asara: { id: 'asara', name: '阿萨拉', color: '#ff5c7a', glow: '#ff2d55' },
-  havk:  { id: 'havk',  name: '哈夫克', color: '#43d9f5', glow: '#18a8bd' },
+  havk:  { id: 'havk',  name: '哈夫克', color: '#b8a26b', glow: '#18a8bd' },
 };
 const FACTION_ORDER = ['asara', 'havk'];
 function factionOf(id) { return FACTIONS[id] || FACTIONS.asara; }

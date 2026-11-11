@@ -48,7 +48,7 @@ T('README 干员数 = OPERATORS', readme.includes('共 **7 名干员**') && val(
 T('README 成就数 = ACHIEVEMENTS', readme.includes('「成就」50 条') && val('ACHIEVEMENTS.length') === 50);
 T('README live 指标数一致', readme.includes('其中 25 条带 `live` 指标') && val('ACHIEVEMENTS.filter(a => a.live).length') === 25);
 T('README 配件数 = MODS', readme.includes('共 84 件配件') && val('Object.keys(MODS).length') === 84);
-T('README 收集品数 = RELICS', readme.includes('收集品 315 件') && val('Object.keys(RELICS).length') === 315);
+T('README 收集品数 = RELICS', readme.includes('收集品 329 件') && val('Object.keys(RELICS).length') === 329);
 T('README 具名护甲数 = ARMORS - 占位', readme.includes('17 件具名甲') && val('ARMORS.length') - 1 === 17);
 T('README 口袋格数 = POCKET_BLOCKS', readme.includes('永远 5 格') && /\| 口袋 \| 5（固定） \|/.test(readme) && val('POCKET_BLOCKS.length') === 5);
 T('README 不再有旧数字', !/成就.{0,4}12 条|194 件|共 21 件配件|永远 4 格/.test(readme));

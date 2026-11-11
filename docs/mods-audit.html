@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>枪械配件全表 · 审查</title>
+<style>
+  :root{--bg:#0e1116;--panel:#161b22;--line:#252c36;--txt:#d7dde6;--dim:#8b95a3;--acc:#c8a45c;--good:#5fb87a;--bad:#d1655c}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.6 "Segoe UI","Microsoft YaHei",system-ui,sans-serif;padding:32px 28px 80px}
+  .wrap{max-width:1180px;margin:0 auto}
+  header{border-bottom:1px solid var(--line);padding-bottom:18px;margin-bottom:8px}
+  h1{margin:0 0 6px;font-size:22px;letter-spacing:.5px;font-weight:650}
+  h1 small{color:var(--dim);font-weight:400;font-size:13px;margin-left:10px}
+  .kpi{display:flex;gap:26px;flex-wrap:wrap;margin-top:14px}
+  .kpi div{font-size:12px;color:var(--dim)}
+  .kpi b{display:block;font-size:20px;color:var(--txt);font-weight:600;font-variant-numeric:tabular-nums}
+  .bar{position:sticky;top:0;z-index:9;background:linear-gradient(var(--bg) 70%,transparent);padding:14px 0 12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  input[type=search]{flex:1;min-width:220px;background:var(--panel);border:1px solid var(--line);color:var(--txt);border-radius:7px;padding:8px 12px;font-size:13px;outline:none}
+  input[type=search]:focus{border-color:#3d4a5c}
+  .chip{background:var(--panel);border:1px solid var(--line);color:var(--dim);border-radius:6px;padding:6px 11px;font-size:12px;cursor:pointer;user-select:none}
+  .chip.on{border-color:var(--acc);color:var(--acc);background:rgba(200,164,92,.09)}
+  .slot{margin:30px 0 6px}
+  h2{display:flex;align-items:baseline;gap:10px;font-size:15px;font-weight:600;margin:0 0 10px;color:#eaf0f7}
+  h2 .en{color:#4d5967;font-size:11px;letter-spacing:1.6px}
+  h2 .cnt{color:var(--dim);font-size:12px;font-weight:400;margin-left:auto}
+  .sq{width:8px;height:8px;border-radius:2px;background:var(--acc);display:inline-block}
+  table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:9px;overflow:hidden}
+  th{text-align:left;font-size:11px;letter-spacing:.8px;color:#6f7b8a;font-weight:600;padding:9px 12px;border-bottom:1px solid var(--line);background:#12171e;text-transform:uppercase}
+  td{padding:10px 12px;border-bottom:1px solid #1c222b;vertical-align:top}
+  tr:last-child td{border-bottom:0}
+  tr:hover td{background:#1a212b}
+  .c3,.c6,.c7{text-align:right;white-space:nowrap}
+  .nm{font-weight:600;color:#e8eef6;margin-right:8px}
+  code{font-size:11px;color:#5c6875;font-family:ui-monospace,Consolas,monospace}
+  .ds{font-size:11.5px;color:#7d8794;line-height:1.5;margin-top:3px;max-width:330px}
+  .q{font-size:11px;border:1px solid;border-radius:4px;padding:1px 6px;white-space:nowrap}
+  .money{font-variant-numeric:tabular-nums;color:#c9b98d}
+  .e{display:inline-block;font-size:11.5px;border-radius:4px;padding:1px 6px;margin:2px 4px 2px 0;white-space:nowrap;background:#1e242d;border:1px solid #2a323d}
+  .e.good{color:var(--good);border-color:#2c4436;background:#16211a}
+  .e.bad{color:var(--bad);border-color:#3f2724;background:#221816}
+  .tag{font-size:10.5px;font-weight:600;border-radius:3px;padding:1px 5px;margin-right:5px;letter-spacing:.3px}
+  .tag.all{color:#7f8b99;background:#1c2129;border:1px solid #2a323d}
+  .tag.cat{color:#6fa8dc;background:#152230;border:1px solid #23405a}
+  .tag.spec{color:#e0a13a;background:#2a2113;border:1px solid #4a3a1c}
+  .num{font-variant-numeric:tabular-nums;color:#b8c2cf}
+  .u{color:#5c6875;font-size:11px}
+  .ft{font-size:10px;border:1px solid;border-radius:3px;padding:0 4px;margin-left:5px;letter-spacing:.3px}
+  .find{margin-top:34px;background:var(--panel);border:1px solid var(--line);border-left:2px solid var(--acc);border-radius:9px;padding:16px 20px}
+  .find h3{margin:0 0 10px;font-size:14px;font-weight:600}
+  .find li{margin:6px 0;font-size:13px;color:#b3bcc8}
+  .find b{color:#e8eef6}
+  .find .warn{color:var(--bad)}
+  .hide{display:none!important}
+  footer{margin-top:40px;color:#5c6875;font-size:12px;border-top:1px solid var(--line);padding-top:14px}
+</style></head>
+<body><div class="wrap">
+<header>
+  <h1>枪械配件全表<small>运行时枚举 · MODS 表 84 件 · 占格按体积分四档</small></h1>
+  <div class="kpi">
+    <div>配件总数<b>84</b></div>
+    <div>槽位<b>5</b></div>
+    <div>普通<b>17</b></div>
+    <div>稀有<b>25</b></div>
+    <div>史诗<b>34</b></div>
+    <div>传说<b>8</b></div>
+    <div>小件 1 格<b>28</b></div>
+    <div>中件 2 格<b>34</b></div>
+    <div>大件 4 格<b>22</b></div>
+  </div>
+</header>
+<div class="bar">
+  <input id="s" type="search" placeholder="搜索配件名 / id / 可装枪名（如 AKM、消音）">
+  <span class="chip on" data-k="all" data-v="all">全部</span>
+  <span class="chip" data-k="c" data-v="1">小件 1 格</span>
+  <span class="chip" data-k="c" data-v="2">中件 2 格</span>
+  <span class="chip" data-k="c" data-v="4">大件 4 格</span>
+  <span class="chip" data-k="q" data-v="legend">传说</span>
+  <span id="hint" style="color:#5c6875;font-size:12px"></span>
+</div>
+<section class="slot"><h2><i class="sq"></i>枪口<span class="en">MUZZLE</span>
+    <span class="cnt">19 件 · 位置：枪管前端 · 螺纹口</span></h2><table>
+    <thead><tr><th class="c1">名称</th><th class="c2">品质</th><th class="c3">价格</th><th class="c4">效果</th>
+    <th class="c5">适配范围</th><th class="c6">可装</th><th class="c7">占格</th></tr></thead><tbody><tr data-q="common" data-c="1" data-s="短管消焰器d_mz_flashg1793rg18野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">短管消焰器</span><code>d_mz_flash</code><div class="ds">削掉枪口的大半火光，夜里不至于像举着信号灯。</div></td>
+      <td class="c2"><span class="q" style="color:#9aa4b2;border-color:#9aa4b244;background:#9aa4b218">普通</span></td>
+      <td class="c3 money">¥720</td>
+      <td class="c4"><span class="e good">枪声 -15%</span><span class="e good">腰射散布 -3%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">32<span class="u">/32</span></td>
+      <td class="c7"><span class="num">1</span><span class="ft" style="color:#5f7a86;border-color:#5f7a8644">小件</span></td>
+    </tr><tr data-q="common" data-c="1" data-s="聚合消音管d_mz_polyg1793rg18野牛mk4汤姆逊mp7vector冲锋枪手枪">
+      <td class="c1"><span class="nm">聚合消音管</span><code>d_mz_poly</code><div class="ds">塑料壳的便宜消音管，声音小一半，动能也小一半。</div></td>
+      <td class="c2"><span class="q" style="color:#9aa4b2;border-color:#9aa4b244;background:#9aa4b218">普通</span></td>
+      <td class="c3 money">¥900</td>
+      <td class="c4"><span class="e good">枪声 -40%</span><span class="e bad">伤害 -6%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 冲锋枪 / 手枪</td>
+      <td class="c6 num">8<span class="u">/32</span></td>
+      <td class="c7"><span class="num">1</span><span class="ft" style="color:#5f7a86;border-color:#5f7a8644">小件</span></td>
+    </tr><tr data-q="rare" data-c="1" data-s="手枪补偿器d_pistol_compg1793rg18">
+      <td class="c1"><span class="nm">手枪补偿器</span><code>d_pistol_comp</code><div class="ds">巴掌小的手枪补偿器，开一枪手腕少歪一次。</div></td>
+      <td class="c2"><span class="q" style="color:#5b9bd5;border-color:#5b9bd544;background:#5b9bd518">稀有</span></td>
+      <td class="c3 money">¥1,400</td>
+      <td class="c4"><span class="e good">后坐 -18%</span><span class="e bad">枪声 +5%</span></td>
+      <td class="c5"><b class="tag spec">专属</b> G17 / 93R / G18</td>
+      <td class="c6 num">3<span class="u">/32</span></td>
+      <td class="c7"><span class="num">1</span><span class="ft" style="color:#5f7a86;border-color:#5f7a8644">小件</span></td>
+    </tr><tr data-q="rare" data-c="1" data-s="双室制退器d_mz_brake2akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700步枪精确射手步枪轻机枪狙击枪">
+      <td class="c1"><span class="nm">双室制退器</span><code>d_mz_brake2</code><div class="ds">两室开孔把后坐分成两口气泄掉，比单室温和得多。</div></td>
+      <td class="c2"><span class="q" style="color:#5b9bd5;border-color:#5b9bd544;background:#5b9bd518">稀有</span></td>
+      <td class="c3 money">¥1,650</td>
+      <td class="c4"><span class="e good">后坐 -16%</span><span class="e bad">枪声 +8%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 步枪 / 精确射手步枪 / 轻机枪 / 狙击枪</td>
+      <td class="c6 num">23<span class="u">/32</span></td>
+      <td class="c7"><span class="num">1</span><span class="ft" style="color:#5f7a86;border-color:#5f7a8644">小件</span></td>
+    </tr><tr data-q="rare" data-c="1" data-s="钛制消焰器s_mz_tig1793rg18野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">钛制消焰器</span><code>s_mz_ti</code><div class="ds">航天级钛合金消焰器，几乎不增重。</div></td>
+      <td class="c2"><span class="q" style="color:#5b9bd5;border-color:#5b9bd544;background:#5b9bd518">稀有</span></td>
+      <td class="c3 money">¥2,100</td>
+      <td class="c4"><span class="e good">枪声 -10%</span><span class="e good">后坐 -4%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">32<span class="u">/32</span></td>
+      <td class="c7"><span class="num">1</span><span class="ft" style="color:#5f7a86;border-color:#5f7a8644">小件</span></td>
+    </tr><tr data-q="rare" data-c="2" data-s="消音器suppg1793rg18野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">消音器</span><code>supp</code><div class="ds">把枪声压成一声闷响，远处的人再难循声包过来；代价是初速和伤害略降。</div></td>
+      <td class="c2"><span class="q" style="color:#5b9bd5;border-color:#5b9bd544;background:#5b9bd518">稀有</span></td>
+      <td class="c3 money">¥1,500</td>
+      <td class="c4"><span class="e good">枪声 -60%</span><span class="e bad">伤害 -4%</span><span class="e bad">初速 -6%</span><span class="e bad">射程 -4%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">32<span class="u">/32</span></td>
+      <td class="c7"><span class="num">2</span><span class="ft" style="color:#c8a45c;border-color:#c8a45c44">中件</span></td>
+    </tr><tr data-q="rare" data-c="2" data-s="老式消音碗d_mz_cang1793rg18野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">老式消音碗</span><code>d_mz_can</code><div class="ds">坝区黑作坊的土制消音碗：声是小了，动能也掉了。</div></td>
+      <td class="c2"><span class="q" style="color:#5b9bd5;border-color:#5b9bd544;background:#5b9bd518">稀有</span></td>
+      <td class="c3 money">¥1,900</td>
+      <td class="c4"><span class="e good">枪声 -45%</span><span class="e bad">伤害 -5%</span><span class="e bad">射程 -8%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">32<span class="u">/32</span></td>
+      <td class="c7"><span class="num">2</span><span class="ft" style="color:#c8a45c;border-color:#c8a45c44">中件</span></td>
+    </tr><tr data-q="rare" data-c="2" data-s="微声管s_mz_hushg1793rg18野牛mk4汤姆逊mp7vector冲锋枪手枪">
+      <td class="c1"><span class="nm">微声管</span><code>s_mz_hush</code><div class="ds">蜂巢式内壁吃掉大部分声压，代价是弹速。</div></td>
+      <td class="c2"><span class="q" style="color:#5b9bd5;border-color:#5b9bd544;background:#5b9bd518">稀有</span></td>
+      <td class="c3 money">¥2,000</td>
+      <td class="c4"><span class="e good">枪声 -50%</span><span class="e bad">伤害 -5%</span><span class="e bad">射程 -5%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 冲锋枪 / 手枪</td>
+      <td class="c6 num">8<span class="u">/32</span></td>
+      <td class="c7"><span class="num">2</span><span class="ft" style="color:#c8a45c;border-color:#c8a45c44">中件</span></td>
+    </tr><tr data-q="epic" data-c="2" data-s="战术补偿器compg1793rg18野牛akmm4a1qbz-95ak-12qbz-192qbz-191sr9mk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svd手枪冲锋枪步枪精确射手步枪轻机枪">
+      <td class="c1"><span class="nm">战术补偿器</span><code>comp</code><div class="ds">两道斜向导气槽把枪口上跳压回去，连发时准星听话得多；枪声更炸。</div></td>
+      <td class="c2"><span class="q" style="color:#a86bd1;border-color:#a86bd144;background:#a86bd118">史诗</span></td>
+      <td class="c3 money">¥2,700</td>
+      <td class="c4"><span class="e good">后坐 -26%</span><span class="e good">腰射散布 -6%</span><span class="e bad">枪声 +15%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 手枪 / 冲锋枪 / 步枪 / 精确射手步枪 / 轻机枪</td>
+      <td class="c6 num">28<span class="u">/32</span></td>
+      <td class="c7"><span class="num">2</span><span class="ft" style="color:#c8a45c;border-color:#c8a45c44">中件</span></td>
+    </tr><tr data-q="epic" data-c="2" data-s="霰弹散热护套d_sg_portm870">
+      <td class="c1"><span class="nm">霰弹散热护套</span><code>d_sg_port</code><div class="ds">枪管外的散热护套带 M24 式通风孔，连喷两管不烫手，霰弹收束更紧。</div></td>
+      <td class="c2"><span class="q" style="color:#a86bd1;border-color:#a86bd144;background:#a86bd118">史诗</span></td>
+      <td class="c3 money">¥3,100</td>
+      <td class="c4"><span class="e good">腰射散布 -12%</span><span class="e good">伤害 +2%</span><span class="e bad">移速 -2%</span></td>
+      <td class="c5"><b class="tag spec">专属</b> M870</td>
+      <td class="c6 num">1<span class="u">/32</span></td>
+      <td class="c7"><span class="num">2</span><span class="ft" style="color:#c8a45c;border-color:#c8a45c44">中件</span></td>
+    </tr><tr data-q="epic" data-c="2" data-s="重锤制退器d_mz_hammerg1793rg18野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">重锤制退器</span><code>d_mz_hammer</code><div class="ds">一块实心钢块顶在枪口，后坐被硬生生吃掉；动静也大得离谱。</div></td>
+      <td class="c2"><span class="q" style="color:#a86bd1;border-color:#a86bd144;background:#a86bd118">史诗</span></td>
+      <td class="c3 money">¥3,200</td>
+      <td class="c4"><span class="e good">后坐 -30%</span><span class="e bad">枪声 +20%</span><span class="e bad">移速 -2%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">32<span class="u">/32</span></td>
+      <td class="c7"><span class="num">2</span><span class="ft" style="color:#c8a45c;border-color:#c8a45c44">中件</span></td>
+    </tr><tr data-q="epic" data-c="2" data-s="哈夫克制退器brake_sg1793rg18野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">哈夫克制退器</span><code>brake_s</code><div class="ds">军规三室制退器，连发时枪口几乎不上跳；代价是枪声大得像在打信号弹。</div></td>
+      <td class="c2"><span class="q" style="color:#a86bd1;border-color:#a86bd144;background:#a86bd118">史诗</span></td>
+      <td class="c3 money">¥3,300</td>
+      <td class="c4"><span class="e good">后坐 -38%</span><span class="e good">腰射散布 -10%</span><span class="e bad">枪声 +18%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">32<span class="u">/32</span></td>
+      <td class="c7"><span class="num">2</span><span class="ft" style="color:#c8a45c;border-color:#c8a45c44">中件</span></td>
+    </tr><tr data-q="epic" data-c="2" data-s="消焰制退一体s_mz_railakmm4a1qbz-95ak-12qbz-192qbz-191sr9rpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svd步枪轻机枪精确射手步枪">
+      <td class="c1"><span class="nm">消焰制退一体</span><code>s_mz_rail</code><div class="ds">制退孔与消焰槽开在同一节枪口件上，军工厂的抠门杰作。</div></td>
+      <td class="c2"><span class="q" style="color:#a86bd1;border-color:#a86bd144;background:#a86bd118">史诗</span></td>
+      <td class="c3 money">¥3,800</td>
+      <td class="c4"><span class="e good">后坐 -22%</span><span class="e good">枪声 -5%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 步枪 / 轻机枪 / 精确射手步枪</td>
+      <td class="c6 num">20<span class="u">/32</span></td>
+      <td class="c7"><span class="num">2</span><span class="ft" style="color:#c8a45c;border-color:#c8a45c44">中件</span></td>
+    </tr><tr data-q="epic" data-c="4" data-s="mk4 连发改装枪管mk4_automk4">
+      <td class="c1"><span class="nm">MK4 连发改装枪管</span><code>mk4_auto</code><div class="ds">MK4 专用的连发改装套件：开放节套 + 强制挂机枪管，把出厂的三连点射改成真正的全自动 —— 装上之后扣住扳机不放就是泼水。</div></td>
+      <td class="c2"><span class="q" style="color:#a86bd1;border-color:#a86bd144;background:#a86bd118">史诗</span></td>
+      <td class="c3 money">¥3,000</td>
+      <td class="c4"><span class="e good">射击模式 → 全自动</span></td>
+      <td class="c5"><b class="tag spec">专属</b> MK4</td>
+      <td class="c6 num">1<span class="u">/32</span></td>
+      <td class="c7"><span class="num">3</span><span class="ft" style="color:#7d9a4e;border-color:#7d9a4e44">长件</span></td>
+    </tr><tr data-q="epic" data-c="4" data-s="加长枪管barrelakmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700步枪精确射手步枪狙击枪轻机枪">
+      <td class="c1"><span class="nm">加长枪管</span><code>barrel</code><div class="ds">更长的膛线换来更高初速与伤害，远距离掉伤更晚；抬枪会沉一些。</div></td>
+      <td class="c2"><span class="q" style="color:#a86bd1;border-color:#a86bd144;background:#a86bd118">史诗</span></td>
+      <td class="c3 money">¥3,100</td>
+      <td class="c4"><span class="e good">伤害 +10%</span><span class="e good">射程 +22%</span><span class="e good">初速 +8%</span><span class="e bad">开镜时间 +12%</span><span class="e bad">移速 -3%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 步枪 / 精确射手步枪 / 狙击枪 / 轻机枪</td>
+      <td class="c6 num">23<span class="u">/32</span></td>
+      <td class="c7"><span class="num">3</span><span class="ft" style="color:#7d9a4e;border-color:#7d9a4e44">长件</span></td>
+    </tr><tr data-q="epic" data-c="4" data-s="定向抑制器s_mz_suppg1793rg18野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">定向抑制器</span><code>s_mz_supp</code><div class="ds">军规抑制器：声压砍掉一半，弹道几乎不变。</div></td>
+      <td class="c2"><span class="q" style="color:#a86bd1;border-color:#a86bd144;background:#a86bd118">史诗</span></td>
+      <td class="c3 money">¥3,600</td>
+      <td class="c4"><span class="e good">枪声 -55%</span><span class="e bad">伤害 -2%</span><span class="e bad">射程 -2%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">32<span class="u">/32</span></td>
+      <td class="c7"><span class="num">3</span><span class="ft" style="color:#7d9a4e;border-color:#7d9a4e44">长件</span></td>
+    </tr><tr data-q="epic" data-c="4" data-s="一体式微声枪口d_asval_intsr-3mas val">
+      <td class="c1"><span class="nm">一体式微声枪口</span><code>d_asval_int</code><div class="ds">AS 与 SR-3M 的原厂微声枪口，与消音短枪管一体加工，声压低到只剩机械音。</div></td>
+      <td class="c2"><span class="q" style="color:#a86bd1;border-color:#a86bd144;background:#a86bd118">史诗</span></td>
+      <td class="c3 money">¥3,600</td>
+      <td class="c4"><span class="e good">枪声 -68%</span><span class="e bad">伤害 0%</span><span class="e bad">初速 -2%</span></td>
+      <td class="c5"><b class="tag spec">专属</b> SR-3M / AS VAL</td>
+      <td class="c6 num">2<span class="u">/32</span></td>
+      <td class="c7"><span class="num">3</span><span class="ft" style="color:#7d9a4e;border-color:#7d9a4e44">长件</span></td>
+    </tr><tr data-q="legend" data-c="4" data-s="特制消音模块supp_sg1793rg18野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">特制消音模块</span><code>supp_s</code><div class="ds">哈夫克军工厂的旗舰消音模块：压住枪声的同时不牺牲初速与杀伤，疯抢级别的硬货。</div></td>
+      <td class="c2"><span class="q" style="color:#e0a13a;border-color:#e0a13a44;background:#e0a13a18">传说</span></td>
+      <td class="c3 money">¥6,800</td>
+      <td class="c4"><span class="e good">枪声 -70%</span><span class="e bad">伤害 0%</span><span class="e bad">初速 -3%</span><span class="e bad">射程 0%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">32<span class="u">/32</span></td>
+      <td class="c7"><span class="num">3</span><span class="ft" style="color:#7d9a4e;border-color:#7d9a4e44">长件</span></td>
+    </tr><tr data-q="legend" data-c="4" data-s="电磁制退环s_mz_emg1793rg18野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">电磁制退环</span><code>s_mz_em</code><div class="ds">通电的制退环把枪口上跳按死，开火像在打气枪。</div></td>
+      <td class="c2"><span class="q" style="color:#e0a13a;border-color:#e0a13a44;background:#e0a13a18">传说</span></td>
+      <td class="c3 money">¥7,000</td>
+      <td class="c4"><span class="e good">后坐 -42%</span><span class="e good">腰射散布 -12%</span><span class="e bad">枪声 +10%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">32<span class="u">/32</span></td>
+      <td class="c7"><span class="num">2</span><span class="ft" style="color:#c8a45c;border-color:#c8a45c44">中件</span></td>
+    </tr></tbody></table></section><section class="slot"><h2><i class="sq"></i>瞄具<span class="en">OPTIC</span>
+    <span class="cnt">18 件 · 位置：机匣顶部导轨</span></h2><table>
+    <thead><tr><th class="c1">名称</th><th class="c2">品质</th><th class="c3">价格</th><th class="c4">效果</th>
+    <th class="c5">适配范围</th><th class="c6">可装</th><th class="c7">占格</th></tr></thead><tbody><tr data-q="common" data-c="1" data-s="机械瞄具d_op_irong1793rg18野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">机械瞄具</span><code>d_op_iron</code><div class="ds">最朴素的准星，抬枪快得没话说，精度全靠手。</div></td>
+      <td class="c2"><span class="q" style="color:#9aa4b2;border-color:#9aa4b244;background:#9aa4b218">普通</span></td>
+      <td class="c3 money">¥420</td>
+      <td class="c4"><span class="e good">开镜时间 -10%</span><span class="e bad">开镜散布 +2%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">32<span class="u">/32</span></td>
+      <td class="c7"><span class="num">1</span><span class="ft" style="color:#5f7a86;border-color:#5f7a8644">小件</span></td>
+    </tr><tr data-q="common" data-c="1" data-s="微光准星d_op_ringg1793rg18野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">微光准星</span><code>d_op_ring</code><div class="ds">一圈发光的荧光准星，抬枪时眼睛不用重新找点。</div></td>
+      <td class="c2"><span class="q" style="color:#9aa4b2;border-color:#9aa4b244;background:#9aa4b218">普通</span></td>
+      <td class="c3 money">¥500</td>
+      <td class="c4"><span class="e good">开镜时间 -8%</span><span class="e good">腰射散布 -2%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">32<span class="u">/32</span></td>
+      <td class="c7"><span class="num">1</span><span class="ft" style="color:#5f7a86;border-color:#5f7a8644">小件</span></td>
+    </tr><tr data-q="common" data-c="1" data-s="微型反射镜s_op_microg1793rg18野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">微型反射镜</span><code>s_op_micro</code><div class="ds">指甲盖大的反射镜，抬枪快得像是没有配件。</div></td>
+      <td class="c2"><span class="q" style="color:#9aa4b2;border-color:#9aa4b244;background:#9aa4b218">普通</span></td>
+      <td class="c3 money">¥680</td>
+      <td class="c4"><span class="e good">开镜时间 -12%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">32<span class="u">/32</span></td>
+      <td class="c7"><span class="num">1</span><span class="ft" style="color:#5f7a86;border-color:#5f7a8644">小件</span></td>
+    </tr><tr data-q="common" data-c="1" data-s="红点镜reddotg1793rg18野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">红点镜</span><code>reddot</code><div class="ds">最基础的开放式红点，抬枪快、视野干净，正面交锋的首选。</div></td>
+      <td class="c2"><span class="q" style="color:#9aa4b2;border-color:#9aa4b244;background:#9aa4b218">普通</span></td>
+      <td class="c3 money">¥700</td>
+      <td class="c4"><span class="e good">开镜时间 -16%</span><span class="e good">开镜散布 -10%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">32<span class="u">/32</span></td>
+      <td class="c7"><span class="num">1</span><span class="ft" style="color:#5f7a86;border-color:#5f7a8644">小件</span></td>
+    </tr><tr data-q="rare" data-c="1" data-s="快瞄镜s_op_cqhg1793rg18野牛m870mk4汤姆逊mp7vector手枪冲锋枪霰弹枪">
+      <td class="c1"><span class="nm">快瞄镜</span><code>s_op_cqh</code><div class="ds">为大窗口近距离交火设计的快瞄镜，抬枪快、视野阔。</div></td>
+      <td class="c2"><span class="q" style="color:#5b9bd5;border-color:#5b9bd544;background:#5b9bd518">稀有</span></td>
+      <td class="c3 money">¥1,900</td>
+      <td class="c4"><span class="e good">开镜时间 -22%</span><span class="e bad">开镜散布 +4%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 手枪 / 冲锋枪 / 霰弹枪</td>
+      <td class="c6 num">9<span class="u">/32</span></td>
+      <td class="c7"><span class="num">1</span><span class="ft" style="color:#5f7a86;border-color:#5f7a8644">小件</span></td>
+    </tr><tr data-q="rare" data-c="2" data-s="二倍棱镜d_op_prism野牛akmm4a1qbz-95ak-12qbz-192qbz-191sr9mk4汤姆逊mp7vectormcxaughk416sr-3mk437as valsksm14sr-25svd步枪精确射手步枪冲锋枪">
+      <td class="c1"><span class="nm">二倍棱镜</span><code>d_op_prism</code><div class="ds">中距离点射的甜点倍率，视野还留得住。</div></td>
+      <td class="c2"><span class="q" style="color:#5b9bd5;border-color:#5b9bd544;background:#5b9bd518">稀有</span></td>
+      <td class="c3 money">¥1,750</td>
+      <td class="c4"><span class="e good">开镜散布 -15%</span><span class="e bad">开镜时间 +5%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 步枪 / 精确射手步枪 / 冲锋枪</td>
+      <td class="c6 num">22<span class="u">/32</span></td>
+      <td class="c7"><span class="num">2</span><span class="ft" style="color:#c8a45c;border-color:#c8a45c44">中件</span></td>
+    </tr><tr data-q="rare" data-c="2" data-s="全息镜holog1793rg18野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">全息镜</span><code>holo</code><div class="ds">全息分划在中距离更好压点，代价是抬枪稍慢一点点。</div></td>
+      <td class="c2"><span class="q" style="color:#5b9bd5;border-color:#5b9bd544;background:#5b9bd518">稀有</span></td>
+      <td class="c3 money">¥1,800</td>
+      <td class="c4"><span class="e good">开镜散布 -16%</span><span class="e good">开镜时间 -6%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">32<span class="u">/32</span></td>
+      <td class="c7"><span class="num">2</span><span class="ft" style="color:#c8a45c;border-color:#c8a45c44">中件</span></td>
+    </tr><tr data-q="rare" data-c="2" data-s="ak 侧轨镜桥d_ak_dustakmak-12rpk">
+      <td class="c1"><span class="nm">AK 侧轨镜桥</span><code>d_ak_dust</code><div class="ds">卡在 AK 系机匣侧面的镜桥，装完依旧留着那个经典导轨间隙。</div></td>
+      <td class="c2"><span class="q" style="color:#5b9bd5;border-color:#5b9bd544;background:#5b9bd518">稀有</span></td>
+      <td class="c3 money">¥1,850</td>
+      <td class="c4"><span class="e good">开镜散布 -12%</span><span class="e good">开镜时间 -2%</span></td>
+      <td class="c5"><b class="tag spec">专属</b> AKM / AK-12 / RPK</td>
+      <td class="c6 num">3<span class="u">/32</span></td>
+      <td class="c7"><span class="num">2</span><span class="ft" style="color:#c8a45c;border-color:#c8a45c44">中件</span></td>
+    </tr><tr data-q="rare" data-c="2" data-s="全息投影镜s_op_holo2g1793rg18野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">全息投影镜</span><code>s_op_holo2</code><div class="ds">投影分划在强光下也清楚，中距离好压点。</div></td>
+      <td class="c2"><span class="q" style="color:#5b9bd5;border-color:#5b9bd544;background:#5b9bd518">稀有</span></td>
+      <td class="c3 money">¥1,950</td>
+      <td class="c4"><span class="e good">开镜散布 -12%</span><span class="e good">开镜时间 -4%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">32<span class="u">/32</span></td>
+      <td class="c7"><span class="num">2</span><span class="ft" style="color:#c8a45c;border-color:#c8a45c44">中件</span></td>
+    </tr><tr data-q="epic" data-c="2" data-s="轻量无框镜s_op_ecog1793rg18野牛akmm4a1qbz-95ak-12qbz-192qbz-191mk4汤姆逊mp7vectormcxaughk416sr-3mk437as val冲锋枪步枪手枪">
+      <td class="c1"><span class="nm">轻量无框镜</span><code>s_op_eco</code><div class="ds">无边框镜片只有一层玻璃，抬枪快得像没装镜。</div></td>
+      <td class="c2"><span class="q" style="color:#a86bd1;border-color:#a86bd144;background:#a86bd118">史诗</span></td>
+      <td class="c3 money">¥2,800</td>
+      <td class="c4"><span class="e good">开镜时间 -20%</span><span class="e good">开镜散布 -6%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 冲锋枪 / 步枪 / 手枪</td>
+      <td class="c6 num">20<span class="u">/32</span></td>
+      <td class="c7"><span class="num">2</span><span class="ft" style="color:#c8a45c;border-color:#c8a45c44">中件</span></td>
+    </tr><tr data-q="epic" data-c="4" data-s="夜视镜d_op_night野牛akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectormcxaughk416sr-3mk437as valsksm14sr-25svdm700步枪精确射手步枪狙击枪冲锋枪">
+      <td class="c1"><span class="nm">夜视镜</span><code>d_op_night</code><div class="ds">坝区夜里能看穿暗角，抬枪会慢上一拍。</div></td>
+      <td class="c2"><span class="q" style="color:#a86bd1;border-color:#a86bd144;background:#a86bd118">史诗</span></td>
+      <td class="c3 money">¥3,100</td>
+      <td class="c4"><span class="e good">开镜散布 -28%</span><span class="e bad">开镜时间 +18%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 步枪 / 精确射手步枪 / 狙击枪 / 冲锋枪</td>
+      <td class="c6 num">25<span class="u">/32</span></td>
+      <td class="c7"><span class="num">3</span><span class="ft" style="color:#7d9a4e;border-color:#7d9a4e44">长件</span></td>
+    </tr><tr data-q="epic" data-c="4" data-s="四倍镜scope4xakmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700步枪精确射手步枪狙击枪轻机枪">
+      <td class="c1"><span class="nm">四倍镜</span><code>scope4x</code><div class="ds">把远处的人拉到眼前。开镜精度高得吓人，但抬枪慢、开镜后几乎挪不动。</div></td>
+      <td class="c2"><span class="q" style="color:#a86bd1;border-color:#a86bd144;background:#a86bd118">史诗</span></td>
+      <td class="c3 money">¥3,200</td>
+      <td class="c4"><span class="e good">开镜散布 -38%</span><span class="e bad">开镜时间 +35%</span><span class="e bad">开镜移速 -12%</span><span class="e good">腰射散布 -4%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 步枪 / 精确射手步枪 / 狙击枪 / 轻机枪</td>
+      <td class="c6 num">23<span class="u">/32</span></td>
+      <td class="c7"><span class="num">3</span><span class="ft" style="color:#7d9a4e;border-color:#7d9a4e44">长件</span></td>
+    </tr><tr data-q="epic" data-c="4" data-s="变倍战术镜s_op_varakmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700步枪精确射手步枪狙击枪轻机枪">
+      <td class="c1"><span class="nm">变倍战术镜</span><code>s_op_var</code><div class="ds">一倍到四倍连续可调，一镜走完远近。</div></td>
+      <td class="c2"><span class="q" style="color:#a86bd1;border-color:#a86bd144;background:#a86bd118">史诗</span></td>
+      <td class="c3 money">¥3,400</td>
+      <td class="c4"><span class="e good">开镜散布 -34%</span><span class="e bad">开镜时间 +28%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 步枪 / 精确射手步枪 / 狙击枪 / 轻机枪</td>
+      <td class="c6 num">23<span class="u">/32</span></td>
+      <td class="c7"><span class="num">3</span><span class="ft" style="color:#7d9a4e;border-color:#7d9a4e44">长件</span></td>
+    </tr><tr data-q="epic" data-c="4" data-s="六倍镜d_op_6xsr9r93awmsksm14sr-25svdm700精确射手步枪狙击枪">
+      <td class="c1"><span class="nm">六倍镜</span><code>d_op_6x</code><div class="ds">六倍放大的精确镜，八百米外看得见帽徽；抬枪慢得像换弹。</div></td>
+      <td class="c2"><span class="q" style="color:#a86bd1;border-color:#a86bd144;background:#a86bd118">史诗</span></td>
+      <td class="c3 money">¥3,600</td>
+      <td class="c4"><span class="e good">开镜散布 -42%</span><span class="e bad">开镜时间 +40%</span><span class="e bad">开镜移速 -14%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 精确射手步枪 / 狙击枪</td>
+      <td class="c6 num">8<span class="u">/32</span></td>
+      <td class="c7"><span class="num">3</span><span class="ft" style="color:#7d9a4e;border-color:#7d9a4e44">长件</span></td>
+    </tr><tr data-q="legend" data-c="4" data-s="长焦观察镜d_op_longsr9r93awmsksm14sr-25svdm700狙击枪精确射手步枪">
+      <td class="c1"><span class="nm">长焦观察镜</span><code>d_op_long</code><div class="ds">把三百米外的人拉到眼前，代价是开镜后几乎动不了。</div></td>
+      <td class="c2"><span class="q" style="color:#e0a13a;border-color:#e0a13a44;background:#e0a13a18">传说</span></td>
+      <td class="c3 money">¥6,400</td>
+      <td class="c4"><span class="e good">开镜散布 -50%</span><span class="e bad">开镜时间 +45%</span><span class="e bad">开镜移速 -15%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 狙击枪 / 精确射手步枪</td>
+      <td class="c6 num">8<span class="u">/32</span></td>
+      <td class="c7"><span class="num">3</span><span class="ft" style="color:#7d9a4e;border-color:#7d9a4e44">长件</span></td>
+    </tr><tr data-q="legend" data-c="4" data-s="热成像瞄具thermalakmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700步枪精确射手步枪狙击枪轻机枪">
+      <td class="c1"><span class="nm">热成像瞄具</span><code>thermal</code><div class="ds">军用热成像通道：开镜精度拉满，掩体后面的体温都藏不住；抬枪偏慢是唯一缺点。</div></td>
+      <td class="c2"><span class="q" style="color:#e0a13a;border-color:#e0a13a44;background:#e0a13a18">传说</span></td>
+      <td class="c3 money">¥7,200</td>
+      <td class="c4"><span class="e good">开镜散布 -45%</span><span class="e bad">开镜时间 +20%</span><span class="e bad">开镜移速 -8%</span><span class="e good">腰射散布 -6%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 步枪 / 精确射手步枪 / 狙击枪 / 轻机枪</td>
+      <td class="c6 num">23<span class="u">/32</span></td>
+      <td class="c7"><span class="num">3</span><span class="ft" style="color:#7d9a4e;border-color:#7d9a4e44">长件</span></td>
+    </tr><tr data-q="legend" data-c="4" data-s="军用量子瞄具s_op_quantumg1793rg18野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">军用量子瞄具</span><code>s_op_quantum</code><div class="ds">哈夫克军规量子瞄具：分划自动补偿弹道，开镜还快。</div></td>
+      <td class="c2"><span class="q" style="color:#e0a13a;border-color:#e0a13a44;background:#e0a13a18">传说</span></td>
+      <td class="c3 money">¥7,400</td>
+      <td class="c4"><span class="e good">开镜散布 -48%</span><span class="e good">开镜时间 -8%</span><span class="e good">腰射散布 -10%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">32<span class="u">/32</span></td>
+      <td class="c7"><span class="num">3</span><span class="ft" style="color:#7d9a4e;border-color:#7d9a4e44">长件</span></td>
+    </tr><tr data-q="legend" data-c="4" data-s="「总监」瞄准组件s_director_kitawm狙击枪">
+      <td class="c1"><span class="nm">「总监」瞄准组件</span><code>s_director_kit</code><div class="ds">安全总监的护卫队用顶级瞄具组件：自动归零、弹道补偿，只匹配最大的那支反器材枪。</div></td>
+      <td class="c2"><span class="q" style="color:#e0a13a;border-color:#e0a13a44;background:#e0a13a18">传说</span></td>
+      <td class="c3 money">¥8,800</td>
+      <td class="c4"><span class="e good">开镜散布 -55%</span><span class="e bad">开镜时间 +10%</span><span class="e good">腰射散布 -8%</span></td>
+      <td class="c5"><b class="tag spec">专属</b> AWM</td>
+      <td class="c6 num">1<span class="u">/32</span></td>
+      <td class="c7"><span class="num">3</span><span class="ft" style="color:#7d9a4e;border-color:#7d9a4e44">长件</span></td>
+    </tr></tbody></table></section><section class="slot"><h2><i class="sq"></i>握把<span class="en">GRIP</span>
+    <span class="cnt">16 件 · 位置：护木下方 · 前握把位</span></h2><table>
+    <thead><tr><th class="c1">名称</th><th class="c2">品质</th><th class="c3">价格</th><th class="c4">效果</th>
+    <th class="c5">适配范围</th><th class="c6">可装</th><th class="c7">占格</th></tr></thead><tbody><tr data-q="common" data-c="1" data-s="缠布握把d_gr_ragg1793rg18野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">缠布握把</span><code>d_gr_rag</code><div class="ds">布条一圈圈缠上去，握着不打滑，聊胜于无。</div></td>
+      <td class="c2"><span class="q" style="color:#9aa4b2;border-color:#9aa4b244;background:#9aa4b218">普通</span></td>
+      <td class="c3 money">¥380</td>
+      <td class="c4"><span class="e good">移速 +3%</span><span class="e bad">后坐 +4%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">32<span class="u">/32</span></td>
+      <td class="c7"><span class="num">1</span><span class="ft" style="color:#5f7a86;border-color:#5f7a8644">小件</span></td>
+    </tr><tr data-q="common" data-c="1" data-s="拇指止滑套d_gr_thumbg1793rg18野牛mk4汤姆逊mp7vector手枪冲锋枪">
+      <td class="c1"><span class="nm">拇指止滑套</span><code>d_gr_thumb</code><div class="ds">握把上套一圈防滑纹，手汗多的人有福了。</div></td>
+      <td class="c2"><span class="q" style="color:#9aa4b2;border-color:#9aa4b244;background:#9aa4b218">普通</span></td>
+      <td class="c3 money">¥420</td>
+      <td class="c4"><span class="e good">开镜时间 -5%</span><span class="e good">后坐 -3%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 手枪 / 冲锋枪</td>
+      <td class="c6 num">8<span class="u">/32</span></td>
+      <td class="c7"><span class="num">1</span><span class="ft" style="color:#5f7a86;border-color:#5f7a8644">小件</span></td>
+    </tr><tr data-q="common" data-c="1" data-s="碳纤维前握s_gr_carbong1793rg18野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">碳纤维前握</span><code>s_gr_carbon</code><div class="ds">轻得像塑料，压枪效果一般，走位没负担。</div></td>
+      <td class="c2"><span class="q" style="color:#9aa4b2;border-color:#9aa4b244;background:#9aa4b218">普通</span></td>
+      <td class="c3 money">¥620</td>
+      <td class="c4"><span class="e good">后坐 -6%</span><span class="e good">移速 +3%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">32<span class="u">/32</span></td>
+      <td class="c7"><span class="num">1</span><span class="ft" style="color:#5f7a86;border-color:#5f7a8644">小件</span></td>
+    </tr><tr data-q="common" data-c="1" data-s="轻型握把lgripg1793rg18野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">轻型握把</span><code>lgrip</code><div class="ds">塑料壳体，几乎不压枪，但走位更轻快 —— 拿命换脚的改法。</div></td>
+      <td class="c2"><span class="q" style="color:#9aa4b2;border-color:#9aa4b244;background:#9aa4b218">普通</span></td>
+      <td class="c3 money">¥650</td>
+      <td class="c4"><span class="e good">移速 +6%</span><span class="e good">开镜移速 +6%</span><span class="e bad">后坐 +5%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">32<span class="u">/32</span></td>
+      <td class="c7"><span class="num">1</span><span class="ft" style="color:#5f7a86;border-color:#5f7a8644">小件</span></td>
+    </tr><tr data-q="rare" data-c="1" data-s="橡胶握把d_gr_rubberg1793rg18野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">橡胶握把</span><code>d_gr_rubber</code><div class="ds">实心橡胶把后坐吃得干净，握久了手不麻。</div></td>
+      <td class="c2"><span class="q" style="color:#5b9bd5;border-color:#5b9bd544;background:#5b9bd518">稀有</span></td>
+      <td class="c3 money">¥1,500</td>
+      <td class="c4"><span class="e good">后坐 -12%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">32<span class="u">/32</span></td>
+      <td class="c7"><span class="num">1</span><span class="ft" style="color:#5f7a86;border-color:#5f7a8644">小件</span></td>
+    </tr><tr data-q="rare" data-c="1" data-s="铝合金握把d_gr_rodakmm4a1qbz-95ak-12qbz-192qbz-191sr9rpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svd步枪轻机枪精确射手步枪">
+      <td class="c1"><span class="nm">铝合金握把</span><code>d_gr_rod</code><div class="ds">整根铝棒铣出来的握把，轻且不变形。</div></td>
+      <td class="c2"><span class="q" style="color:#5b9bd5;border-color:#5b9bd544;background:#5b9bd518">稀有</span></td>
+      <td class="c3 money">¥1,500</td>
+      <td class="c4"><span class="e good">后坐 -13%</span><span class="e good">移速 +1%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 步枪 / 轻机枪 / 精确射手步枪</td>
+      <td class="c6 num">20<span class="u">/32</span></td>
+      <td class="c7"><span class="num">1</span><span class="ft" style="color:#5f7a86;border-color:#5f7a8644">小件</span></td>
+    </tr><tr data-q="rare" data-c="2" data-s="斜角前握d_gr_angled野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191mk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as val步枪冲锋枪霰弹枪轻机枪">
+      <td class="c1"><span class="nm">斜角前握</span><code>d_gr_angled</code><div class="ds">四十五度斜握把，手腕不吃劲，长点射手感极顺。</div></td>
+      <td class="c2"><span class="q" style="color:#5b9bd5;border-color:#5b9bd544;background:#5b9bd518">稀有</span></td>
+      <td class="c3 money">¥1,550</td>
+      <td class="c4"><span class="e good">后坐 -14%</span><span class="e good">开镜时间 -4%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 步枪 / 冲锋枪 / 霰弹枪 / 轻机枪</td>
+      <td class="c6 num">21<span class="u">/32</span></td>
+      <td class="c7"><span class="num">2</span><span class="ft" style="color:#c8a45c;border-color:#c8a45c44">中件</span></td>
+    </tr><tr data-q="rare" data-c="2" data-s="垂直握把vgripg1793rg18野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">垂直握把</span><code>vgrip</code><div class="ds">最实用的握把：把纵向后坐压掉两成，长点射不再朝天。</div></td>
+      <td class="c2"><span class="q" style="color:#5b9bd5;border-color:#5b9bd544;background:#5b9bd518">稀有</span></td>
+      <td class="c3 money">¥1,600</td>
+      <td class="c4"><span class="e good">后坐 -20%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">32<span class="u">/32</span></td>
+      <td class="c7"><span class="num">2</span><span class="ft" style="color:#c8a45c;border-color:#c8a45c44">中件</span></td>
+    </tr><tr data-q="rare" data-c="2" data-s="铝合金骨架握把s_gr_alug1793rg18野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">铝合金骨架握把</span><code>s_gr_alu</code><div class="ds">镂空骨架握把，稳且不重。</div></td>
+      <td class="c2"><span class="q" style="color:#5b9bd5;border-color:#5b9bd544;background:#5b9bd518">稀有</span></td>
+      <td class="c3 money">¥1,700</td>
+      <td class="c4"><span class="e good">后坐 -16%</span><span class="e good">移速 +2%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">32<span class="u">/32</span></td>
+      <td class="c7"><span class="num">2</span><span class="ft" style="color:#c8a45c;border-color:#c8a45c44">中件</span></td>
+    </tr><tr data-q="epic" data-c="2" data-s="激光指示器laserg1793rg18野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">激光指示器</span><code>laser</code><div class="ds">腰射散布大幅收紧，冲进屋子时不用抬枪也能打准；开镜反而略受影响。</div></td>
+      <td class="c2"><span class="q" style="color:#a86bd1;border-color:#a86bd144;background:#a86bd118">史诗</span></td>
+      <td class="c3 money">¥2,600</td>
+      <td class="c4"><span class="e good">腰射散布 -20%</span><span class="e bad">开镜散布 +2%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">32<span class="u">/32</span></td>
+      <td class="c7"><span class="num">2</span><span class="ft" style="color:#c8a45c;border-color:#c8a45c44">中件</span></td>
+    </tr><tr data-q="epic" data-c="2" data-s="复合斜握把s_gr_hybrid野牛akmm4a1qbz-95ak-12qbz-192qbz-191mk4汤姆逊mp7vectormcxaughk416sr-3mk437as val步枪冲锋枪">
+      <td class="c1"><span class="nm">复合斜握把</span><code>s_gr_hybrid</code><div class="ds">斜握加阻尼垫的复合设计，压枪和腰射两头都占。</div></td>
+      <td class="c2"><span class="q" style="color:#a86bd1;border-color:#a86bd144;background:#a86bd118">史诗</span></td>
+      <td class="c3 money">¥2,900</td>
+      <td class="c4"><span class="e good">后坐 -18%</span><span class="e good">腰射散布 -6%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 步枪 / 冲锋枪</td>
+      <td class="c6 num">17<span class="u">/32</span></td>
+      <td class="c7"><span class="num">2</span><span class="ft" style="color:#c8a45c;border-color:#c8a45c44">中件</span></td>
+    </tr><tr data-q="epic" data-c="2" data-s="磁吸稳定握把s_gr_magg1793rg18野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">磁吸稳定握把</span><code>s_gr_mag</code><div class="ds">内部磁阻尼吃掉枪身抖动，腰射也跟着准。</div></td>
+      <td class="c2"><span class="q" style="color:#a86bd1;border-color:#a86bd144;background:#a86bd118">史诗</span></td>
+      <td class="c3 money">¥3,000</td>
+      <td class="c4"><span class="e good">后坐 -32%</span><span class="e good">开镜散布 -8%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">32<span class="u">/32</span></td>
+      <td class="c7"><span class="num">2</span><span class="ft" style="color:#c8a45c;border-color:#c8a45c44">中件</span></td>
+    </tr><tr data-q="epic" data-c="2" data-s="液压阻尼握把hygripg1793rg18野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">液压阻尼握把</span><code>hygrip</code><div class="ds">内置液压缓冲的握把，把后坐力吃掉一大截；握着像握着一小块稳如老狗的地面。</div></td>
+      <td class="c2"><span class="q" style="color:#a86bd1;border-color:#a86bd144;background:#a86bd118">史诗</span></td>
+      <td class="c3 money">¥3,050</td>
+      <td class="c4"><span class="e good">后坐 -30%</span><span class="e good">开镜散布 -10%</span><span class="e bad">移速 -1%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">32<span class="u">/32</span></td>
+      <td class="c7"><span class="num">2</span><span class="ft" style="color:#c8a45c;border-color:#c8a45c44">中件</span></td>
+    </tr><tr data-q="epic" data-c="4" data-s="前握把支架d_gr_bipodsr9r93awmrpkm249pkmsksm14sr-25svdm700精确射手步枪狙击枪轻机枪">
+      <td class="c1"><span class="nm">前握把支架</span><code>d_gr_bipod</code><div class="ds">折叠支架撑住枪身，连发时稳得不像同一把枪。</div></td>
+      <td class="c2"><span class="q" style="color:#a86bd1;border-color:#a86bd144;background:#a86bd118">史诗</span></td>
+      <td class="c3 money">¥2,900</td>
+      <td class="c4"><span class="e good">后坐 -24%</span><span class="e bad">开镜移速 -5%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 精确射手步枪 / 狙击枪 / 轻机枪</td>
+      <td class="c6 num">11<span class="u">/32</span></td>
+      <td class="c7"><span class="num">3</span><span class="ft" style="color:#7d9a4e;border-color:#7d9a4e44">长件</span></td>
+    </tr><tr data-q="legend" data-c="4" data-s="狙击重型两脚架d_sniper_bipodr93awmm700狙击枪">
+      <td class="c1"><span class="nm">狙击重型两脚架</span><code>d_sniper_bipod</code><div class="ds">狙击枪专用的液压阻尼两脚架，架住之后枪几乎长在地上。</div></td>
+      <td class="c2"><span class="q" style="color:#e0a13a;border-color:#e0a13a44;background:#e0a13a18">传说</span></td>
+      <td class="c3 money">¥6,200</td>
+      <td class="c4"><span class="e good">后坐 -45%</span><span class="e good">开镜散布 -15%</span><span class="e bad">开镜移速 -10%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 狙击枪</td>
+      <td class="c6 num">3<span class="u">/32</span></td>
+      <td class="c7"><span class="num">3</span><span class="ft" style="color:#7d9a4e;border-color:#7d9a4e44">长件</span></td>
+    </tr><tr data-q="legend" data-c="4" data-s="机械稳定爪s_gr_clawrpkm249pkm轻机枪">
+      <td class="c1"><span class="nm">机械稳定爪</span><code>s_gr_claw</code><div class="ds">哈夫克为总监卫队的重枪手定制的伺服稳定爪，后坐被机械臂按在原地。</div></td>
+      <td class="c2"><span class="q" style="color:#e0a13a;border-color:#e0a13a44;background:#e0a13a18">传说</span></td>
+      <td class="c3 money">¥6,900</td>
+      <td class="c4"><span class="e good">后坐 -40%</span><span class="e good">开镜散布 -12%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 轻机枪</td>
+      <td class="c6 num">3<span class="u">/32</span></td>
+      <td class="c7"><span class="num">3</span><span class="ft" style="color:#7d9a4e;border-color:#7d9a4e44">长件</span></td>
+    </tr></tbody></table></section><section class="slot"><h2><i class="sq"></i>弹匣<span class="en">MAG</span>
+    <span class="cnt">15 件 · 位置：机匣底部 · 弹匣井</span></h2><table>
+    <thead><tr><th class="c1">名称</th><th class="c2">品质</th><th class="c3">价格</th><th class="c4">效果</th>
+    <th class="c5">适配范围</th><th class="c6">可装</th><th class="c7">占格</th></tr></thead><tbody><tr data-q="common" data-c="1" data-s="铁皮弹匣d_mg_ting1793rg18野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">铁皮弹匣</span><code>d_mg_tin</code><div class="ds">铁皮敲出来的弹匣，能装一点，换弹慢一点。</div></td>
+      <td class="c2"><span class="q" style="color:#9aa4b2;border-color:#9aa4b244;background:#9aa4b218">普通</span></td>
+      <td class="c3 money">¥560</td>
+      <td class="c4"><span class="e good">弹匣容量 +12%</span><span class="e bad">换弹时间 +10%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">32<span class="u">/32</span></td>
+      <td class="c7"><span class="num">1</span><span class="ft" style="color:#5f7a86;border-color:#5f7a8644">小件</span></td>
+    </tr><tr data-q="common" data-c="1" data-s="轻量弹匣lightmagg1793rg18野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">轻量弹匣</span><code>lightmag</code><div class="ds">换成聚合物壳体，背着轻、走得快；装弹量少一点。</div></td>
+      <td class="c2"><span class="q" style="color:#9aa4b2;border-color:#9aa4b244;background:#9aa4b218">普通</span></td>
+      <td class="c3 money">¥600</td>
+      <td class="c4"><span class="e good">移速 +4%</span><span class="e bad">弹匣容量 -5%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">32<span class="u">/32</span></td>
+      <td class="c7"><span class="num">1</span><span class="ft" style="color:#5f7a86;border-color:#5f7a8644">小件</span></td>
+    </tr><tr data-q="common" data-c="1" data-s="加厚弹匣簧d_mg_plusg1793rg18野牛akmm4a1qbz-95ak-12qbz-192qbz-191mk4汤姆逊mp7vectormcxaughk416sr-3mk437as val手枪冲锋枪步枪">
+      <td class="c1"><span class="nm">加厚弹匣簧</span><code>d_mg_plus</code><div class="ds">换一根硬一点的托弹簧，容量涨一成半，供弹更稳。</div></td>
+      <td class="c2"><span class="q" style="color:#9aa4b2;border-color:#9aa4b244;background:#9aa4b218">普通</span></td>
+      <td class="c3 money">¥640</td>
+      <td class="c4"><span class="e good">弹匣容量 +15%</span><span class="e bad">换弹时间 +4%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 手枪 / 冲锋枪 / 步枪</td>
+      <td class="c6 num">20<span class="u">/32</span></td>
+      <td class="c7"><span class="num">1</span><span class="ft" style="color:#5f7a86;border-color:#5f7a8644">小件</span></td>
+    </tr><tr data-q="common" data-c="1" data-s="军用双排弹匣s_mg_twin野牛akmm4a1qbz-95ak-12qbz-192qbz-191mk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as val冲锋枪步枪轻机枪">
+      <td class="c1"><span class="nm">军用双排弹匣</span><code>s_mg_twin</code><div class="ds">军规双排结构，容量比民用款大一圈。</div></td>
+      <td class="c2"><span class="q" style="color:#9aa4b2;border-color:#9aa4b244;background:#9aa4b218">普通</span></td>
+      <td class="c3 money">¥700</td>
+      <td class="c4"><span class="e good">弹匣容量 +20%</span><span class="e bad">换弹时间 +5%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 冲锋枪 / 步枪 / 轻机枪</td>
+      <td class="c6 num">20<span class="u">/32</span></td>
+      <td class="c7"><span class="num">1</span><span class="ft" style="color:#5f7a86;border-color:#5f7a8644">小件</span></td>
+    </tr><tr data-q="rare" data-c="1" data-s="刻度弹匣d_mg_markakmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmcxaughk416sr-3mk437as valsksm14sr-25svdm700步枪精确射手步枪狙击枪">
+      <td class="c1"><span class="nm">刻度弹匣</span><code>d_mg_mark</code><div class="ds">弹匣侧面开观察孔，还剩几发一眼扫出来，换弹时机掐得准。</div></td>
+      <td class="c2"><span class="q" style="color:#5b9bd5;border-color:#5b9bd544;background:#5b9bd518">稀有</span></td>
+      <td class="c3 money">¥1,750</td>
+      <td class="c4"><span class="e good">换弹时间 -10%</span><span class="e good">弹匣容量 +5%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 步枪 / 精确射手步枪 / 狙击枪</td>
+      <td class="c6 num">20<span class="u">/32</span></td>
+      <td class="c7"><span class="num">1</span><span class="ft" style="color:#5f7a86;border-color:#5f7a8644">小件</span></td>
+    </tr><tr data-q="rare" data-c="1" data-s="快速弹匣套d_mg_quickg1793rg18野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">快速弹匣套</span><code>d_mg_quick</code><div class="ds">快拔套加漏斗口，换弹干脆利落。</div></td>
+      <td class="c2"><span class="q" style="color:#5b9bd5;border-color:#5b9bd544;background:#5b9bd518">稀有</span></td>
+      <td class="c3 money">¥1,800</td>
+      <td class="c4"><span class="e good">换弹时间 -15%</span><span class="e bad">弹匣容量 -5%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">32<span class="u">/32</span></td>
+      <td class="c7"><span class="num">1</span><span class="ft" style="color:#5f7a86;border-color:#5f7a8644">小件</span></td>
+    </tr><tr data-q="rare" data-c="1" data-s="快拆弹匣井s_mg_wellg1793rg18野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">快拆弹匣井</span><code>s_mg_well</code><div class="ds">漏斗形弹匣井，闭着眼睛也能插进去。</div></td>
+      <td class="c2"><span class="q" style="color:#5b9bd5;border-color:#5b9bd544;background:#5b9bd518">稀有</span></td>
+      <td class="c3 money">¥1,850</td>
+      <td class="c4"><span class="e good">换弹时间 -20%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">32<span class="u">/32</span></td>
+      <td class="c7"><span class="num">1</span><span class="ft" style="color:#5f7a86;border-color:#5f7a8644">小件</span></td>
+    </tr><tr data-q="rare" data-c="2" data-s="扩容弹匣extmagg1793rg18野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">扩容弹匣</span><code>extmag</code><div class="ds">加长弹匣多装四成子弹，一个弹匣能多放倒两个人；换弹更笨重。</div></td>
+      <td class="c2"><span class="q" style="color:#5b9bd5;border-color:#5b9bd544;background:#5b9bd518">稀有</span></td>
+      <td class="c3 money">¥1,900</td>
+      <td class="c4"><span class="e good">弹匣容量 +45%</span><span class="e bad">换弹时间 +15%</span><span class="e bad">移速 -2%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">32<span class="u">/32</span></td>
+      <td class="c7"><span class="num">2</span><span class="ft" style="color:#c8a45c;border-color:#c8a45c44">中件</span></td>
+    </tr><tr data-q="epic" data-c="2" data-s="速拔弹匣quickmagg1793rg18野牛akmm4a1qbz-95ak-12qbz-192qbz-191sr9mk4汤姆逊mp7vectormcxaughk416sr-3mk437as valsksm14sr-25svd手枪冲锋枪步枪精确射手步枪">
+      <td class="c1"><span class="nm">速拔弹匣</span><code>quickmag</code><div class="ds">快拔套 + 漏斗口，换弹快三成，火力断档短得几乎听不出来；容量缩水。</div></td>
+      <td class="c2"><span class="q" style="color:#a86bd1;border-color:#a86bd144;background:#a86bd118">史诗</span></td>
+      <td class="c3 money">¥2,900</td>
+      <td class="c4"><span class="e good">换弹时间 -32%</span><span class="e bad">弹匣容量 -15%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 手枪 / 冲锋枪 / 步枪 / 精确射手步枪</td>
+      <td class="c6 num">25<span class="u">/32</span></td>
+      <td class="c7"><span class="num">2</span><span class="ft" style="color:#c8a45c;border-color:#c8a45c44">中件</span></td>
+    </tr><tr data-q="epic" data-c="2" data-s="双联弹匣夹d_mg_clampg1793rg18野牛akmm4a1qbz-95ak-12qbz-192qbz-191mk4汤姆逊mp7vectormcxaughk416sr-3mk437as val手枪冲锋枪步枪">
+      <td class="c1"><span class="nm">双联弹匣夹</span><code>d_mg_clamp</code><div class="ds">两个弹匣并排夹住，换弹只花一半时间。</div></td>
+      <td class="c2"><span class="q" style="color:#a86bd1;border-color:#a86bd144;background:#a86bd118">史诗</span></td>
+      <td class="c3 money">¥2,950</td>
+      <td class="c4"><span class="e good">换弹时间 -28%</span><span class="e bad">移速 -3%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 手枪 / 冲锋枪 / 步枪</td>
+      <td class="c6 num">20<span class="u">/32</span></td>
+      <td class="c7"><span class="num">2</span><span class="ft" style="color:#c8a45c;border-color:#c8a45c44">中件</span></td>
+    </tr><tr data-q="epic" data-c="2" data-s="备用弹匣袋s_mg_caskg1793rg18野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">备用弹匣袋</span><code>s_mg_cask</code><div class="ds">枪托侧面挂两个满弹匣，换弹时手不用往腰上摸。</div></td>
+      <td class="c2"><span class="q" style="color:#a86bd1;border-color:#a86bd144;background:#a86bd118">史诗</span></td>
+      <td class="c3 money">¥3,100</td>
+      <td class="c4"><span class="e good">换弹时间 -22%</span><span class="e bad">移速 -2%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">32<span class="u">/32</span></td>
+      <td class="c7"><span class="num">2</span><span class="ft" style="color:#c8a45c;border-color:#c8a45c44">中件</span></td>
+    </tr><tr data-q="epic" data-c="4" data-s="野战弹鼓d_mg_drum2野牛akmm4a1qbz-95ak-12qbz-192qbz-191mk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as val冲锋枪步枪轻机枪">
+      <td class="c1"><span class="nm">野战弹鼓</span><code>d_mg_drum2</code><div class="ds">七十五发的野战弹鼓，火力断档这个词跟你无缘。</div></td>
+      <td class="c2"><span class="q" style="color:#a86bd1;border-color:#a86bd144;background:#a86bd118">史诗</span></td>
+      <td class="c3 money">¥3,300</td>
+      <td class="c4"><span class="e good">弹匣容量 +40%</span><span class="e bad">换弹时间 +20%</span><span class="e bad">移速 -3%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 冲锋枪 / 步枪 / 轻机枪</td>
+      <td class="c6 num">20<span class="u">/32</span></td>
+      <td class="c7"><span class="num">4</span><span class="ft" style="color:#c2622f;border-color:#c2622f44">弹鼓</span></td>
+    </tr><tr data-q="epic" data-c="4" data-s="哈夫克快拔弹鼓drummag野牛mk4汤姆逊mp7vectorrpkm249pkm冲锋枪轻机枪">
+      <td class="c1"><span class="nm">哈夫克快拔弹鼓</span><code>drummag</code><div class="ds">军规快拔弹鼓：容量、换速两头都要 —— 厂里说这是给「安全总监的卫队」配的。</div></td>
+      <td class="c2"><span class="q" style="color:#a86bd1;border-color:#a86bd144;background:#a86bd118">史诗</span></td>
+      <td class="c3 money">¥3,400</td>
+      <td class="c4"><span class="e good">弹匣容量 +55%</span><span class="e good">换弹时间 -15%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 冲锋枪 / 轻机枪</td>
+      <td class="c6 num">8<span class="u">/32</span></td>
+      <td class="c7"><span class="num">4</span><span class="ft" style="color:#c2622f;border-color:#c2622f44">弹鼓</span></td>
+    </tr><tr data-q="epic" data-c="4" data-s="轻量化弹鼓s_mg_lightdrum野牛mk4汤姆逊mp7vectorrpkm249pkm冲锋枪轻机枪">
+      <td class="c1"><span class="nm">轻量化弹鼓</span><code>s_mg_lightdrum</code><div class="ds">航空铝弹鼓，容量大还不太坠手。</div></td>
+      <td class="c2"><span class="q" style="color:#a86bd1;border-color:#a86bd144;background:#a86bd118">史诗</span></td>
+      <td class="c3 money">¥3,500</td>
+      <td class="c4"><span class="e good">弹匣容量 +50%</span><span class="e bad">移速 -4%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 冲锋枪 / 轻机枪</td>
+      <td class="c6 num">8<span class="u">/32</span></td>
+      <td class="c7"><span class="num">4</span><span class="ft" style="color:#c2622f;border-color:#c2622f44">弹鼓</span></td>
+    </tr><tr data-q="epic" data-c="4" data-s="弹链转换器s_mg_chainrpkm249pkm轻机枪">
+      <td class="c1"><span class="nm">弹链转换器</span><code>s_mg_chain</code><div class="ds">把弹匣枪改成弹链供弹的军改套件，厂里只给重枪班组配。</div></td>
+      <td class="c2"><span class="q" style="color:#a86bd1;border-color:#a86bd144;background:#a86bd118">史诗</span></td>
+      <td class="c3 money">¥4,200</td>
+      <td class="c4"><span class="e good">弹匣容量 +60%</span><span class="e good">换弹时间 -10%</span><span class="e bad">移速 -5%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 轻机枪</td>
+      <td class="c6 num">3<span class="u">/32</span></td>
+      <td class="c7"><span class="num">3</span><span class="ft" style="color:#7d9a4e;border-color:#7d9a4e44">长件</span></td>
+    </tr></tbody></table></section><section class="slot"><h2><i class="sq"></i>枪托<span class="en">STOCK</span>
+    <span class="cnt">16 件 · 位置：枪身尾部</span></h2><table>
+    <thead><tr><th class="c1">名称</th><th class="c2">品质</th><th class="c3">价格</th><th class="c4">效果</th>
+    <th class="c5">适配范围</th><th class="c6">可装</th><th class="c7">占格</th></tr></thead><tbody><tr data-q="common" data-c="1" data-s="木托d_st_wood野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">木托</span><code>d_st_wood</code><div class="ds">老木托，抵肩扎实，就是有点沉。</div></td>
+      <td class="c2"><span class="q" style="color:#9aa4b2;border-color:#9aa4b244;background:#9aa4b218">普通</span></td>
+      <td class="c3 money">¥500</td>
+      <td class="c4"><span class="e good">后坐 -6%</span><span class="e bad">移速 -2%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">29<span class="u">/32</span></td>
+      <td class="c7"><span class="num">1</span><span class="ft" style="color:#5f7a86;border-color:#5f7a8644">小件</span></td>
+    </tr><tr data-q="common" data-c="1" data-s="折叠枪托folding野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">折叠枪托</span><code>folding</code><div class="ds">折起来挂身上不碍事，跑动更快；抵肩不实，后坐略涨。</div></td>
+      <td class="c2"><span class="q" style="color:#9aa4b2;border-color:#9aa4b244;background:#9aa4b218">普通</span></td>
+      <td class="c3 money">¥550</td>
+      <td class="c4"><span class="e good">移速 +7%</span><span class="e bad">后坐 +6%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">29<span class="u">/32</span></td>
+      <td class="c7"><span class="num">1</span><span class="ft" style="color:#5f7a86;border-color:#5f7a8644">小件</span></td>
+    </tr><tr data-q="common" data-c="1" data-s="折叠骨架托s_st_frame野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">折叠骨架托</span><code>s_st_frame</code><div class="ds">钢架折叠托，跑动轻快，抵肩一般。</div></td>
+      <td class="c2"><span class="q" style="color:#9aa4b2;border-color:#9aa4b244;background:#9aa4b218">普通</span></td>
+      <td class="c3 money">¥560</td>
+      <td class="c4"><span class="e good">移速 +5%</span><span class="e good">后坐 -3%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">29<span class="u">/32</span></td>
+      <td class="c7"><span class="num">1</span><span class="ft" style="color:#5f7a86;border-color:#5f7a8644">小件</span></td>
+    </tr><tr data-q="rare" data-c="1" data-s="骨架折叠托d_st_skel野牛akmm4a1qbz-95ak-12qbz-192qbz-191sr9mk4汤姆逊mp7vectormcxaughk416sr-3mk437as valsksm14sr-25svd步枪冲锋枪精确射手步枪">
+      <td class="c1"><span class="nm">骨架折叠托</span><code>d_st_skel</code><div class="ds">钢架骨架托，折起来是一根小棍，展开抵肩也扎实。</div></td>
+      <td class="c2"><span class="q" style="color:#5b9bd5;border-color:#5b9bd544;background:#5b9bd518">稀有</span></td>
+      <td class="c3 money">¥1,600</td>
+      <td class="c4"><span class="e good">移速 +4%</span><span class="e good">后坐 -7%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 步枪 / 冲锋枪 / 精确射手步枪</td>
+      <td class="c6 num">22<span class="u">/32</span></td>
+      <td class="c7"><span class="num">1</span><span class="ft" style="color:#5f7a86;border-color:#5f7a8644">小件</span></td>
+    </tr><tr data-q="rare" data-c="1" data-s="可调托腮板d_st_cheek野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">可调托腮板</span><code>d_st_cheek</code><div class="ds">托腮高度可调，抬枪找镜更快。</div></td>
+      <td class="c2"><span class="q" style="color:#5b9bd5;border-color:#5b9bd544;background:#5b9bd518">稀有</span></td>
+      <td class="c3 money">¥1,650</td>
+      <td class="c4"><span class="e good">开镜时间 -10%</span><span class="e good">后坐 -5%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">29<span class="u">/32</span></td>
+      <td class="c7"><span class="num">1</span><span class="ft" style="color:#5f7a86;border-color:#5f7a8644">小件</span></td>
+    </tr><tr data-q="rare" data-c="2" data-s="重型枪托heavyakmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700步枪精确射手步枪狙击枪轻机枪">
+      <td class="c1"><span class="nm">重型枪托</span><code>heavy</code><div class="ds">实心托底把后坐顶回肩膀里，代价是开镜时挪得更慢。</div></td>
+      <td class="c2"><span class="q" style="color:#5b9bd5;border-color:#5b9bd544;background:#5b9bd518">稀有</span></td>
+      <td class="c3 money">¥1,700</td>
+      <td class="c4"><span class="e good">后坐 -22%</span><span class="e bad">开镜移速 -6%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 步枪 / 精确射手步枪 / 狙击枪 / 轻机枪</td>
+      <td class="c6 num">23<span class="u">/32</span></td>
+      <td class="c7"><span class="num">2</span><span class="ft" style="color:#c8a45c;border-color:#c8a45c44">中件</span></td>
+    </tr><tr data-q="rare" data-c="2" data-s="减震托底板d_st_recoilm870akmm4a1qbz-95ak-12qbz-192qbz-191rpkm249pkmmcxaughk416sr-3mk437as val霰弹枪轻机枪步枪">
+      <td class="c1"><span class="nm">减震托底板</span><code>d_st_recoil</code><div class="ds">聚氨酯托底夹层，重枪的 kickoff 被垫掉一截。</div></td>
+      <td class="c2"><span class="q" style="color:#5b9bd5;border-color:#5b9bd544;background:#5b9bd518">稀有</span></td>
+      <td class="c3 money">¥1,700</td>
+      <td class="c4"><span class="e good">后坐 -15%</span><span class="e bad">开镜移速 -3%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 霰弹枪 / 轻机枪 / 步枪</td>
+      <td class="c6 num">16<span class="u">/32</span></td>
+      <td class="c7"><span class="num">2</span><span class="ft" style="color:#c8a45c;border-color:#c8a45c44">中件</span></td>
+    </tr><tr data-q="rare" data-c="2" data-s="气动缓冲托s_st_pneu野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">气动缓冲托</span><code>s_st_pneu</code><div class="ds">气动缓冲把后坐吸进去，连发节奏更稳。</div></td>
+      <td class="c2"><span class="q" style="color:#5b9bd5;border-color:#5b9bd544;background:#5b9bd518">稀有</span></td>
+      <td class="c3 money">¥1,750</td>
+      <td class="c4"><span class="e good">后坐 -26%</span><span class="e good">开镜时间 -2%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">29<span class="u">/32</span></td>
+      <td class="c7"><span class="num">2</span><span class="ft" style="color:#c8a45c;border-color:#c8a45c44">中件</span></td>
+    </tr><tr data-q="epic" data-c="2" data-s="缓冲托底d_st_pad野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">缓冲托底</span><code>d_st_pad</code><div class="ds">聚氨酯托底把后坐顶回肩膀里，连发不再散架。</div></td>
+      <td class="c2"><span class="q" style="color:#a86bd1;border-color:#a86bd144;background:#a86bd118">史诗</span></td>
+      <td class="c3 money">¥2,700</td>
+      <td class="c4"><span class="e good">后坐 -20%</span><span class="e good">开镜时间 -6%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">29<span class="u">/32</span></td>
+      <td class="c7"><span class="num">2</span><span class="ft" style="color:#c8a45c;border-color:#c8a45c44">中件</span></td>
+    </tr><tr data-q="epic" data-c="2" data-s="战术枪托tactic野牛akmm4a1qbz-95ak-12qbz-192qbz-191sr9mk4汤姆逊mp7vectormcxaughk416sr-3mk437as valsksm14sr-25svd步枪精确射手步枪冲锋枪">
+      <td class="c1"><span class="nm">战术枪托</span><code>tactic</code><div class="ds">可调托腮 + 缓冲垫，抬枪更快、散布更小，几乎是一把新枪。</div></td>
+      <td class="c2"><span class="q" style="color:#a86bd1;border-color:#a86bd144;background:#a86bd118">史诗</span></td>
+      <td class="c3 money">¥2,800</td>
+      <td class="c4"><span class="e good">开镜时间 -24%</span><span class="e good">腰射散布 -7%</span><span class="e good">后坐 -6%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 步枪 / 精确射手步枪 / 冲锋枪</td>
+      <td class="c6 num">22<span class="u">/32</span></td>
+      <td class="c7"><span class="num">2</span><span class="ft" style="color:#c8a45c;border-color:#c8a45c44">中件</span></td>
+    </tr><tr data-q="epic" data-c="2" data-s="无托缓冲组件d_bull_kitqbz-95qbz-192aug">
+      <td class="c1"><span class="nm">无托缓冲组件</span><code>d_bull_kit</code><div class="ds">无托结构的贴腮与缓冲垫整套，后坐直接顶进肩窝里，抬枪也顺了。</div></td>
+      <td class="c2"><span class="q" style="color:#a86bd1;border-color:#a86bd144;background:#a86bd118">史诗</span></td>
+      <td class="c3 money">¥2,900</td>
+      <td class="c4"><span class="e good">后坐 -15%</span><span class="e good">开镜时间 -10%</span></td>
+      <td class="c5"><b class="tag spec">专属</b> QBZ-95 / QBZ-192 / AUG</td>
+      <td class="c6 num">3<span class="u">/32</span></td>
+      <td class="c7"><span class="num">2</span><span class="ft" style="color:#c8a45c;border-color:#c8a45c44">中件</span></td>
+    </tr><tr data-q="epic" data-c="2" data-s="平衡配重托d_st_ballsr9r93awmsksm14sr-25svdm700精确射手步枪狙击枪">
+      <td class="c1"><span class="nm">平衡配重托</span><code>d_st_ball</code><div class="ds">托尾灌了配重铅，整枪重心后移，抬枪稳得像端着秤。</div></td>
+      <td class="c2"><span class="q" style="color:#a86bd1;border-color:#a86bd144;background:#a86bd118">史诗</span></td>
+      <td class="c3 money">¥3,000</td>
+      <td class="c4"><span class="e good">后坐 -18%</span><span class="e good">开镜散布 -5%</span><span class="e bad">移速 -4%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 精确射手步枪 / 狙击枪</td>
+      <td class="c6 num">8<span class="u">/32</span></td>
+      <td class="c7"><span class="num">2</span><span class="ft" style="color:#c8a45c;border-color:#c8a45c44">中件</span></td>
+    </tr><tr data-q="epic" data-c="2" data-s="人机工学托s_st_ergo野牛akmm4a1qbz-95ak-12qbz-192qbz-191sr9mk4汤姆逊mp7vectormcxaughk416sr-3mk437as valsksm14sr-25svd步枪精确射手步枪冲锋枪">
+      <td class="c1"><span class="nm">人机工学托</span><code>s_st_ergo</code><div class="ds">托底角度照着几百份士兵问卷调的，肩感无可挑剔。</div></td>
+      <td class="c2"><span class="q" style="color:#a86bd1;border-color:#a86bd144;background:#a86bd118">史诗</span></td>
+      <td class="c3 money">¥3,050</td>
+      <td class="c4"><span class="e good">开镜时间 -15%</span><span class="e good">后坐 -10%</span><span class="e good">腰射散布 -4%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 步枪 / 精确射手步枪 / 冲锋枪</td>
+      <td class="c6 num">22<span class="u">/32</span></td>
+      <td class="c7"><span class="num">2</span><span class="ft" style="color:#c8a45c;border-color:#c8a45c44">中件</span></td>
+    </tr><tr data-q="epic" data-c="2" data-s="军规伸缩托s_st_tel野牛m870akmm4a1qbz-95ak-12qbz-192qbz-191sr9r93awmmk4汤姆逊mp7vectorrpkm249pkmmcxaughk416sr-3mk437as valsksm14sr-25svdm700">
+      <td class="c1"><span class="nm">军规伸缩托</span><code>s_st_tel</code><div class="ds">六档伸缩＋托腮，抬枪快、后坐小、跑得动。</div></td>
+      <td class="c2"><span class="q" style="color:#a86bd1;border-color:#a86bd144;background:#a86bd118">史诗</span></td>
+      <td class="c3 money">¥3,100</td>
+      <td class="c4"><span class="e good">开镜时间 -14%</span><span class="e good">后坐 -10%</span><span class="e good">移速 +2%</span></td>
+      <td class="c5"><b class="tag all">全枪通用</b></td>
+      <td class="c6 num">29<span class="u">/32</span></td>
+      <td class="c7"><span class="num">2</span><span class="ft" style="color:#c8a45c;border-color:#c8a45c44">中件</span></td>
+    </tr><tr data-q="epic" data-c="2" data-s="碳纤维战术枪托carstock野牛akmm4a1qbz-95ak-12qbz-192qbz-191sr9mk4汤姆逊mp7vectormcxaughk416sr-3mk437as valsksm14sr-25svd步枪冲锋枪精确射手步枪">
+      <td class="c1"><span class="nm">碳纤维战术枪托</span><code>carstock</code><div class="ds">航空级碳纤维一体托，又轻又稳，抬枪快、跑得动、后坐还小。</div></td>
+      <td class="c2"><span class="q" style="color:#a86bd1;border-color:#a86bd144;background:#a86bd118">史诗</span></td>
+      <td class="c3 money">¥3,200</td>
+      <td class="c4"><span class="e good">开镜时间 -18%</span><span class="e good">移速 +5%</span><span class="e good">后坐 -8%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 步枪 / 冲锋枪 / 精确射手步枪</td>
+      <td class="c6 num">22<span class="u">/32</span></td>
+      <td class="c7"><span class="num">2</span><span class="ft" style="color:#c8a45c;border-color:#c8a45c44">中件</span></td>
+    </tr><tr data-q="epic" data-c="4" data-s="供弹手稳定托d_lmg_sledrpkm249pkm轻机枪">
+      <td class="c1"><span class="nm">供弹手稳定托</span><code>d_lmg_sled</code><div class="ds">机枪手专用的宽大稳定托，蹲下压制时枪身稳得像焊在掩体上。</div></td>
+      <td class="c2"><span class="q" style="color:#a86bd1;border-color:#a86bd144;background:#a86bd118">史诗</span></td>
+      <td class="c3 money">¥3,400</td>
+      <td class="c4"><span class="e good">后坐 -20%</span><span class="e good">移速 +3%</span></td>
+      <td class="c5"><b class="tag cat">限类目</b> 轻机枪</td>
+      <td class="c6 num">3<span class="u">/32</span></td>
+      <td class="c7"><span class="num">3</span><span class="ft" style="color:#7d9a4e;border-color:#7d9a4e44">长件</span></td>
+    </tr></tbody></table></section>
+<div class="find">
+  <h3>占格规则（本次改动）</h3>
+  <ul>
+    <li><b>小件 1x1（28 件）</b>：小型瞄具、小握把、民用小弹匣、折叠托、消焰器 —— 口袋也能塞。</li>
+    <li><b>中件 2x1（35 件）</b>：消音器 / 制退器 / 常规瞄具 / 扩容弹匣 / 战术托 / 电磁制退环 —— 横放在 2 列以上的舱里。</li>
+    <li><b>长件 3x1（18 件）</b>：加长枪管 / 连发枪管 / 倍镜 / 抑制器 / 两脚架 / 机械稳定爪 / 弹链转换器 / 供弹手稳定托 —— 3x1 是弹挂最主流的舱形（<code>blocks</code> 里 <code>[3,1]</code> 遍地都是），横着正好卡进一格；进不去就自动躺倒成 1x3，竖舱也吃得下。</li>
+    <li><b>弹鼓 2x2（3 件）</b>：哈夫克快拔弹鼓 / 轻量化弹鼓 / 野战弹鼓 —— 又粗又圆，全表只剩它占 4 格。</li>
+    <li><b>口袋是 5 个独立的单格舱</b>，所以 2 格以上的配件塞不进裤兜，搜到长件必须往弹挂 / 背包里放。</li>
+  </ul>
+</div>
+<div class="find" style="border-left-color:#d1655c">
+  <h3>仍待处理的 4 条价格倒挂（更贵的那件效果全面更差）</h3>
+  <ul>
+    <li><b>全息镜 ¥1,800</b> 压过 <b>全息投影镜 ¥1,950</b>：开镜散布 0.84 &lt; 0.88、开镜时间 0.94 &lt; 0.96。</li>
+    <li><b>全息镜 ¥1,800</b> 压过 <b>AK 侧轨镜桥 ¥1,850</b>：后者是 AK 系专属（只适配 3 把枪），效果更差还更贵，<span class="warn">专属件等于没有存在价值</span>。</li>
+    <li><b>哈夫克快拔弹鼓 ¥3,400</b> 压过 <b>轻量化弹鼓 ¥3,500</b>：容量 1.55 &gt; 1.50、换弹 0.85 &lt; 1.00，且没有移速惩罚。</li>
+    <li><b>扩容弹匣 ¥1,900</b> 压过 <b>野战弹鼓 ¥3,300</b>：容量 1.45 &gt; 1.40、换弹 1.15 &lt; 1.20、移速 0.98 &gt; 0.97。</li>
+  </ul>
+</div>
+<footer>数据来源：<code>js/data.js</code> 的 MODS / MOD_EXT / MOD_EXT2 / MOD_FIT / MOD_FOOT，经 tests/loader 载入 index.html 后按运行时
+<code>modAllowed()</code> / <code>shapeOf()</code> 求值，非人工抄录。<br>
+「占格」来自 SHAPES 表的实际宽×高；「可装 x/32」= 该配件能装到多少把枪上。</footer>
+</div>
+<script>
+var all = [].slice.call(document.querySelectorAll('tbody tr'));
+var f = { k: 'all', v: 'all' }, txt = '';
+function apply() {
+  var n = 0;
+  all.forEach(function (tr) {
+    var okK = f.k === 'all' || String(tr.dataset[f.k]) === f.v;
+    var okT = !txt || tr.dataset.s.indexOf(txt) >= 0;
+    var show = okK && okT;
+    tr.classList.toggle('hide', !show);
+    if (show) n++;
+  });
+  document.querySelectorAll('section.slot').forEach(function (sec) {
+    sec.classList.toggle('hide', sec.querySelectorAll('tbody tr:not(.hide)').length === 0);
+  });
+  document.getElementById('hint').textContent = '显示 ' + n + ' / 84 件';
+}
+document.getElementById('s').addEventListener('input', function (e) { txt = e.target.value.trim().toLowerCase(); apply(); });
+document.querySelectorAll('.chip').forEach(function (c) {
+  c.addEventListener('click', function () {
+    document.querySelectorAll('.chip').forEach(function (x) { x.classList.remove('on'); });
+    c.classList.add('on');
+    f.k = c.dataset.k; f.v = c.dataset.v; apply();
+  });
+});
+apply();
+</script>
+</body></html>

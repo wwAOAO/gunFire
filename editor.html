@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NEON PURGE · 地图编辑器</title>
+<title>战术搜达撤 · 地图编辑器</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   html, body {
@@ -226,6 +226,8 @@
       <option value="tool">工具箱 · 改枪配件</option>
       <option value="weapon">武器箱 · 必出一把枪</option>
       <option value="safe">保险柜 · 最慢最肥</option>
+      <option value="docs">文件柜 · 情报与文件收集品</option>
+      <option value="lux">陈列柜 · 贵重品收集品</option>
       <option value="">随机 · 每局按权重抽</option>
     </select></label>
     <div id="crateMix" style="font-size:11px;line-height:1.95;color:#8fb7d0;letter-spacing:.02em">—</div>
@@ -266,6 +268,8 @@
         <option value="tool">工具箱</option>
         <option value="weapon">武器箱</option>
         <option value="safe">保险柜</option>
+        <option value="docs">文件柜</option>
+        <option value="lux">陈列柜</option>
         <option value="">随机（每局按权重抽）</option>
       </select></label>
     </div>
@@ -366,6 +370,8 @@ const CONTAINERS = {
   tool:   { id: 'tool',   name: '工具箱', tag: '工具', color: '#6ec6ff', dim: 'rgba(110,198,255,', body: '#182530', w: 30, h: 22 },
   weapon: { id: 'weapon', name: '武器箱', tag: '军械', color: '#c9a3ff', dim: 'rgba(201,163,255,', body: '#231a2e', w: 48, h: 18 },
   safe:   { id: 'safe',   name: '保险柜', tag: '金库', color: '#ff5c7a', dim: 'rgba(255,92,122,',  body: '#2a1820', w: 26, h: 28 },
+  docs:   { id: 'docs',   name: '文件柜', tag: '档案', color: '#8fd6a0', dim: 'rgba(143,214,160,', body: '#18261e', w: 26, h: 30 },
+  lux:    { id: 'lux',    name: '陈列柜', tag: '贵重', color: '#ffd166', dim: 'rgba(255,209,102,', body: '#2b1e2e', w: 30, h: 24 },
 };
 const CONTAINER_IDS = Object.keys(CONTAINERS);
 const containerOf = id => CONTAINERS[id] || CONTAINERS.crate;

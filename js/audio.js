@@ -108,4 +108,126 @@ const Sfx = {
   meleeMiss() { this.noiseBurst(0.13, 2300, 0.9, 0.10, 'bandpass'); },
   adsIn()   { this.tone(880, 0.05, 0.05, 'square', 1320); },                           // 抬枪：轻脆一声
   adsOut()  { this.tone(560, 0.05, 0.035, 'square', 360); },                           // 落枪
+
+  /* ── 干员技能音效：kind = 技能 kind（OPERATORS.g/v/x 的 kind 字段）──
+     全部由 tone / noiseBurst 合成，每种技能一条音色轮廓：
+     投掷物「拉栓一声脆 + 出手呼啸」，大招「上电 / 起转」的机械感，
+     电箭弦震带电火花、侦察箭带声纳回波。开技能时都有声，不只命中才有。 */
+  skill(kind) {
+    if (!this.ready) return;
+    const T = (f, d, v, ty, s) => this.tone(f, d, v, ty, s);
+    const N = (d, f, q, v, ty) => this.noiseBurst(d, f, q, v, ty);
+    switch (kind) {
+      /* 投掷物：拉栓脆响 + 罐体出手呼啸 */
+      case 'smoke': case 'frag':
+        T(2400, 0.04, 0.06, 'square');
+        setTimeout(() => N(0.18, 1800, 0.8, 0.09, 'bandpass'), 30);
+        break;
+      /* 蜂巢烟：拉栓 + 蜂鸣底噪 */
+      case 'beesmoke':
+        T(2400, 0.04, 0.06, 'square');
+        T(180, 0.5, 0.045, 'sawtooth', 140);
+        N(0.5, 320, 0.5, 0.05, 'lowpass');
+        break;
+      /* 磁吸弹：上电双哔 + 呼啸 */
+      case 'magbomb':
+        T(1400, 0.07, 0.06, 'sine', 700);
+        setTimeout(() => T(1400, 0.07, 0.05, 'sine', 700), 90);
+        N(0.16, 1600, 0.9, 0.08, 'bandpass');
+        break;
+      /* 闪光弹：弹壳 pop + 高频亮环（听感上「白」） */
+      case 'flash':
+        T(320, 0.05, 0.08, 'square', 90);
+        setTimeout(() => T(3400, 0.4, 0.05, 'sine', 2900), 40);
+        break;
+      /* 毒雾：阀门泄气 + 低频翻涌 */
+      case 'gas':
+        N(0.55, 900, 0.4, 0.10, 'bandpass');
+        T(120, 0.4, 0.05, 'sawtooth', 60);
+        break;
+      /* 燃烧弹：出手呼啸 + 落地前引燃的低频噼啪 */
+      case 'firebomb':
+        N(0.3, 1400, 0.7, 0.10, 'bandpass');
+        setTimeout(() => N(0.5, 500, 0.6, 0.08, 'lowpass'), 80);
+        break;
+      /* 外骨骼：伺服上电（低频爬升 + 气路 + 上线哔） */
+      case 'exo':
+        T(140, 0.5, 0.09, 'square', 480);
+        N(0.45, 1200, 0.5, 0.07, 'bandpass');
+        setTimeout(() => T(520, 0.12, 0.07, 'square', 980), 320);
+        break;
+      /* 动力推进：喷气比过门重一档，带推进器低鸣 */
+      case 'dash':
+        N(0.32, 2200, 0.6, 0.16, 'bandpass');
+        T(90, 0.3, 0.10, 'sawtooth', 42);
+        break;
+      /* 虎蹲炮：压缩空气炮——闷砰 + 气浪嘶 */
+      case 'shock':
+        T(70, 0.25, 0.20, 'sawtooth', 30);
+        N(0.28, 1100, 0.6, 0.18, 'bandpass');
+        break;
+      /* 电箭：弦震 + 电火花 */
+      case 'shockbow':
+        T(880, 0.08, 0.07, 'triangle', 300);
+        setTimeout(() => { T(1900, 0.16, 0.05, 'square', 640); N(0.2, 3400, 2.2, 0.05, 'bandpass'); }, 40);
+        break;
+      /* 侦察箭：弦震 + 声纳回波两跳 */
+      case 'scanbow':
+        T(880, 0.08, 0.07, 'triangle', 300);
+        setTimeout(() => T(660, 0.5, 0.06, 'sine', 1180), 60);
+        setTimeout(() => T(990, 0.4, 0.04, 'sine', 1480), 240);
+        break;
+      /* 无人机：旋翼起转 */
+      case 'drone':
+        T(190, 0.5, 0.06, 'sawtooth', 330);
+        N(0.4, 700, 1.2, 0.05, 'bandpass');
+        break;
+      /* 激素针：软气声 + 上扬轻音 */
+      case 'healgun':
+        N(0.14, 2400, 1.6, 0.06, 'bandpass');
+        setTimeout(() => T(700, 0.16, 0.06, 'sine', 1120), 50);
+        break;
+      /* 速凝掩体：高压喷注 */
+      case 'coverdev':
+        N(0.35, 1500, 0.7, 0.10, 'bandpass');
+        T(300, 0.2, 0.06, 'square', 640);
+        break;
+      /* 旋刃：高速旋转甩出的啸声 */
+      case 'blade':
+        T(420, 0.35, 0.07, 'sawtooth', 1500);
+        N(0.25, 2800, 1.8, 0.05, 'bandpass');
+        break;
+      /* 巡飞弹：发射闷响 + 电机嗡鸣起转 */
+      case 'loiter':
+        T(120, 0.2, 0.14, 'square', 60);
+        setTimeout(() => T(150, 0.7, 0.05, 'sawtooth', 260), 60);
+        break;
+    }
+  },
+
+  /* ── 3D 脚步：敌人方位声 ──
+     pan：-1 左耳 / +1 右耳（以玩家准星朝向为「正前」算出来的声像）；
+     behind：身后的脚步套低通把高频闷掉 —— 戴上耳机就能听出「这人在我后面」；
+     heavy：重甲敌人（ brute / boss ）降转速，声音又沉又慢。 */
+  step3d(pan, vol, behind, heavy) {
+    if (!this.ready || vol <= 0.004) return;
+    const c = this.ctx, t = c.currentTime;
+    const src = c.createBufferSource(); src.buffer = this.noise;
+    src.playbackRate.value = heavy ? rand(0.42, 0.55) : rand(0.85, 1.15);
+    const f = c.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.value = behind ? 420 : (heavy ? 720 : 1000);
+    const g = c.createGain();
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+    if (c.createStereoPanner) {
+      const p = c.createStereoPanner();
+      p.pan.value = clamp(pan || 0, -1, 1);
+      src.connect(f); f.connect(p); p.connect(g);
+    } else {                                       // 老浏览器没有声像节点：退化为单声道
+      src.connect(f); f.connect(g);
+    }
+    g.connect(this.master);
+    src.start(t); src.stop(t + 0.11);
+  },
 };

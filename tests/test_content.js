@@ -1,10 +1,11 @@
-/* 内容扩编回归：收集品 315 / 成就 50 / 配件 84 + 兼容性 / 干员分组
-   ① 收集品：总数 315，两图产地均衡，五档品质齐全，字段完整，占格合法
+/* 内容扩编回归：收集品 329 / 成就 50 / 配件 84 + 兼容性 / 干员分组
+   ① 收集品：总数 329，两图产地均衡，五档品质齐全，字段完整，占格合法
    ② 成就：50 条，id 唯一，test 函数对空数据不抛异常
    ③ 配件：modAllowed 兼容矩阵（类目 fit / 专属 guns / 手枪无枪托）
       cleanGunMods 读档清洗会丢掉装错的配件
    ④ 干员页：按 突击/侦察/支援/工程 四组分组摆放，卡片数 = 干员总数
-   ⑤ 枪的占格：32 把枪全部在 SHAPES / CELLS 显式登记，宽×高与格数一致（防空档回落 4 格） */
+   ⑤ 枪的占格：32 把枪全部在 SHAPES / CELLS 显式登记，宽×高与格数一致（防空档回落 4 格）
+   ⑥ 配件占格：84 件按体积四档 1x1 / 2x1 / 3x1 / 2x2 全登记，口袋放不进 2 格以上件 */
 const fs = require('fs');
 const path = require('path');
 const { JSDOM } = require('jsdom');
@@ -39,7 +40,7 @@ setTimeout(() => {
       }
       return { n: Object.keys(RELICS).length, qc: qc, perQ: perQ, bad: bad };
     })())`));
-    T('收集品总数 315', d.n === 315);
+    T('收集品总数 329', d.n === 329);
     const mythStats = JSON.parse(w.eval(`JSON.stringify((function(){
       var n = 0, sum = 0, cheap = [], named = {};
       for (var id in RELICS) {
@@ -66,7 +67,7 @@ setTimeout(() => {
               RELIC_IDS.every(id => RELIC_RARITY[id] === undefined || id === 'africaheart' || id === 'oceantear')`));
     T('神话新形状齐全：1x2 / 1x3 / 2x2 / 2x3 / 3x3 在列',
       ['1x2', '1x3', '2x2', '2x3', '3x3'].every(s => mythStats.shapes.includes(s)));
-    T('坝区 149 + 航天 149 + 双图 17', d.qc.dam === 149 && d.qc.space === 149 && d.qc.both === 17);
+    T('坝区 149 + 航天 149 + 双图 31', d.qc.dam === 149 && d.qc.space === 149 && d.qc.both === 31);
     T('两图各自五档品质齐全',
       ['common', 'rare', 'epic', 'legend', 'myth'].every(q => d.perQ.dam[q] > 0 && d.perQ.space[q] > 0));
     T('字段完整 / 价格档位 / 占格合法 / 无孤儿占格', d.bad.length === 0);
@@ -211,6 +212,52 @@ setTimeout(() => {
         .every(id => gs.by[id] === '5x2/10'));
     T('狙击：R93 5x1 / M700 5x1 / AWM 7x1',
       gs.by.r93 === '5x1/5' && gs.by.m700 === '5x1/5' && gs.by.awm === '7x1/7');
+
+    // ── ⑥ 配件占格：按体积分四档（1x1 / 2x1 / 3x1 / 2x2），全部显式登记 ──
+    //    早先 84 件配件全落在 cellSize 的「1 格」兜底上 —— ¥8,800 的总监瞄准组件和
+    //    ¥420 的机械瞄具运输成本一模一样，配件完全没有体积概念。这条断言防回归：
+    //    新增配件必须在 MOD_FOOT 四张表里挑一档。
+    //    3x1 = 长件（枪管 / 倍镜 / 抑制器 / 两脚架 / 弹链 / 供弹托），2x2 只剩三种弹鼓。
+    const ms = JSON.parse(w.eval(`JSON.stringify((function(){
+      var fb = [], bad = [], dist = {}, big = [];
+      for (var id in MODS) {
+        var sh = SHAPES[id];
+        if (!sh) { fb.push(id); continue; }
+        if (cellSize({ t: 'mod', id: id }) !== sh[0] * sh[1]) bad.push(id);
+        dist[sh.join('x')] = (dist[sh.join('x')] || 0) + 1;
+        if (sh[0] * sh[1] > 1) big.push(id);
+      }
+      // 口袋是 5 个独立的单格舱：2 格以上的配件一律塞不进
+      var pb = zoneBlocks('pocket');
+      var pocket = new Array(5).fill(null);
+      var leak = [];
+      for (var i = 0; i < big.length; i++) {
+        if (findFitAuto(pocket, pb, { t: 'mod', id: big[i] })) leak.push(big[i]);
+      }
+      // 2x2 组只剩弹鼓；18 件 3x1 长件要能横向卡进 3x1 舱
+      var big22 = [], fit31 = 0;
+      for (var id2 in MODS) {
+        var sh2 = SHAPES[id2] || [1, 1];
+        if (sh2[0] === 2 && sh2[1] === 2) big22.push(id2);
+        if (sh2[0] === 3 && sh2[1] === 1) {
+          var slot = new Array(3).fill(null);
+          if (findFitAuto(slot, [[0, 3, 3]], { t: 'mod', id: id2 })) fit31++;
+        }
+      }
+      big22.sort();
+      return { total: Object.keys(MODS).length, fb: fb, bad: bad, dist: dist, leak: leak,
+               big22: big22, fit31: fit31 };
+    })())`));
+    T('全部 ' + ms.total + ' 件配件都在 SHAPES 显式登记（没有走 1 格兜底）', ms.fb.length === 0);
+    T('配件只有 1x1 / 2x1 / 3x1 / 2x2 四档', Object.keys(ms.dist).sort().join(',') === '1x1,2x1,2x2,3x1');
+    T('四档数量 小件 28 / 中件 35 / 长件 18 / 弹鼓 3',
+      ms.dist['1x1'] === 28 && ms.dist['2x1'] === 35 && ms.dist['3x1'] === 18 && ms.dist['2x2'] === 3);
+    // 2x2 只剩弹鼓：别的配件混进 2x2 就说明有人偷偷把长件改回去了
+    T('2x2 只剩三种弹鼓', ms.big22.join(',') === 'd_mg_drum2,drummag,s_mg_lightdrum');
+    // 长件进 3x1 舱：这是弹挂最主流的舱形，必须横着塞得进
+    T('18 件长件都能塞进 3x1 舱', ms.fit31 === 18);
+    T('占格数与形状逐件一致', ms.bad.length === 0);
+    T('口袋（5 个单格舱）放不进任何 2 格以上配件', ms.leak.length === 0);
 
   } catch (e) {
     fail++; console.log('FAIL  异常: ' + e.message);

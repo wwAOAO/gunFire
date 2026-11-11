@@ -13,7 +13,7 @@ const readRaw = f => fs.readFileSync(path.join(root, f));
 const read = f => readRaw(f).toString('utf8');
 const html = read('index.html');
 const edHtml = read('editor.html');
-const MODULE_ORDER = ['maps/builtin-maps.js', 'js/data.js', 'js/audio.js', 'js/game.js', 'js/render.js', 'js/ui.js'];
+const MODULE_ORDER = ['maps/builtin-maps.js', 'js/data.js', 'js/audio.js', 'js/game.js', 'js/art.js', 'js/render.js', 'js/ui.js'];
 
 let pass = 0, fail = 0;
 const T = (n, ok) => { ok ? pass++ : fail++; console.log((ok ? 'PASS' : 'FAIL') + '  ' + n); };
@@ -34,7 +34,7 @@ for (const f of MODULE_ORDER) {
 /* 2. index.html 的模块引用：顺序正确、无遗留内联游戏脚本 */
 {
   const got = [...html.matchAll(/<script src="([^"]+)"><\/script>/g)].map(m => m[1]);
-  T('index.html 按序引用全部 6 个模块', JSON.stringify(got) === JSON.stringify(MODULE_ORDER));
+  T('index.html 按序引用全部 ' + (MODULE_ORDER.length - 1) + ' 个模块', JSON.stringify(got) === JSON.stringify(MODULE_ORDER));
   const inline = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
   T('index.html 无内联游戏脚本残留', inline.length === 0);
   T('index.html 不再内嵌地图数据', !html.includes('const BUILTIN_MAPS') && !html.includes('buildSpaceBase'));

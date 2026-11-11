@@ -39,7 +39,7 @@ function loadDom(html, extra) {
     拆分后游戏逻辑不在 index.html 里了，源码检查必须扫完整源。 */
 function fullSource() {
   return fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8') + '\n' +
-    ['maps/builtin-maps.js', 'js/data.js', 'js/audio.js', 'js/game.js', 'js/render.js', 'js/ui.js']
+    ['maps/builtin-maps.js', 'js/data.js', 'js/audio.js', 'js/game.js', 'js/art.js', 'js/render.js', 'js/ui.js']
       .map(f => fs.readFileSync(path.join(ROOT, f), 'utf8')).join('\n');
 }
 

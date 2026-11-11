@@ -369,6 +369,7 @@ const G = {
   reinforceWave: 0,
   alarm: 0,        // 全局警戒度 0..1
   callCd: 0,       // 「呼叫增援」冷却
+  backups: [],     // 正在路上的增援：[{ x, y, t, n, warned }] —— 无线电要时间
   nests: [],       // 固定刷怪点位
   shake: 0,
   shakeX: 0,
@@ -450,6 +451,8 @@ const P = {
   downHp: 0,                    // 倒地血条：100 点，无护甲减伤，扣光直接阵亡
   downRev: 0,                   // 长按 F 自救已累计的秒数
   regenT: 0,                    // 激素针的后续回血剩余时间
+  exoHealPool: 0,               // 外骨骼击杀的待回血量：快速爬升灌入，不是瞬间跳满
+  exoStamPool: 0,               // 同上，体力那份
   concuss: 0,                   // 被自己的榴弹震到：眩晕，重影 + 不能开镜
   aim: 0,
   fireCd: 0,
@@ -482,6 +485,16 @@ const P = {
   armorMove: 0,       // 移速惩罚：走速 ×(1-move)
   armorHp: 0,         // 当前耐久：挡弹会磨，磨光就没防护了
   armorMax: 0,        // 耐久上限：修甲会掉上限（恢复 × 损耗率）
+  /* 头盔：第二个防具槽 —— 防护很薄，但改「听觉」（拾音范围 / 降噪）和抬枪、走位 */
+  helmetId: 0,        // 头上这顶的目录编号（HELMETS 下标，0 = 不戴）
+  helmetLv: 0,        // 头盔等级 1-3
+  helmetDr: 0,        // 对低级别子弹的平减
+  helmetDrLv: 0,      // 吃到减伤的弹级上限（3 级头 = 只吃 1-3 级弹）
+  helmetAim: 0,       // 开镜时间惩罚：adsTime ×(1+aim)
+  helmetMove: 0,      // 移速惩罚
+  helmetHear: 1,      // 拾音倍率：听力半径 × 这个数
+  helmetQuiet: 0,     // 降噪：自己发出的动静半径 ×(1-quiet)
+  helmetFov: 1,       // 视野：视锥半角倍率（<1 收窄，>1 变宽）
   /* 医疗：meds 是这一局随身带的六种包，carePick 是上次用的那种治疗物品（短按 5 走自动阶梯，回血段优先沿用它的剩余耐久）
      key 形如 'med:inject_s' / 'stop:bandage' / 'surg:surg_dek' */
   meds: {},
@@ -693,6 +706,7 @@ function generateExtracts() {
        units:[{x,y,type}, ...],    // 兵种布点：type 为 runner/shooter/brute/boss
        squad:['runner','shooter',...] }   // 旧字段，没有 units 时按它铺守军
    ══════════════════════════════════════════════════════════ */
+/* 同 SAVE_KEY：旧名 key 保留，改了会让玩家自建地图全部消失 */
 const MAP_KEY = 'neonpurge_map_v1';
 const MAP_FORMAT = 'neonpurge-map';
 const MAP_VERSION = 1;
@@ -1363,7 +1377,7 @@ function resetPlayer() {
   P.weapon = P.slots[P.curSlot] || null;
   /* 出生飘字要等配装结算完再说 —— 放在这里才知道手里到底有没有枪 */
   popup(P.x, P.y - 46, P.curSlot === 'melee' ? '只有刀 · 1~5 切换装备'
-    : (P.curSlot === 'pistol' ? '只有手枪 · 1~5 切换装备' : '右键开镜 · 1~5 切换装备'), '#8ef2ff', 13);
+    : (P.curSlot === 'pistol' ? '只有手枪 · 1~5 切换装备' : '右键开镜 · 1~5 切换装备'), '#e6e0c9', 13);
 
   P.melee = (SAVE.ownedMelee && SAVE.ownedMelee[SAVE.equippedMelee]) ? SAVE.equippedMelee : STARTER_MELEE;
   P.meleeCd = 0;
@@ -1413,6 +1427,18 @@ function resetPlayer() {
     P.armorAim = AR.aim || 0;        // 瞄准惩罚：开火散布变大
     P.armorMove = AR.move || 0;      // 移速惩罚：走得慢
     P.armorLoad = AR.load || 0;      // 负重：影响跑步耗体力
+  }
+  {
+    const H = helmetOf(SAVE.wornHelmet);
+    P.helmetId = H.id;
+    P.helmetLv = H.lv | 0;
+    P.helmetDr = H.dr || 0;
+    P.helmetDrLv = H.drLv | 0;
+    P.helmetAim = H.aim || 0;
+    P.helmetMove = H.move || 0;
+    P.helmetHear = helmetHearMul(H);      // +20% → 听力半径 1.2 倍
+    P.helmetQuiet = H.quiet || 0;
+    P.helmetFov = H.fov || 1;             // 视野：全盔收窄，开放式放大
   }
 }
 
@@ -1630,13 +1656,17 @@ function rectFitsAt(arr, s, e, C, i, cell) {
   }
   return true;
 }
-/* 一件物品从 i 铺开的全部下标（行优先矩形） */
+/* 一件物品从 i 铺开的全部下标（行优先矩形）。
+   形状放不进这个舱（比舱宽 / 比舱高）时返回空数组 —— 调用方据此判定「不合法」。
+   老版本这里只判 j < e，w > C 时 dx 会把下标推到下一行，产出 [8,9,9,10] 这种
+   重复 + 跨舱的脏结果，spanOk 反而认为占位是完整的，越界物品就此赖在 1x3 舱里。 */
 function spanIdxs(i, cell, s, e, C) {
   const [w, h] = shapeOf(cell, C);
   const out = [];
+  if (w > C || (i - s) % C + w > C) return out;          // 舱太窄 / 起点太靠右
+  if (((i - s) / C | 0) + h > (e - s) / C) return out;    // 舱太矮
   for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) {
-    const j = i + dy * C + dx;
-    if (j < e) out.push(j);
+    out.push(i + dy * C + dx);
   }
   return out;
 }
@@ -1753,7 +1783,9 @@ function spanOk(arr, i, blocks) {
   if (!c || c.cont) return true;
   const b = blkAt(blocks, i);
   if (!b) return true;
-  const idxs = spanIdxs(i, c, b[0], b[1], b[2]);
+  const [s, e, C] = b;
+  const idxs = spanIdxs(i, c, s, e, C);
+  if (!idxs.length) return false;          // 形状根本装不进这个舱（舱变窄/变矮后的遗留大件）
   if (idxs.length <= 1) return true;
   for (const j of idxs) {
     if (j === i) continue;
@@ -1857,15 +1889,22 @@ function consumeRepairUnit(id) {
   }
 }
 
-/* 止血消耗品：一份一格 */
+/* 止血 / 止痛消耗品：一瓶一格，格子里记剩余片数（n）。
+   瓶装类（抗生素 3 片、DVE 5 片）按表里的 uses 定每格上限，一次性的绷带 / 止血带上限就是 1。
+   老存档的格子没有 n 字段 —— 一律当 1 片。 */
+function stopCap(id) {
+  const S = STOPS[id] || STOPS.bandage;
+  return Math.max(1, (S.uses | 0) || 1);
+}
+function stopUnits(c) { return Math.max(1, (c && c.n | 0) || 1); }
 function stopCount(id) {
   let n = 0;
-  for (const { cell } of usableCellList()) if (cell.t === 'stop' && cell.id === id) n++;
+  for (const { cell } of usableCellList()) if (cell.t === 'stop' && cell.id === id) n += stopUnits(cell);
   return n;
 }
 function stopTotal() {
   let n = 0;
-  for (const { cell } of usableCellList()) if (cell.t === 'stop') n++;
+  for (const { cell } of usableCellList()) if (cell.t === 'stop') n += stopUnits(cell);
   return n;
 }
 /* 手术包还剩几次刀：各格剩余次数求和 */
@@ -1893,12 +1932,16 @@ function consumeSurgUse(id) {
   }
 }
 
-/* 用完一份止血 / 止痛：把那格清空 */
+/* 用掉一片止血 / 止痛：格子里的片数 -1，吃空了才清格 */
 function consumeStopUnit(id) {
   for (const arr of carryZones()) {
     for (let i = 0; i < arr.length; i++) {
       const c = arr[i];
-      if (c && c.t === 'stop' && c.id === id) { arr[i] = null; return; }
+      if (c && c.t === 'stop' && c.id === id) {
+        const left = stopUnits(c) - 1;
+        if (left <= 0) arr[i] = null; else c.n = left;
+        return;
+      }
     }
   }
 }
@@ -2040,12 +2083,31 @@ function addMed(id, n) {
   if (placed > 0 && medCount(careIdOf(P.carePick)) <= 0) P.carePick = careKeyMake('med', key);
   return placed;
 }
+/* 收药：先往身上没装满的同类瓶里塞，塞满了再开新瓶。
+   一瓶抗生素 3 片 —— 捡回来是 1 格 ×3，而不是摊成 3 个一格。 */
 function addStop(id, n) {
   const key = STOPS[id] ? id : 'bandage';
+  const cap = stopCap(key);
+  let rest = Math.max(1, n | 0);
   let placed = 0;
-  for (let k = 0; k < Math.max(1, n | 0); k++) {
-    if (!stowCell({ t: 'stop', id: key })) break;
-    placed++;
+  for (const arr of allCarryZones()) {
+    if (rest <= 0) break;
+    for (const c of arr) {
+      if (rest <= 0) break;
+      if (!c || c.t !== 'stop' || c.id !== key) continue;
+      const have = (c.n | 0) || 1;
+      if (have >= cap) continue;
+      const take = Math.min(cap - have, rest);
+      c.n = have + take;
+      rest -= take;
+      placed += take;
+    }
+  }
+  while (rest > 0) {
+    const take = Math.min(cap, rest);
+    if (!stowCell({ t: 'stop', id: key, n: take })) break;
+    rest -= take;
+    placed += take;
   }
   return placed;
 }
@@ -2093,11 +2155,11 @@ function saveCarePick() {
 /* ══════════════════════════════════════════════════════════
    创伤 debuff
    ──────────────────────────────────────────────────────────
-   bleed   流血：每层每秒掉血，最低锁 1 血；绷带 / 止血带处理
+   bleed   流血：每层每秒掉血（最多 3 层），最低锁 1 血；绷带 / 止血带处理
    red*    贯穿伤（头 / 胸 / 腹）：每层 -10% 血量上限 + 黑边；手术包治
    arm     手臂骨折：开镜 / 换弹 / 打药变慢、散布变大；止痛可屏蔽
-   leg     腿部骨折：不能冲刺、移速大降；止痛只屏蔽视觉
-   fissure 骨裂：腿骨折后强行冲刺触发，更慢；止痛无效
+   leg     腿部骨折：不能冲刺、移速大降；止痛压住一半（能拖着腿跑）
+   fissure 骨裂：腿骨折后强行冲刺触发，更慢；止痛压住一半
    weak    虚弱：被拉起后 -20% 上限（目前没有救起流程，先留底）
    ══════════════════════════════════════════════════════════ */
 function resetDebuff() {
@@ -2121,12 +2183,15 @@ function redLayers() {
 }
 /* 手臂骨折的负面：止痛期间被压住 */
 function armHurt() { return P.deb.arm > 0 && P.painT <= 0; }
-/* 腿骨折 / 骨裂 是实打实的结构损伤，止痛只能骗过脑子，跑不动还是跑不动。
+/* 腿骨折 / 骨裂：结构损伤。止痛压得住一半 —— 疼被药压下去，能拖着腿小跑
+   （冲刺解锁），但骨头没接回来：滑铲依旧蹬不了地，惩罚不会消失，手术包才能治。
    外骨骼撑着的时候腿是机械在带，骨折照挂、但照样能跑（见 X 技能）。 */
 function legBroken() {
   if (exoOn()) return false;
   return P.deb.leg > 0 || P.deb.fissure > 0;
 }
+/* 腿伤减速的止痛系数：药效期间惩罚减半（腿折 0.6 → 0.8，骨裂每层 12% → 6%） */
+function legMoveK() { return P.painT > 0 ? 0.5 : 1; }
 
 /* 挂一层创伤。kind: bleed / redHead / redChest / redAbdomen / arm / leg / fissure / weak */
 function addDebuff(kind, n, label) {
@@ -2447,6 +2512,14 @@ function playerShoot() {
   const a = currentAmmo();
   if (a.mag <= 0) { startReload(); return; }
 
+  /* 磨损惩罚：磨满 100 的枪每发可能哑火（不耗弹，只耽误事）——
+     保养是钱的问题，哑火是命的问题，把钱逼回经济系统。 */
+  if (gunWearOf(P.weapon) >= 100 && Math.random() < GUN_WEAR.jam) {
+    P.fireCd = 0.35;
+    popup(P.x, P.y - 52, '哑火', '#c25040', 11);
+    return;
+  }
+
   a.mag--;
   /* 这一发吃的是什么弹：弹级决定穿甲和肉伤倍率 */
   const T = ammoTier(a.tier == null ? 1 : a.tier);
@@ -2464,6 +2537,7 @@ function playerShoot() {
 
   for (let i = 0; i < W.count; i++) {
     const sp0 = W.spread * (1 - P.ads * (1 - adsOf(W).spread)) * (armHurt() ? DEBUFF.armSpread : 1)  // 开镜收束散布；手断了端不稳
+              * gunSpreadMul(P.weapon)                                                               // 枪况磨损：越磨枪口越飘
               * (1 + (P.armorAim || 0))                                                              // 护甲瞄准惩罚：板子越硬枪口越晃
               * (P.sprinting ? SPRINT.spreadMul : 1);                                                // 跑动中开枪：枪口飘
     const spread = W.count > 1 ? rand(-sp0, sp0) : rand(-sp0, sp0) * 0.6;
@@ -2786,7 +2860,7 @@ function updateMedHeal(dt) {
     if (Math.random() < dt * 7) {
       addParticle(P.x + rand(-14, 14), P.y + rand(-10, 10), {
         vx: rand(-8, 8), vy: rand(-26, -8), life: 0.4, r: rand(1.6, 3),
-        color: kind === 'surg' ? '#8ef2ff' : '#ffd66b', drag: 0.94, glow: true,
+        color: kind === 'surg' ? '#e6e0c9' : '#ffd66b', drag: 0.94, glow: true,
       });
     }
     if (P.medWind > 0) return;
@@ -2798,7 +2872,9 @@ function updateMedHeal(dt) {
       if (S.pain) {
         P.painT = Math.max(P.painT, S.pain);
         popup(P.x, P.y - 46, '止痛 ' + S.pain + 's', S.color, 14);
-        if (stopCount(id) > 0) popup(P.x, P.y - 62, S.short + ' 还剩 ' + stopCount(id) + ' 份', 'rgba(190,230,250,0.9)', 12);
+        const legHurt = P.deb.leg > 0 || P.deb.fissure > 0;
+        if (legHurt) popup(P.x, P.y - 62, '腿伤压住一半 · 骨头还得手术', 'rgba(255,155,107,0.9)', 12);
+        if (stopCount(id) > 0) popup(P.x, P.y - (legHurt ? 78 : 62), S.short + ' 还剩 ' + stopCount(id) + ' 份', 'rgba(190,230,250,0.9)', 12);
       } else {
         stopBleeding(S.layers);
       }
@@ -2940,13 +3016,13 @@ function updateMedHeal(dt) {
 /* ── 跑步结算：移动中按一下 Shift 就进入跑步姿态 ──
    姿态是「锁存」的：只要人还在移动就一直跑，不用按着不放；
    松开方向键（停下来）姿态解除，再次移动后要重新按 Shift 才会接着跑。
-   只有「在动 + 没开镜 + 没换弹 + 没在包扎 + 腿没断 + 没力竭」才跑得起来；
+   只有「在动 + 没开镜 + 没换弹 + 没在包扎 + 腿没断（止痛压住一半时可跑）+ 没力竭」才跑得起来；
    已经在跑的人可以一直跑到 0，重新起跑要 >= resumeAt，避免在 0 附近反复抖。 */
 function updateSprint(dt, il) {
   const load = P.armorLoad || 0;
   if (dashOn() || knockOn() || isDowned()) { P.sprinting = false; P.sprintLatch = false; return; }   // 推进 / 倒地时不算跑
   const ready = P.alive && il > 0 && P.ads < 0.3 && P.reloading <= 0 &&
-                P.medOn === null && !legBroken() && P.exhaust <= 0 && !modeOn();
+                P.medOn === null && (!legBroken() || painOn()) && P.exhaust <= 0 && !modeOn();
   /* 锁存：移动中按 Shift 上膛；一停下来就解除，重新起跑要再按一次 */
   if (keys['shift'] && il > 0 && ready && P.stamina >= SPRINT.resumeAt) P.sprintLatch = true;
   if (il <= 0 || !ready) P.sprintLatch = false;
@@ -2985,6 +3061,21 @@ function updatePlayer(dt) {
   if (P.regenT > 0 && P.alive && !isDowned()) {
     P.regenT = Math.max(0, P.regenT - dt);
     P.hp = Math.min(P.maxHp, P.hp + SKILL.heal.regen * dt);
+  }
+
+  /* 外骨骼击杀的爬升式回复：血约 1.5 秒灌完（20/秒），体力约 0.85 秒拉满。
+     血已满时池子照样排空（溢出作废），不会留个永久挂着的池子。 */
+  if ((P.exoHealPool > 0 || P.exoStamPool > 0) && P.alive && !isDowned()) {
+    if (P.exoHealPool > 0) {
+      const h = Math.min(P.exoHealPool, 20 * dt);
+      P.hp = Math.min(P.maxHp, P.hp + h);
+      P.exoHealPool -= h;
+    }
+    if (P.exoStamPool > 0) {
+      const s = Math.min(P.exoStamPool, SPRINT.max * 1.2 * dt);
+      P.stamina = Math.min(SPRINT.max, P.stamina + s);
+      P.exoStamPool -= s;
+    }
   }
 
   /* 蜂医倒地：只能 WASD 爬行 + 长按 F 自救，打不了枪用不了技能 */
@@ -3029,7 +3120,8 @@ function updatePlayer(dt) {
   const gearClear = adrClearGear();
   const rigAds = rigWornMods().ads;
   const adsTime = aCfg.time * (armHurt() ? DEBUFF.armAds : 1) * (1 + 0.12 * P.chill)
-                * (1 + (gearClear ? 0 : rigAds) / 100) * adrAdsMul();
+                * (1 + (gearClear ? 0 : rigAds) / 100) * adrAdsMul()
+                * (1 + (gearClear ? 0 : (P.helmetAim || 0)));      // 头盔面罩拖慢抬枪
   P.ads = clamp(P.ads + (adsOn ? dt / adsTime : -dt / (adsTime * 0.75)), 0, 1);
   if (P.ads > 0.02 && P.adsPrev <= 0.02) Sfx.adsIn();
   if (P.ads <= 0.02 && P.adsPrev > 0.02) Sfx.adsOut();
@@ -3040,13 +3132,14 @@ function updatePlayer(dt) {
   if (!gearClear) {
     spd *= 1 - SPRINT.loadWalk * (P.armorLoad || 0);  // 护甲负重：穿得越厚走得越慢
     spd *= 1 - (P.armorMove || 0);                    // 护甲移速惩罚（具名甲各自不同）
+    spd *= 1 - (P.helmetMove || 0);                   // 头盔移速惩罚（重盔压脖子）
   }
   spd *= adrMoveMul();                               // 蛊：肾上腺素的小幅移速加成
   if (P.sprinting) spd *= SPRINT.mul;                // 按住 Shift：跑步
   else if (P.exhaust > 0) spd *= SPRINT.exhaustMul;  // 体力见底：先喘几口
   if (P.curSlot === 'melee') spd *= 1.06;            // 收枪持刀：跑得更利索
   else if (P.medOn && activeMedPerk() !== 'move') spd *= 0.92;   // 一边包扎一边走，慢一点
-  /* 创伤：流血越多越虚；腿断了直接掉一半多；骨裂再叠一层，止痛都救不回来 */
+  /* 创伤：流血越多越虚；腿断了掉一半多（止痛压住一半）；骨裂再叠一层 */
   if (P.deb.bleed > 0) spd *= 1 - Math.min(0.20, 0.05 * P.deb.bleed);
   /* 久经沙场：腿断 / 骨裂 / 冻伤三条减速各按自己的抗性打折（改 SKILL.tough 即刻生效）
      以前三处都读 legMul，fissureMul / chillMul 是死字段，改配置不生效 */
@@ -3054,8 +3147,8 @@ function updatePlayer(dt) {
   const legK = tough ? SKILL.tough.legMul : 1;
   const fissK = tough ? SKILL.tough.fissureMul : 1;
   const chillK = tough ? SKILL.tough.chillMul : 1;
-  if (P.deb.leg > 0) spd *= 1 - (1 - DEBUFF.legMove) * legK;
-  if (P.deb.fissure > 0) spd *= 1 - DEBUFF.fissureMove * P.deb.fissure * fissK;
+  if (P.deb.leg > 0) spd *= 1 - (1 - DEBUFF.legMove) * legK * legMoveK();
+  if (P.deb.fissure > 0) spd *= 1 - DEBUFF.fissureMove * P.deb.fissure * fissK * legMoveK();
   if (armHurt()) spd *= 0.96;                        // 一只手挂着，跑起来也别扭
   /* 冻伤：每层再慢 7%，霜区里叠满三层基本挪不动 */
   if (P.chill > 0) spd *= 1 - 0.07 * P.chill * chillK;
@@ -3339,7 +3432,14 @@ function damagePlayer(amount, srcX, srcY, inv, pen) {
       if (P.armorHp <= 0) armorBreak();
     } else {
       dmg *= (1 - P.armorDR);
+      /* 爆炸/近战/火/冻吃固定减免，也会磨甲 —— 不然纯近战图里甲永远不掉 */
+      P.armorHp = Math.max(0, P.armorHp - dmg * 0.2);
+      if (P.armorHp <= 0) armorBreak();
     }
+  }
+  /* 头盔：只吃「低级别子弹」的平减 —— pen 0 的爆炸 / 近战 / 火 / 冻不吃，高一级的弹照旧打穿 */
+  if (P.helmetLv > 0 && typeof pen === 'number' && pen > 0 && pen <= P.helmetDrLv) {
+    dmg *= 1 - P.helmetDr;
   }
   if (P.painT > 0) dmg *= 1 - PAIN_DR;      // 止痛剂压着，挨打没那么疼
   rollTrauma(dmg, 'bullet');                // 掷创伤：流血 / 贯穿伤 / 骨折
@@ -3368,8 +3468,10 @@ function damagePlayer(amount, srcX, srcY, inv, pen) {
    · 平时在固定点附近巡逻，不会主动朝玩家搜索
    · 视野 = 朝向 ± fov、距离 sight、且必须视线通畅（被障碍物挡住看不见）
    · 听觉穿墙，开枪/爆炸会惊动范围内敌人去查看
-   · 一旦有人确认看见玩家 → enterCombat → alertOthers 逐跳扩散
-     整片区域都会被叫来，发现者还有概率直接呼叫增援
+   · 一旦有人确认看见玩家 → enterCombat → alertOthers 逐跳喊话，但只惊动附近一圈：
+     离发现点超过 ALERT.chaseR 的人不进追杀、同一轮追兵封顶 ALERT.maxResponders、
+     追出 ALERT.giveUpR 还没再咬住就放弃回防 —— 不再是「一个人看见 = 全图都来」
+   · 发现者会摇增援，但无线电要时间：先挂 ETA，到点才从集结点进场
    ─────────────────────────────────────────────────────── */
 
 // 线段与矩形是否相交（Liang-Barsky），用于视线遮挡
@@ -3426,6 +3528,17 @@ function emitNoise(x, y, radius, hardness, byPlayer) {
     radius *= SKILL.silent.noiseMul;
     hardness *= SKILL.silent.hardMul;
   }
+  /* 降噪：盔把声压吃下去 —— 不只是「传得近」，还「听着软、方位糊」
+     ①半径打折：脚步 / 枪声 / 搜刮全吃
+     ②硬度打折：警戒条涨得慢，听见了也拿不准
+     ③方位糊掉：摸过去的落点是偏的，容易搜空 */
+  let blur = 0;
+  if (byPlayer) {
+    const q = P.helmetQuiet || 0;
+    radius *= 1 - q;
+    hardness *= Math.max(0.35, 1 - q * HELMET_QUIET_HARD);
+    blur = q * HELMET_QUIET_BLUR;
+  }
   if (radius < 30) return;
   for (const e of G.enemies) {
     if (e.state === 'combat') continue;
@@ -3435,7 +3548,9 @@ function emitNoise(x, y, radius, hardness, byPlayer) {
     if (d > ear) continue;
     const k = 1 - d / ear;
 
-    e.lastSeenX = x; e.lastSeenY = y;
+    /* 降噪大 → 他们摸过去的位置偏得多（同一个闷响，每个人猜的方位都不一样） */
+    e.lastSeenX = blur ? x + rand(-blur, blur) : x;
+    e.lastSeenY = blur ? y + rand(-blur, blur) : y;
 
     if (e.state === 'patrol') {
       e.state = 'alert';
@@ -3449,13 +3564,32 @@ function emitNoise(x, y, radius, hardness, byPlayer) {
   }
 }
 
-/* 警戒扩散：hop 控制连锁深度，形成喊话涟漪 */
+/* 这一轮已经在朝你身上扑的人有多少 —— 喊话的上限靠它算：
+   在打你的 + 被喊来正在赶的（还挂着 chain 的那种），死一个 / 放弃一个才放新名额 */
+function huntCount() {
+  let n = 0;
+  for (const o of G.enemies) {
+    if (!o.alive) continue;
+    if (o.state === 'combat') n++;
+    else if (o.state === 'alert' && o.chain > 0) n++;
+  }
+  return n;
+}
+
+/* 警戒扩散：hop 控制连锁深度，形成喊话涟漪 —— 但涟漪是「一圈」，不是「全图」：
+   半径逐跳收缩、总人数封顶、离发现点太远的直接不喊（喊了也来不及） */
 function alertOthers(src, sx, sy, hop) {
-  if (hop >= 3) return;
-  const radius = 520 - hop * 80;
+  if (hop >= ALERT.maxHop) return;
+  const radius = ALERT.hopR - hop * ALERT.hopDecay;
+  let taken = huntCount();
   for (const o of G.enemies) {
     if (o === src || o.state === 'combat') continue;
+    if (!o.alive) continue;
     if (Math.hypot(o.x - src.x, o.y - src.y) > radius) continue;
+    /* 离「看见玩家」的位置已经太远：喊了也追不上，就当没听见 */
+    if (Math.hypot(o.x - sx, o.y - sy) > ALERT.chaseR) continue;
+    /* 这一轮已经凑够追兵了：剩下的人留在原地守自己的点位 */
+    if (taken >= ALERT.maxResponders && !(o.state === 'alert' && o.chain > 0)) continue;
     o.lastSeenX = sx; o.lastSeenY = sy;
     if (o.state === 'alert') { o.investigateT = 13; continue; }
     o.state = 'alert';
@@ -3463,15 +3597,29 @@ function alertOthers(src, sx, sy, hop) {
     o.investigateT = 13;
     o.chain = 0.28 + Math.random() * 0.45;   // 稍后自己也开打并继续扩散
     o.chainHop = hop + 1;
+    taken++;
   }
   G.alarm = Math.min(1, G.alarm + 0.3);
   G.lastAlarmX = sx; G.lastAlarmY = sy;
 }
 
 function enterCombat(e, sx, sy, bySight) {
+  /* 硬闸：不是亲眼看见的人，离发现点太远就不许进入追杀。
+     老实现里被喊话的人不管在多远都会进 combat 然后一路走过来 —— 半张图的守军
+     全在「追杀」你。现在他们只在原地犯疑一下，该站哪站哪。 */
+  if (!bySight && Math.hypot(e.x - sx, e.y - sy) > ALERT.chaseR) {
+    e.chain = 0;
+    if (e.state === 'alert') {
+      e.lastSeenX = e.x + rand(-60, 60);
+      e.lastSeenY = e.y + rand(-60, 60);
+      e.investigateT = Math.min(e.investigateT || 6, 6);
+    }
+    return;
+  }
   e.state = 'combat';
   e.alertMeter = 1;
   e.lastSeenX = sx; e.lastSeenY = sy;
+  e.chaseX = sx; e.chaseY = sy;      // 追杀锚点：从这儿往外追，追远了就放弃
   e.loseT = 0;
   e.chain = 0;
   /* 侧翼包抄：场上同时只留一个 flanker，沿玩家侧后 ±0.65~0.95 弧度绕行 2.5~4 秒。
@@ -3489,21 +3637,65 @@ function enterCombat(e, sx, sy, bySight) {
   }
 }
 
+/* 呼叫增援：无线电要时间 —— 先挂进「在路上」队列，ETA 到点才从集结点进场。
+   老实现是当场在最近的集结点刷 2~3 个人（喊一声就到），压力全砸在同一个瞬间。 */
+function queueBackup(sx, sy, n, eta, label) {
+  if (G.backups.length >= ALERT.backupMax) return false;
+  if (G.enemies.length > (G.enemyCap || 42)) return false;
+  G.backups.push({ x: sx, y: sy, t: eta, n: n, warned: false });
+  if (label) uiToast(label, 'warn');
+  return true;
+}
+
 function callBackup(sx, sy) {
-  if (G.callCd > 0 || G.enemies.length > (G.enemyCap || 42)) return;
-  G.callCd = 17;
-  const n = 2 + ((Math.random() * 2) | 0);
-  const nest = nearestNest(sx, sy);
-  for (let i = 0; i < n; i++) {
+  if (G.callCd > 0) return;
+  const eta = rand(ALERT.backupEta[0], ALERT.backupEta[1]);
+  if (!queueBackup(sx, sy, 2 + ((Math.random() * 2) | 0), eta,
+                   '敌 人 呼 叫 增 援 · 约 ' + Math.round(eta) + ' 秒')) return;
+  G.callCd = ALERT.backupCd;
+  Sfx.tone(260, 0.35, 0.1, 'square', 120);
+}
+
+/* 在路上的增援：倒计时 → 临近提示 → 到点进场 */
+function updateBackups(dt) {
+  for (let i = G.backups.length - 1; i >= 0; i--) {
+    const b = G.backups[i];
+    b.t -= dt;
+    if (!b.warned && b.t <= 6) {
+      b.warned = true;
+      uiToast('增 援 接 近', 'warn');
+      Sfx.tone(200, 0.3, 0.08, 'sawtooth', 120);
+    }
+    if (b.t > 0) continue;
+    G.backups.splice(i, 1);
+    deployBackup(b);
+  }
+}
+
+/* 增援到点：从离呼叫点最近的集结点进场（但不在玩家眼皮底下），再自己走过去 */
+function deployBackup(b) {
+  const nest = backupNest(b.x, b.y);
+  for (let i = 0; i < b.n; i++) {
     const e = spawnEnemy('runner', nest.x + rand(-46, 46), nest.y + rand(-46, 46));
     if (!e) continue;
     e.state = 'alert';
     e.alertMeter = 1;
-    e.investigateT = 16;
-    e.lastSeenX = sx; e.lastSeenY = sy;
+    e.investigateT = 18;
+    e.lastSeenX = b.x; e.lastSeenY = b.y;
   }
-  uiToast('敌 人 呼 叫 增 援', 'warn');
-  Sfx.tone(260, 0.35, 0.1, 'square', 120);
+  uiToast('增 援 到 达', 'warn');
+}
+
+/* 集结点挑选：近一点（别让他们走太久），但至少离玩家 ALERT.backupMinDist */
+function backupNest(sx, sy) {
+  if (!G.nests.length) return { x: sx, y: sy };
+  const pool = G.nests.filter(n => dist(n.x, n.y, P.x, P.y) >= ALERT.backupMinDist);
+  let best = (pool.length ? pool : G.nests)[0], bd = Infinity;
+  for (const n of (pool.length ? pool : G.nests)) {
+    const d = dist2(n.x, n.y, sx, sy);
+    if (d < bd) { bd = d; best = n; }
+  }
+  return best;
 }
 
 function spawnEnemy(type, atX, atY, fac) {
@@ -3615,6 +3807,7 @@ function spawnEnemy(type, atX, atY, fac) {
     /* 护甲：armorLv 是等级（普通最高 5，机密图封顶也是 5），armorId 是穿的具名甲，
        armorHp 是耐久 —— 挡住的弹会磨甲，磨穿就裸了 */
     armorLv, armorId, armorHp, armorMax: armorHp, armorFlash: 0,
+    pen,   /* 穿甲等级：之前漏了这个字段，所有敌弹 pen=0，玩家护甲只吃固定减免且永远不磨 */
     /* 加特林：spin 预热 / burst 剩余弹数 / fire 连发间隔 / heat 枪管热度 / bloom 弹道扩散 */
     gatCd: rand(0.7, 1.6), gatSpin: 0, gatBurst: 0, gatFire: 0, gatHeat: 0, gatBloom: 0, gatPhase: 0,
 
@@ -3700,7 +3893,8 @@ function spawnReinforce() {  G.reinforceWave++;
     else if (G.reinforceWave >= 2 && r < 0.48) type = 'nader';
     else if (G.reinforceWave >= 2 && r < 0.62) type = 'shooter';
     const e = spawnEnemy(type);
-    if (e && alarmed) {
+    /* 增援波也守「本地」原则：只有刷在警报附近的才会扑过去，远的照常守自己点位 */
+    if (e && alarmed && dist(e.x, e.y, G.lastAlarmX, G.lastAlarmY) < ALERT.waveAwareR) {
       e.state = 'alert';
       e.alertMeter = 1;
       e.investigateT = 18;
@@ -4104,7 +4298,7 @@ function throwSmoke() {
 
   G.smokes.push({ x: tx, y: ty, t: 0, r: 0, seed: rand(0, 100) });
   popup(P.x, P.y - 46, '烟 雾 弹', '#c8d6de', 12);
-  Sfx.dash();
+  Sfx.skill('smoke');
   burst(tx, ty, 12, { color: ['#e8eef2', '#aab8c2'], life: 0.4, r: 6, spdMin: 20, spdMax: 120, drag: 0.88 });
 }
 
@@ -4125,7 +4319,7 @@ function throwMagBomb(dist) {
   });
 
   popup(P.x, P.y - 46, '磁 吸 炸 弹', '#8fe0ff', 12);
-  Sfx.dash();
+  Sfx.skill('magbomb');
   burst(P.x + Math.cos(a) * (P.r + 12), P.y + Math.sin(a) * (P.r + 12), 10, {
     angle: a, spread: 0.5, spdMin: 60, spdMax: 220,
     color: ['#cdf3ff', '#4ad1ff'], life: 0.3, r: 3, glow: true,
@@ -4312,7 +4506,7 @@ function dashForward() {
   P.ads = 0;
   P.sprinting = false;
   P.stamina = Math.max(0, P.stamina - D.cost);
-  Sfx.dash();
+  Sfx.skill('dash');
   shake(4);
 
   /* 喷口在后、气浪往前推 */
@@ -4470,7 +4664,7 @@ function useUlt() {
   P.hp = Math.min(P.maxHp, P.hp + 10);
   uiToast('动力外骨骼 · ' + op.x.dur + 's', '');
   popup(P.x, P.y - 52, '外 骨 骼 上 线', '#ff8a4c', 14);
-  Sfx.adsIn();
+  Sfx.skill('exo');
   shake(8);
   burst(P.x, P.y, 26, { color: ['#ff8a4c', '#ffd66b', '#ffffff'], life: 0.6, r: 4, spdMin: 60, spdMax: 300, glow: true });
   kineticKick();
@@ -4490,8 +4684,7 @@ function fireShock() {
   P.recoil = Math.max(P.recoil, 8);
   P.x -= Math.cos(a) * 4.5;
   P.y -= Math.sin(a) * 4.5;
-  Sfx.shoot('shotgun');
-  Sfx.noiseBurst(0.3, 1200, 0.7, 0.2, 'bandpass');
+  Sfx.skill('shock');
   shake(6);
   burst(mx, my, 16, {
     angle: a, spread: 0.3, spdMin: 100, spdMax: 320,
@@ -4591,10 +4784,11 @@ function exoOnKill() {
   if (!op) return;
   const X = op.x;
   P.op.x.t += X.killExtend;
-  P.hp = Math.min(P.maxHp, P.hp + X.killHeal);
-  P.stamina = SPRINT.max;
-  P.exhaust = 0;
-  popup(P.x, P.y - 64, '延长 +' + X.killExtend + 's · +' + X.killHeal + ' 血', '#ff8a4c', 12);
+  /* 血和体力都进「爬升池」：约 1.5 秒快速灌完，看着是往上冲的，不是瞬间跳满 */
+  P.exoHealPool += X.killHeal;
+  P.exoStamPool += SPRINT.max;
+  P.exhaust = 0;                       // 力竭锁直接解（体力马上开始回）
+  popup(P.x, P.y - 64, '延长 +' + X.killExtend + 's · 回复 ' + X.killHeal + ' 血', '#ff8a4c', 12);
 }
 
 /* ── 被动：战术滑铲（奔跑中按 C，无冷却） ── */
@@ -4606,7 +4800,7 @@ function trySlide() {
   if (S.slide > 0) return;                          // 这一下滑完再说
   if (!P.sprinting) { uiToast('先跑起来再滑铲', 'small'); return; }
   if (!exoOn() && P.stamina < SKILL.slide.cost) { uiToast('体力不够滑铲', 'small warn'); return; }
-  if (legBroken()) return;
+  if (legBroken()) { uiToast(P.painT > 0 ? '止痛压不住滑铲 —— 断腿蹬不了地' : '腿断了没法滑铲', 'small warn'); return; }
 
   const exo = exoOn();
   const dur = SKILL.slide.dur * (exo ? SKILL.exo.slideDur : 1);
@@ -4772,7 +4966,7 @@ function fragThrow(isLob) {
     angle: a, spread: 0.5, spdMin: 50, spdMax: 180,
     color: ['#e8f6ec', '#8ef2b0'], life: 0.25, r: 3,
   });
-  Sfx.dash();
+  Sfx.skill('frag');
 }
 
 function fragBlast(x, y, self) {
@@ -4885,7 +5079,7 @@ function throwFlash() {
     angle: a, spread: 0.4, spdMin: 60, spdMax: 220,
     color: ['#ffffff', '#dcd4ff'], life: 0.24, r: 3, glow: true,
   });
-  Sfx.dash();
+  Sfx.skill('flash');
   popup(P.x, P.y - 46, '闪 光 弹', '#dcd4ff', 12);
 }
 
@@ -5065,7 +5259,7 @@ function fireBlade(tgt) {
     angle: a, spread: 0.35, spdMin: 80, spdMax: 280,
     color: ['#ffffff', '#c9c0ff', '#8f7bff'], life: 0.26, r: 3.2, glow: true,
   });
-  Sfx.tone(520, 0.06, 0.04, 'sawtooth', 1400);
+  Sfx.skill('blade');
   popup(P.x, P.y - 46, tgt ? '旋 刃 · 追 踪' : '旋 刃 投 掷', '#c9c0ff', 12);
 }
 
@@ -5333,7 +5527,7 @@ function throwGas() {
     angle: a, spread: 0.4, spdMin: 60, spdMax: 200,
     color: ['#e8ffc0', '#a6ef5e'], life: 0.24, r: 3, glow: true,
   });
-  Sfx.dash();
+  Sfx.skill('gas');
 }
 
 function updateGasBombs(dt) {
@@ -5690,7 +5884,7 @@ function fireArrow(kind, bounce) {
     color: kind === 'arc' ? ['#ffffff', '#8ef2b0', '#43d9a0'] : ['#ffffff', '#9ef7c8', '#5fe0b0'],
     life: 0.24, r: 2.6, glow: true,
   });
-  Sfx.tone(620, 0.06, 0.03, 'triangle', 1400);
+  Sfx.skill(kind === 'arc' ? 'shockbow' : 'scanbow');
   popup(P.x, P.y - 46, kind === 'arc' ? '电 击 箭' : '侦 察 箭', kind === 'arc' ? '#8ef2b0' : '#9ef7c8', 12);
 }
 
@@ -5888,7 +6082,7 @@ function throwBeeSmoke() {
   for (let t = 0; t < 14 && pointInObstacle(tx, ty); t++) { tx -= (dx / d) * 24; ty -= (dy / d) * 24; }
   G.smokes.push({ x: tx, y: ty, t: 0, r: 0, seed: rand(0, 100), life: SKILL.bee.life, bee: true });
   popup(P.x, P.y - 46, '蜂 巢 烟', '#8dffc0', 12);
-  Sfx.dash();
+  Sfx.skill('beesmoke');
   burst(tx, ty, 14, { color: ['#e8fff0', '#8dffc0', '#43d9a0'], life: 0.45, r: 6, spdMin: 20, spdMax: 140, drag: 0.88 });
 }
 
@@ -5950,7 +6144,7 @@ function layLineSmoke() {
     auto: true, dist: 0, max: D.autoRange,
   });
   popup(P.x, P.y - 46, '直 线 长 烟', '#8dffc0', 12);
-  Sfx.tone(520, 0.12, 0.04, 'triangle', 900);
+  Sfx.skill('drone');
   burst(P.x + Math.cos(a) * 40, P.y + Math.sin(a) * 40, 10, {
     angle: a, spread: 0.4, spdMin: 40, spdMax: 200,
     color: ['#e8fff0', '#8dffc0'], life: 0.35, r: 4, drag: 0.9,
@@ -5966,6 +6160,7 @@ function startDrone() {
     x: P.x + Math.cos(a) * 46, y: P.y + Math.sin(a) * 46,
     ang: a, life: D.life, stepT: 0,
   });
+  Sfx.skill('drone');
   enterMode('drone', 'v');
   uiToast('WASD 操控无人机 · 再按 V 收回', 'small');
 }
@@ -6045,7 +6240,7 @@ function fireHealDart() {
     angle: a, spread: 0.2, spdMin: 60, spdMax: 200,
     color: ['#ffffff', '#8dffc0'], life: 0.22, r: 2.4, glow: true,
   });
-  Sfx.tone(980, 0.05, 0.03, 'sine', 1600);
+  Sfx.skill('healgun');
 }
 
 function healSelfShot() {
@@ -6083,7 +6278,7 @@ function firebombThrow(isLob) {
     angle: a, spread: 0.5, spdMin: 50, spdMax: 180,
     color: ['#ffd66b', '#ff8a3a'], life: 0.25, r: 3, glow: true,
   });
-  Sfx.dash();
+  Sfx.skill('firebomb');
 }
 
 function igniteGround(x, y) {
@@ -6173,7 +6368,7 @@ function placeCover(vert) {
   G.obstacles.push(o);
   G.covers.push({ o, t: C.life, max: C.life });
   rebuildFogBlock();
-  Sfx.tone(300, 0.16, 0.06, 'square', 900);
+  Sfx.skill('coverdev');
   shake(3);
   popup(spot.x + spot.w / 2, spot.y - 14, '速 凝 掩 体', '#ffc98a', 12);
   burst(spot.x + spot.w / 2, spot.y + spot.h / 2, 16, {
@@ -6248,7 +6443,7 @@ function fireLoiter(ctl) {
   if (ctl && P.op && P.op.mode) P.op.mode.controlling = true;
   P.recoil = Math.max(P.recoil, 9);
   shake(6);
-  Sfx.shoot('shotgun');
+  Sfx.skill('loiter');
   burst(P.x + Math.cos(a) * (P.r + 16), P.y + Math.sin(a) * (P.r + 16), 14, {
     angle: a + Math.PI, spread: 0.5, spdMin: 60, spdMax: 260,
     color: ['#ffffff', '#ffd66b', '#ffb457'], life: 0.4, r: 4, glow: true,
@@ -6905,11 +7100,39 @@ function breakShield(e) {
   e.stagger = 0.4;
 }
 
+/* ── 敌人脚步声（3D 方位）──
+   以玩家准星朝向为「正前」：左右决定声像 pan，身后套低通闷掉高频。
+   听力半径 460 世界像素；重甲（brute / boss）脚步又沉又响。 */
+const FOOTSTEP_EAR = 460;
+function footPanVol(e, heavy) {
+  const ear = FOOTSTEP_EAR * (P.helmetHear || 1);       // 拾音范围：头盔把听力圈放大 / 收窄
+  const dx = e.x - P.x, dy = e.y - P.y;
+  const dist = Math.hypot(dx, dy);
+  if (dist > ear || dist < 14) return null;             // 太远听不见；贴脸的近战声归近战音效管
+  const rel = Math.atan2(dy, dx) - P.aim;               // 相对玩家朝向的方位角
+  const k = Math.pow(1 - dist / ear, 1.35);             // 距离衰减（曲线偏近，近处更清晰）
+  return {
+    pan: clamp(Math.sin(rel) * 0.9, -1, 1),
+    behind: Math.cos(rel) < 0,
+    vol: 0.10 * k * (e.state === 'combat' ? 1.15 : 1) * (heavy ? 1.8 : 1),
+  };
+}
+function enemyFootstep(e) {
+  if (!P.alive || !Sfx.ready || (G.stepBudget | 0) <= 0) return;
+  const heavy = e.type === 'brute' || e.type === 'boss';
+  const pv = footPanVol(e, heavy);
+  if (!pv) return;
+  G.stepBudget--;
+  Sfx.step3d(pv.pan, pv.vol, pv.behind, heavy);
+}
+
 function updateEnemies(dt) {
+  G.stepBudget = 5;                    // 每帧脚步声预算：一群人围上来也不会把耳朵塞爆
   G.combatCount = 0;
   G.alertCount = 0;
   G.suspect = 0;
   G.directorMarkT = Math.max(0, (G.directorMarkT || 0) - dt);   // 安全总监的位置标记倒计时
+  updateBackups(dt);                   // 在路上的增援：倒计时 → 临近提示 → 到点进场
 
   for (let i = G.enemies.length - 1; i >= 0; i--) {
     const e = G.enemies[i];
@@ -6992,7 +7215,8 @@ function updateEnemies(dt) {
     }
 
     /* ── 安全总监的持续标记：总监盯着你的时候，全体哈夫克都知道你站在哪 ── */
-    if (G.directorMarkT > 0 && P.alive && !silentOn() && e.faction === 'havk' && e.state !== 'combat' && e.type !== 'seeker') {
+    if (G.directorMarkT > 0 && P.alive && !silentOn() && e.faction === 'havk' && e.state !== 'combat' &&
+        e.type !== 'seeker' && dist(e.x, e.y, P.x, P.y) < ALERT.markR) {
       e.lastSeenX = P.x; e.lastSeenY = P.y;
       if (e.state === 'patrol') { e.state = 'alert'; e.alertMeter = 1; }
       e.investigateT = Math.max(e.investigateT || 0, 3);
@@ -7043,6 +7267,7 @@ function updateEnemies(dt) {
     if (e.state === 'combat') {
       if (sees) {
         e.lastSeenX = P.x; e.lastSeenY = P.y;
+        e.chaseX = P.x; e.chaseY = P.y;    // 追杀锚点跟着「最后一次咬住的位置」走
         e.loseT = 0;
       } else {
         e.loseT += dt;
@@ -7051,6 +7276,16 @@ function updateEnemies(dt) {
           e.investigateT = 12;
           e.loseT = 0;
         }
+      }
+      /* 追杀闸：从锚点算追出 ALERT.giveUpR 还没再咬住 → 放弃回防。
+         不然远处的人会一路从半张图外走进来，看着像「全图 AI 都在找我」。 */
+      if (e.state === 'combat' && !sees && e.type !== 'boss' &&
+          dist(P.x, P.y, e.chaseX === undefined ? e.x : e.chaseX,
+               e.chaseY === undefined ? e.y : e.chaseY) > ALERT.giveUpR) {
+        e.state = 'alert';
+        e.loseT = 0;
+        e.investigateT = 5;
+        e.lastSeenX = e.homeX; e.lastSeenY = e.homeY;   // 回自己的点位
       }
     }
 
@@ -7546,7 +7781,8 @@ function updateEnemies(dt) {
             popup(e.x, e.y - e.r - 44, '发现干员！呼叫增援', '#ffb02e', 15);
             Sfx.tone(880, 0.28, 0.12, 'square', 340);
             Sfx.tone(660, 0.42, 0.1, 'square', 300);
-            spawnReinforce();
+            /* 无线电有延迟：先排队，比杂兵的增援快一档，但也不是「喊一声就到」 */
+            queueBackup(P.x, P.y, 3, ALERT.backupEta[0] * 0.8, '总 监 呼 叫 增 援');
           }
           if (!silentOn()) G.directorMarkT = DT.mark || 10;   // 盯着就一直刷新（削到 10 秒）
         }
@@ -7774,6 +8010,17 @@ function updateEnemies(dt) {
 
     e.x += mvx * spd * dt;
     e.y += mvy * spd * dt;
+
+    /* 脚步声：实际位移积累步距，迈够一步响一声（3D 方位）——
+       背后有人摸过来，戴耳机听声辨位；战斗状态步频快、巡逻步幅大 */
+    const moved = Math.hypot(mvx, mvy) * spd * dt;
+    if (moved > 0.02 && !rolling) {
+      e.stepDist = (e.stepDist || 0) + moved;
+      if (e.stepDist >= (e.state === 'combat' ? 24 : 30)) {
+        e.stepDist = 0;
+        enemyFootstep(e);
+      }
+    }
 
     /* 挥击突进：朝锁定方向扑一小段，纯位移、不走常规移动（让你看清"这一刀"） */
     if (e.meleeSwing > 0 && e.meleeLunge > 0 && !rolling) {
@@ -8036,7 +8283,7 @@ function killEnemy(e) {
     const gain = Math.round(e.score * mult);
     G.score += gain;
     popup(e.x, e.y - e.r - 6, '+' + gain, G.combo > 3 ? '#ffd66b' : '#a8d8ff', e.type === 'boss' ? 26 : 14);
-    if (G.combo > 2) popup(e.x, e.y - e.r - 30, 'x' + G.combo + ' 连击', '#43d9f5', 12);
+    if (G.combo > 2) popup(e.x, e.y - e.r - 30, 'x' + G.combo + ' 连击', '#b8a26b', 12);
   } else {
     popup(e.x, e.y - e.r - 6, '阵营交火', 'rgba(200,220,240,0.75)', 11);
   }
@@ -8144,7 +8391,7 @@ function collectPickup(p) {
   } else if (p.kind === 'medkit') {
     if (Math.random() < 0.22) ok = addStop('bandage', 1) > 0;
     else ok = addMed(rollMedDropId(false), 1) > 0;
-    if (ok) { popup(P.x, P.y - 30, '医疗物资 +1', '#46e08a', 14); Sfx.pickup(); }
+    if (ok) { popup(P.x, P.y - 30, '医疗物资 +1', '#74a35c', 14); Sfx.pickup(); }
     else popup(P.x, P.y - 30, '身上没有空位', '#ff6b8a', 13);
   } else if (p.kind === 'ammo') {
     const a = currentAmmo();
@@ -8157,7 +8404,7 @@ function collectPickup(p) {
     } else {
       P.hp = Math.min(P.maxHp, P.hp + 8);
       ok = true;
-      popup(P.x, P.y - 30, '没有枪，先回血', '#8ef2ff', 14);
+      popup(P.x, P.y - 30, '没有枪，先回血', '#e6e0c9', 14);
       Sfx.pickup();
     }
   } else if (p.kind === 'relic' && p.relicId && RELICS[p.relicId]) {
@@ -8167,7 +8414,7 @@ function collectPickup(p) {
     else popup(P.x, P.y - 30, '身上没有空位', '#ff6b8a', 13);
   }
   if (ok) {
-    burst(p.x, p.y, 10, { color: p.kind === 'medkit' ? '#46e08a' : (p.kind === 'ammo' ? '#8ef2ff' : (p.kind === 'cell' ? cellColor(p.cell) : (p.relicId && RELICS[p.relicId] ? QUALITY[RELICS[p.relicId].q].color : '#ffd08a'))), life: 0.4, r: 3, spdMin: 50, spdMax: 200, glow: true });
+    burst(p.x, p.y, 10, { color: p.kind === 'medkit' ? '#74a35c' : (p.kind === 'ammo' ? '#e6e0c9' : (p.kind === 'cell' ? cellColor(p.cell) : (p.relicId && RELICS[p.relicId] ? QUALITY[RELICS[p.relicId].q].color : '#ffd08a'))), life: 0.4, r: 3, spdMin: 50, spdMax: 200, glow: true });
   }
   return ok;
 }
@@ -8703,7 +8950,7 @@ function makeMedItem(id, n) {
   const M = MEDKITS[key];
   const cnt = n || (key.indexOf('inject') === 0 ? 2 : 1);
   return {
-    kind: 'med', icon: '药', name: M.name, val: '×' + cnt, color: M.color,
+    kind: 'med', icon: M.icon || '药', name: M.name, val: '×' + cnt, color: M.color,
     tier: 'supply', med: key, n: cnt,
     note: M.dur + ' 耐久 · ' + M.hps + '/秒',
   };
@@ -8721,7 +8968,7 @@ function makeStopItem(id) {
   const S = STOPS[id] || STOPS.bandage;
   const cnt = Math.max(1, S.uses | 0);
   return {
-    kind: 'stop', icon: S.pain ? '片' : '带', name: S.name, val: '×' + cnt, color: S.color,
+    kind: 'stop', icon: S.pain ? '片' : (S.layers > 1 ? '绞' : '带'), name: S.name, val: '×' + cnt, color: S.color,
     tier: 'supply', stop: S === STOPS[id] ? id : 'bandage', n: cnt,
     note: S.pain ? ('止痛 ' + S.pain + 's · ' + S.sec + 's') : (S.layers > 1 ? '止全部流血' : '止 1 层流血'),
   };
@@ -8757,7 +9004,8 @@ function makeBulletItem(cal, lv, n) {
   const cnt = Math.max(1, Math.round(n));
   return {
     kind: 'bullet', cal, lv, n: cnt,
-    icon: '弹', name: C.short + ' ' + T.name, val: '×' + cnt + ' 发',
+    icon: C.tag || '弹',                    // 图标=口径短标签，扫一眼就知道是什么弹
+    name: C.short + ' ' + T.name, val: '×' + cnt + ' 发',
     color: T.color, tier: AMMO_TIER_Q[lv] || 'common',
     note: T.grade + ' · ' + penTableText(lv),
   };
@@ -8847,6 +9095,14 @@ function rollContainer(kind) {
   const items = [];
   const addRelic = (bob) => items.push(makeRelicItem(rollRelicOf(pickWeighted(relicWeights(bob)))));
   const addMod = (bob) => { const mid = rollModOf(pickWeighted(modWeights(bob))); if (mid) items.push(makeModItem(mid)); };
+  /* 主题收集品：按类别过滤品质池子（类别里该品质缺货逐层放宽，见 rollCatRelic）。
+     mythChance：大红直抽概率 —— 主题箱品质 bob 压得低，大红几乎全靠这一抽，
+     统一压得比保险柜（bob 卷满约 2.8%/件）低。 */
+  const addCatRelic = (cat, bob, mythChance) => {
+    if (mythChance && Math.random() < mythChance) { items.push(makeRelicItem(rollCatRelic('myth', cat))); return; }
+    const w = relicWeights(bob).map(([k, v]) => [k, k === 'myth' ? 0 : v]);
+    items.push(makeRelicItem(rollCatRelic(pickWeighted(w), cat)));
+  };
 
   switch (C.id) {
     /* 补给箱：什么都有一点，什么都不多 */
@@ -8869,6 +9125,7 @@ function rollContainer(kind) {
       for (let i = 0; i < rows; i++) items.push(rollBulletDrop(i === 0 ? 1.25 : 0.9));
       if (Math.random() < (isSecret() ? 0.16 : 0.08)) items.push(rollArmorDrop(0));
       if (Math.random() < 0.10) items.push(makeMedItem(rollMedDropId(false)));
+      if (Math.random() < 0.08) addCatRelic('mil', -0.6, 0);   // 偶尔压着一件军械收集品
       break;
     }
     /* 医疗箱：一箱药，偶尔压着一件货 */
@@ -8881,7 +9138,8 @@ function rollContainer(kind) {
         const r = Math.random();
         items.push(makeSurgItem(r < 0.74 ? 'surg_simple' : (r < 0.96 ? 'surg_tactical' : 'surg_dek')));
       }
-      if (Math.random() < 0.26) addRelic(-0.35);
+      /* 医疗主题收集品：绷带 / 血浆 / 器械箱，大红 1%（低于保险柜） */
+      if (Math.random() < 0.45) addCatRelic('med', -0.3, 0.010);
       if (Math.random() < 0.10) items.push(rollBulletDrop(0.7));
       break;
     }
@@ -8901,6 +9159,22 @@ function rollContainer(kind) {
       if (Math.random() < 0.15) items.push(makeMedItem(rollMedDropId(false)));
       if (Math.random() < (isSecret() ? 0.32 : 0.20)) items.push(rollArmorDrop(0.6));
       if (Math.random() < 0.10) items.push(makeGearItem(pickGear()));
+      /* 军械主题收集品：弹链 / 枪管 / 军械清单，大红 1.2%（低于保险柜） */
+      if (Math.random() < 0.30) addCatRelic('mil', -0.4, 0.012);
+      break;
+    }
+    /* 文件柜：情报类收集品的家 —— 账本 / 图纸 / 密钥，翻得不慢不快、动静小 */
+    case 'docs': {
+      for (let i = 0; i < randInt(C.n[0], C.n[1]); i++) addCatRelic('intel', -0.2, 0.010);
+      if (Math.random() < 0.35) addCatRelic('intel', 0.3, 0);
+      if (Math.random() < 0.12) items.push(rollBulletDrop(0.6));
+      if (Math.random() < 0.10) addMod(0.3);
+      break;
+    }
+    /* 陈列柜：贵重品专柜 —— 珠宝古董硬通货，翻开动静大、大红 1.5% 仍低于保险柜 */
+    case 'lux': {
+      for (let i = 0; i < randInt(C.n[0], C.n[1]); i++) addCatRelic('val', 0, 0.015);
+      if (Math.random() < 0.40) addCatRelic('val', 0.6, 0);
       break;
     }
     /* 保险柜：慢得离谱，但品质卷得最高 */
@@ -8976,6 +9250,17 @@ function rollRelicOf(q) {
   if (!pool.length) pool = RELIC_IDS.filter(id => RELICS[id].q === q);   // 兜底
   if (!pool.length) return 'shell';
   return pickWeighted(pool.map(id => [id, RELIC_RARITY[id] || 1]));
+}
+
+/* 在某品质 + 主题类别里抽收集品：类别池先按产地过滤，缺货放宽产地，
+   再缺货退回该品质全量池（rollRelicOf 自己还有最后一层兜底）。 */
+function rollCatRelic(q, cat) {
+  const z = lootZone();
+  const pool = RELIC_IDS.filter(id => RELICS[id].q === q && relicCat(id) === cat && (!RELICS[id].z || RELICS[id].z === z));
+  if (pool.length) return pickWeighted(pool.map(id => [id, RELIC_RARITY[id] || 1]));
+  const pool2 = RELIC_IDS.filter(id => RELICS[id].q === q && relicCat(id) === cat);
+  if (pool2.length) return pickWeighted(pool2.map(id => [id, RELIC_RARITY[id] || 1]));
+  return rollRelicOf(q);
 }
 
 /* 收集品 → 战利品面板行 */
@@ -9165,7 +9450,11 @@ function cellToLootItem(c) {
            val: '剩 ' + Math.round(c.left) + '/' + R.dur, color: R.color, tier: 'supply',
            note: '修 ' + R.capLv + ' 级以内护甲' };
   }
-  else if (c.t === 'stop') it = makeStopItem(c.id);
+  else if (c.t === 'stop') {
+    it = makeStopItem(c.id);
+    it.n = stopUnits(c);                     // 剩几片就报几片（满瓶才是表里的 uses）
+    it.val = '×' + it.n;
+  }
   else if (c.t === 'surg') {
     it = makeSurgItem(c.id);
     it.uses = c.uses;
@@ -9178,7 +9467,7 @@ function cellToLootItem(c) {
   else if (c.t === 'mod') it = makeModItem(c.id);
   else if (c.t === 'gear' && GEAR[c.key]) {
     const g = GEAR[c.key];
-    it = { kind: 'gear', gear: c.key, name: g.name, icon: g.kind === 'rig' ? '弹' : '背',
+    it = { kind: 'gear', gear: c.key, name: g.name, icon: g.kind === 'rig' ? '挂' : '背',
            color: g.color || '#ffb08a', tier: 'common',
            val: g.kind === 'rig' ? '弹挂' : '背包' };
   }
@@ -9249,9 +9538,9 @@ function pileSearchInteract() {
   if (!items.length) return false;
   const total = layoutLoot(items, 0);       // 空地上的东西不用「搜」：面板一开全部直接可拿
   G.lootPanel = { items, t: 0, shown: 0, taken: 0, closeT: 0, crate: near[0].p, total,
-    col: { name: '地面物资', en: 'GROUND PILE', color: '#8ef2ff', dim: 'rgba(142,242,255,' },
+    col: { name: '地面物资', en: 'GROUND PILE', color: '#e6e0c9', dim: 'rgba(142,242,255,' },
     again: true, sel: 0, pile: true };
-  popup(near[0].p.x, near[0].p.y - 40, '搜 地面物资 ×' + items.length, '#8ef2ff', 12);
+  popup(near[0].p.x, near[0].p.y - 40, '搜 地面物资 ×' + items.length, '#e6e0c9', 12);
   Sfx.loot();
   return true;
 }
@@ -9616,6 +9905,17 @@ function renderLootEquipSlots() {
   for (const kind of ['rig', 'pack']) gear.appendChild(pkBuildGearSlot(kind, lootRender, lootPlaceGear(kind)));
 }
 
+/* 1×1 格子压在图标下面的短名：药品 / 止血 / 手术 / 甲修各取表里的 short。
+   弹药不用 —— 它的图标本来就是口径标签（5.45 / 9×19 …） */
+function lootShortName(it) {
+  if (!it) return '';
+  if (it.kind === 'med') return (MEDKITS[it.med] || MEDKITS[STARTER_MEDKIT]).short;
+  if (it.kind === 'stop') return (STOPS[it.stop] || STOPS.bandage).short;
+  if (it.kind === 'surg') return (SURGERIES[it.surg] || SURGERIES.surg_simple).short;
+  if (it.kind === 'repair') return (REPAIRS[it.repair] || REPAIRS.repair_b).short;
+  return '';
+}
+
 function lootRender() {
   const L = G.lootPanel;
   const ui = $('loot');
@@ -9684,17 +9984,44 @@ function lootRender() {
       continue;
     }
     const sel = L.items[L.sel] === e.it;
-    el.className = 'lo-cell bcell ready' + (sel ? ' sel' : '');
+    el.className = 'lo-cell bcell ready' + (sel ? ' sel' : '') +
+      (e.it.kind === 'relic' || e.it.kind === 'mod' ? ' relic-txt' : '');
     el.style.gridColumn = (e.col + 1) + ' / span ' + e.w;
     el.style.gridRow = (e.row + 1) + ' / span ' + e.h;
     if (e.w > 1) el.style.width = 'calc(' + e.w + ' * var(--bcell) + ' + ((e.w - 1) * 2) + 'px)';
     if (e.h > 1) el.style.height = 'calc(' + e.h + ' * var(--bcell) + ' + ((e.h - 1) * 2) + 'px)';
     const shp = e.cell ? shapeOf(e.cell, LOOT_BOX_COLS) : [1, 1];
     const sub = e.cell ? cellSub(e.cell) : '';     // 价格 / 耐久 / 口径等信息行（收集品这里是 ¥ 价格）
-    el.title = e.it.name + (sub ? ' · ' + sub : '') + ' · 占 ' + shp[0] + '×' + shp[1];
-    let html = '<span class="ic" style="color:' + (e.it.color || '#cfe8f5') + '">' + (e.it.icon || '?') + '</span>';
-    if (e.w > 1 || e.h > 1) html += '<span class="nm">' + e.it.name + '</span>' +
-      (sub ? '<span class="sub">' + sub + '</span>' : '');
+    /* 1×1 的格子：弹药 / 药品 / 止血在右下角补数量角标。
+       非弹药一律**不画那个占满格子的图标大字**（一个「医」「盘」读不出是什么），
+       只留名称顶在中间 —— 有表里的短名就用短名（强效针 / 绷带 / 加密硬盘），
+       没有就用名称（超过 8 字截断，全名看悬停）。弹药例外：它的图标本来就是口径标签
+       （5.45 / 9×19），字号已经按长度降过，画出来是信息不是噪音。 */
+    const one = e.w === 1 && e.h === 1;
+    const qn = e.it.n | 0;
+    const cnt = one && (e.it.kind === 'bullet' || e.it.kind === 'med' || e.it.kind === 'stop') && qn > 1 ? qn : 0;
+    const shortNm = one ? lootShortName(e.it) : '';
+    /* 收集品哪怕占多格也一样是「一个大字 + 名字」没信息量，一并去掉大字 */
+    const textOnly = e.it.kind === 'relic' || e.it.kind === 'med' || e.it.kind === 'stop' ||
+      e.it.kind === 'surg' || e.it.kind === 'repair' ||
+      e.it.kind === 'mod' || e.it.kind === 'weapon';
+    const soloName = !textOnly ? '' :
+      (one ? (shortNm || String(e.it.name || '').slice(0, 8)) : String(e.it.name || ''));
+    el.title = e.it.name + (sub ? ' · ' + sub : '') + (cnt ? ' ×' + cnt : '') + ' · 占 ' + shp[0] + '×' + shp[1];
+    let html;
+    if (soloName) {
+      /* 收集品**不管占几格都要报价格** —— 一格的工牌 / 钥匙卡只剩个名字，玩家没法判断值不值得带走。
+         别的 1×1（药 / 绷带）不放信息行：它们的信息是角标和短名，塞三行会顶出格子。 */
+      html = '<span class="nm solo" style="color:' + (e.it.color || '#d6d0b8') + '">' + soloName + '</span>' +
+        (sub && (e.it.kind !== 'med' && e.it.kind !== 'stop' && e.it.kind !== 'surg' && e.it.kind !== 'repair' || !one)
+          ? '<span class="sub">' + (e.it.kind === 'mod' && one ? sub.split(' · ')[0] : sub) + '</span>' : '');
+      if (cnt) html += '<span class="ct">' + cnt + '</span>';
+    } else {
+      html = '<span class="ic' + icSizeCls(e.it.icon || '?') + '" style="color:' + (e.it.color || '#cfe8f5') + '">' + (e.it.icon || '?') + '</span>';
+      if (e.w > 1 || e.h > 1) html += '<span class="nm">' + e.it.name + '</span>' +
+        (sub ? '<span class="sub">' + sub + '</span>' : '');
+      else if (cnt) html += '<span class="ct">' + cnt + '</span>';
+    }
     el.innerHTML = html;
     el.__pkPlace = canStore ? lootDepositPlace : null;   // 拖东西松在容器格上 = 存进箱子
     el.addEventListener('pointerdown', () => {      // 点一下就选中它（F 收的就是这件）
@@ -9793,7 +10120,7 @@ function updateExtract(dt) {
     if (Math.random() < 0.35) {
       addParticle(P.x + rand(-70, 70), P.y + rand(-70, 70), {
         vx: 0, vy: rand(-60, -120), life: 0.8, r: rand(2, 4),
-        color: '#46e08a', drag: 0.96, glow: true,
+        color: '#74a35c', drag: 0.96, glow: true,
       });
     }
     if (G.extractT >= hold) {

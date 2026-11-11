@@ -65,7 +65,7 @@ setTimeout(() => {
     })()`));
     T('分档进度统计', E(`(function(){
       var p = codexProgress();
-      return p.common.total === 107 && p.myth.total === 29 && p.common.have >= 1;
+      return p.common.total === 111 && p.myth.total === 29 && p.common.have >= 1;
     })()`));
     T('未集齐不发奖励', E(`(function(){
       var c0 = SAVE.credits;
