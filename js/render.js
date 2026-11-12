@@ -5936,6 +5936,7 @@ const FOG = {
   seen: null,        // 是否探索过
   vis: null,         // 本帧是否可见
   block: null,       // 静态墙体遮挡
+  rayD: null,        // 每根视线的光照终点距离（供玩家照明层做墙遮挡）
   noise: null,       // 雾面纹理
   cv: null, cx: null, img: null,
   soft: null,        // 柔化用的 Float32 缓冲（复用，别每帧 new）
@@ -5978,6 +5979,8 @@ function initFog() {
   FOG.seen = new Uint8Array(n);
   FOG.vis = new Uint8Array(n);
   FOG.block = new Uint8Array(n);
+  FOG.rayD = new Float32Array(FOG_RAYS);
+  FOG.alphaF = new Float32Array(n).fill(FOG_A_DARK * 255);   // 时间平滑缓冲（0~255 尺度，与像素 alpha 一致）
   FOG.timer = 0;
   FOG.lastX = -99999;
   FOG.lastY = -99999;
@@ -6014,7 +6017,23 @@ function initFog() {
   FOG.img = FOG.cx.createImageData(FOG.cols, FOG.rows);
 
   // 把障碍物栅格化成遮挡掩码，供射线 O(1) 查询
+  rebuildFogBlock();
+
+  FOG.ready = true;
+  updateFog(1);
+}
+
+/* 重建雾的静态遮挡数据：block（栅格脚印，O(1) 粗判）+ cellObs（每格挂真实障碍矩形）。
+   只用脚印会让阴影贴着「格边界」而不是墙皮 —— 格脚印比墙体最多外溢一圈格宽，
+   玩家走近/离开墙时阴影整片跳 26px（视觉上的抖动）。所以粗判命中后
+   还要拿 cellObs 里的真实矩形做精确求交，阴影边缘精确贴墙皮、随玩家连续移动。
+   障碍物在局内不变，只有 initFog 和测试里改完障碍后需要手动调一次。 */
+function rebuildFogBlock() {
   const c = FOG.cell;
+  const n = FOG.cols * FOG.rows;
+  if (!FOG.cellObs || FOG.cellObs.length !== n) FOG.cellObs = new Array(n);
+  FOG.block.fill(0);
+  for (let i = 0; i < n; i++) FOG.cellObs[i] = null;
   for (const o of G.obstacles) {
     const c0 = Math.floor(o.x / c), c1 = Math.floor((o.x + o.w) / c);
     const r0 = Math.floor(o.y / c), r1 = Math.floor((o.y + o.h) / c);
@@ -6023,13 +6042,32 @@ function initFog() {
       const base = r * FOG.cols;
       for (let k = c0; k <= c1; k++) {
         if (k < 0 || k >= FOG.cols) continue;
-        FOG.block[base + k] = 1;
+        const idx = base + k;
+        FOG.block[idx] = 1;
+        if (!FOG.cellObs[idx]) FOG.cellObs[idx] = [o]; else FOG.cellObs[idx].push(o);
       }
     }
   }
+}
 
-  FOG.ready = true;
-  updateFog(1);
+/* 射线-矩形精确求交（slab 法）：返回沿单位方向 (dx,dy) 的首个相交距离，
+   不相交或矩形在起点身后返回 Infinity。起点在矩形内部时返回 0。 */
+function rayRectT(ox, oy, dx, dy, o) {
+  let tmin = -Infinity, tmax = Infinity;
+  if (dx > 1e-9 || dx < -1e-9) {
+    let t1 = (o.x - ox) / dx, t2 = (o.x + o.w - ox) / dx;
+    if (t1 > t2) { const tt = t1; t1 = t2; t2 = tt; }
+    if (t1 > tmin) tmin = t1;
+    if (t2 < tmax) tmax = t2;
+  } else if (ox < o.x || ox > o.x + o.w) return Infinity;
+  if (dy > 1e-9 || dy < -1e-9) {
+    let t1 = (o.y - oy) / dy, t2 = (o.y + o.h - oy) / dy;
+    if (t1 > t2) { const tt = t1; t1 = t2; t2 = tt; }
+    if (t1 > tmin) tmin = t1;
+    if (t2 < tmax) tmax = t2;
+  } else if (oy < o.y || oy > o.y + o.h) return Infinity;
+  if (tmax < Math.max(tmin, 0)) return Infinity;
+  return tmin < 0 ? 0 : tmin;
 }
 
 /* 视线：从玩家位置向前方扇形投射射线，撞墙即停。
@@ -6037,8 +6075,8 @@ function initFog() {
 function updateFog(dt) {
   if (!FOG.ready) return;
   const mdx = P.x - FOG.lastX, mdy = P.y - FOG.lastY;
-  const moved = mdx * mdx + mdy * mdy > 900;   // 位移超过 30px 立刻刷新，避免冲刺时视野掉队
-  const turned = Math.abs(angleDiff(P.aim, FOG.lastAim || 0)) > 0.03;  // 转身立刻刷新
+  const moved = mdx * mdx + mdy * mdy > 64;    // 位移超过 8px 就刷新：阈值太大，阴影边缘会攒着一步跳（抖动）
+  const turned = Math.abs(angleDiff(P.aim, FOG.lastAim || 0)) > 0.008;  // 转身立刻刷新（0.5° 内不攒步）
   const adsChanged = Math.abs((P.ads || 0) - (FOG.lastAds || 0)) > 0.02;   // 开镜/收镜也要重算
   const pingN = G.scanPings ? G.scanPings.length : 0;
   const pingChanged = pingN !== (FOG.pingN | 0);   // 侦察视野开了/到期：强制重算一次
@@ -6049,7 +6087,7 @@ function updateFog(dt) {
     (ml && ((ml.x - (FOG.mlX || 0)) ** 2 + (ml.y - (FOG.mlY || 0)) ** 2 > 900));
   FOG.timer -= dt;
   if (FOG.timer > 0 && !moved && !turned && !adsChanged && !pingChanged && !mlChanged) return;
-  FOG.timer = 0.04;
+  FOG.timer = 0.025;   // 40Hz：边界推进的步进间隔更短，配合时间平滑看不出离散重算
   FOG.lastX = P.x;
   FOG.lastY = P.y;
   FOG.lastAim = P.aim;
@@ -6082,31 +6120,55 @@ function updateFog(dt) {
   const maxR = dyn.light;
   const cosEdge = dyn.cosEdge;
   const adx = Math.cos(P.aim), ady = Math.sin(P.aim);   // 正面方向
+  const rayD = FOG.rayD;                                // 每根射线的光照终点（撞墙距离）
 
+  // 遮挡判定 = 栅格脚印粗筛 + cellObs 真实矩形精确求交（见 rebuildFogBlock）。
+  // 玩家踩着的格如果只是墙脚印外溢、射线实际没碰到墙，就继续往前走 ——
+  // 不再需要「自己格豁免」这种会随跨格开关而跳变的补丁。
   for (let a = 0; a < FOG_RAYS; a++) {
     const ang = a * TAU / FOG_RAYS;
     const ca = Math.cos(ang), sa = Math.sin(ang);
     // 射线方向与正面的夹角：超出余光范围就不给光（背后彻底不照亮）
     const lit = (ca * adx + sa * ady) >= cosEdge;
+    // 光照遮挡多边形用的终点距离：撞墙就精确停在墙皮上，没撞到就是满视距。
+    // drawPlayerLight 拿这组数据裁剪加法光锥，光就不会越过墙照亮墙后。
+    let dEnd = maxR;
     for (let r = 0; r <= maxR; r += FOG_STEP) {
       const x = px + ca * r, y = py + sa * r;
-      if (x < 0 || y < 0 || x >= WORLD.w || y >= WORLD.h) break;
+      if (x < 0 || y < 0 || x >= WORLD.w || y >= WORLD.h) { dEnd = r; break; }
       const ci = (x / cell) | 0, ri = (y / cell) | 0;
       const idx = ri * cols + ci;
-      // 起点附近不做遮挡判定，避免贴墙站立时视野全黑
-      if (block[idx] && r > cell + 14) {
+      if (block[idx]) {
+        const obs = FOG.cellObs[idx];
+        let hitT = Infinity;
+        if (obs) for (let oi = 0; oi < obs.length; oi++) {
+          const t = rayRectT(px, py, ca, sa, obs[oi]);
+          if (t < hitT) hitT = t;
+        }
+        if (hitT === Infinity) {          // 脚印外溢：这格没真挡住射线，继续走
+          if (lit) vis[idx] = 1;
+          seen[idx] = 1;
+          continue;
+        }
         if (lit) { vis[idx] = 1; seen[idx] = 1; }   // 墙本身是被照亮的，墙后才是阴影
+        dEnd = Math.min(hitT + 2, maxR);            // 光贴到墙面，+2px 防止与墙皮重合处露缝
         break;
       }
       if (lit) vis[idx] = 1;
       seen[idx] = 1;    // 视线扫过的范围都算「去过」，转身回来只剩记忆轮廓
     }
+    rayD[a] = dEnd;
   }
 
   // 玩家脚下的贴身感知圈（正面半圆）：窄巷里准星怼着墙时，至少能看清身周一圈。
-  // 每格做一次视线步进：隔着墙的格子不点亮（墙本身照常亮），修掉「面对墙却看见墙后面」的视野穿透。
+  // 隔墙判定用真实矩形精确检测：以前按栅格步进，墙脚印外溢会把墙前的格子也误判成隔墙。
   const pc = (px / cell) | 0, pr = (py / cell) | 0;
   const nearC = Math.ceil(FOG_NEAR / cell);
+  const nearObs = [];
+  for (const o of G.obstacles) {
+    if (px > o.x - FOG_NEAR && px < o.x + o.w + FOG_NEAR &&
+        py > o.y - FOG_NEAR && py < o.y + o.h + FOG_NEAR) nearObs.push(o);
+  }
   for (let r = pr - nearC; r <= pr + nearC; r++) {
     if (r < 0 || r >= rows) continue;
     for (let k = pc - nearC; k <= pc + nearC; k++) {
@@ -6117,16 +6179,13 @@ function updateFog(dt) {
       if (d2 > FOG_NEAR * FOG_NEAR) continue;
       const idx = r * cols + k;
       if (!block[idx]) {
-        // 目标格不是墙：从玩家到格心步进，中途撞到别的墙格 = 隔墙，不给光
-        const dist = Math.sqrt(d2);
-        const steps = Math.max(1, Math.ceil(dist / (cell * 0.45)));
-        let clear = true;
-        for (let s = 1; s < steps; s++) {
-          const t = s / steps;
-          const sx = px + dx * t, sy = py + dy * t;
-          if (block[((sy / cell) | 0) * cols + ((sx / cell) | 0)]) { clear = false; break; }
+        // 目标格不是墙：玩家到格心的线段撞到真实障碍矩形 = 隔墙，不给光
+        const cx = px + dx, cy = py + dy;
+        let blocked = false;
+        for (let oi = 0; oi < nearObs.length; oi++) {
+          if (segmentHitsRect(px, py, cx, cy, nearObs[oi])) { blocked = true; break; }
         }
-        if (!clear) continue;
+        if (blocked) continue;
       }
       vis[idx] = 1;
       seen[idx] = 1;
@@ -6181,6 +6240,10 @@ function paintFog() {
   const vis = FOG.vis, seen = FOG.seen;
   const px = P.x, py = P.y;
   const dyn = FOG.dyn;
+  let alphaF = FOG.alphaF;                          // 时间平滑缓冲（initFog 分配，0~255 尺度）
+  if (!alphaF || alphaF.length !== cols * rows) {
+    alphaF = FOG.alphaF = new Float32Array(cols * rows).fill(FOG_A_DARK * 255);
+  }
   const inner = dyn.light * 0.35, outer = dyn.light;
   const noise = FOG.noise;
   const adx = Math.cos(P.aim), ady = Math.sin(P.aim);
@@ -6232,6 +6295,15 @@ function paintFog() {
     }
   }
   fogSoften();
+  /* 时间平滑放在空间柔化之后：先柔化得到一整条软边界，再对整场做逐帧插值。
+     以前是先对每格独立平滑再柔化 —— 每格各自淡入淡出、26px 一格先后错开，
+     靠近墙时边界会「呼吸」式抖动；现在边界作为整体滑移，看不出单格的翻转。 */
+  for (let i = 0, n2 = cols * rows; i < n2; i++) {
+    const o4 = i * 4 + 3;
+    const s = alphaF[i] + (d[o4] - alphaF[i]) * 0.2;
+    alphaF[i] = s;
+    d[o4] = s;
+  }
   FOG.cx.putImageData(FOG.img, 0, 0);
 }
 
@@ -6239,13 +6311,16 @@ function paintFog() {
    栅格是 26 世界单位一格 —— 直接放大后边界就是一条 26px 宽的硬阶梯，
    特写时能明显看出「方格子」。这里对 alpha 通道做 1-2-1 可分离平滑，
    跑两轮（等效 σ≈1.8 格 ≈ 47 世界单位），边界变成 3~4 格宽的渐变。
-   纯 JS 循环 4×cols×rows ≈ 3.4 万次，不进绘制管线，成本可忽略。 */
+   纯 JS 循环 4×cols×rows ≈ 3.4 万次，不进绘制管线，成本可忽略。
+   墙格是硬边界：墙格本身不柔化，邻格遇墙用自身值顶上 ——
+   否则亮区的低 alpha 会顺着卷积核抹过墙，玩家就「看见」了墙后面的地板。 */
 function fogSoften() {
   const cols = FOG.cols, rows = FOG.rows;
   if (cols < 3 || rows < 3) return;
   const d = FOG.img.data;
   const n = cols * rows;
   const tmp = (FOG.soft && FOG.soft.length === n) ? FOG.soft : (FOG.soft = new Float32Array(n));
+  const block = FOG.block;
 
   for (let pass = 0; pass < 2; pass++) {
     // 横
@@ -6253,9 +6328,11 @@ function fogSoften() {
       const b = r * cols;
       for (let c = 0; c < cols; c++) {
         const i = b + c;
-        const l = c > 0 ? d[(i - 1) * 4 + 3] : d[i * 4 + 3];
-        const rr = c < cols - 1 ? d[(i + 1) * 4 + 3] : d[i * 4 + 3];
-        tmp[i] = (l + 2 * d[i * 4 + 3] + rr) * 0.25;
+        const a0 = d[i * 4 + 3];
+        if (block[i]) { tmp[i] = a0; continue; }
+        const l = c > 0 && !block[i - 1] ? d[(i - 1) * 4 + 3] : a0;
+        const rr = c < cols - 1 && !block[i + 1] ? d[(i + 1) * 4 + 3] : a0;
+        tmp[i] = (l + 2 * a0 + rr) * 0.25;
       }
     }
     // 竖
@@ -6263,9 +6340,11 @@ function fogSoften() {
       const b = r * cols;
       for (let c = 0; c < cols; c++) {
         const i = b + c;
-        const u = r > 0 ? tmp[i - cols] : tmp[i];
-        const dn = r < rows - 1 ? tmp[i + cols] : tmp[i];
-        d[i * 4 + 3] = (u + 2 * tmp[i] + dn) * 0.25;
+        const a0 = tmp[i];
+        if (block[i]) { d[i * 4 + 3] = a0; continue; }
+        const u = r > 0 && !block[i - cols] ? tmp[i - cols] : a0;
+        const dn = r < rows - 1 && !block[i + cols] ? tmp[i + cols] : a0;
+        d[i * 4 + 3] = (u + 2 * a0 + dn) * 0.25;
       }
     }
   }
@@ -6331,6 +6410,7 @@ function fogSeenAt(x, y) {
 
 function drawPlayerLight() {
   // 玩家自带的照明：只照正面扇形，背后完全不发光
+  let clipped = false;                          // 是否叠了墙遮挡裁剪（多一层 save 要多一层 restore）
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
 
@@ -6344,6 +6424,23 @@ function drawPlayerLight() {
   ctx.closePath();
   ctx.clip();
 
+  // 墙遮挡：雾射线记录了每根视线的撞墙距离，光照多边形贴着墙截止。
+  // 没有这一层裁剪，加法光会透过墙把墙后面的地板「烘」出轮廓（穿墙漏光）。
+  if (FOG.ready && FOG.rayD) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(P.x, P.y);
+    for (let a = 0; a <= FOG_RAYS; a++) {
+      const i = a % FOG_RAYS;
+      const d = FOG.rayD[i];
+      const ang = i * TAU / FOG_RAYS;
+      ctx.lineTo(P.x + Math.cos(ang) * d, P.y + Math.sin(ang) * d);
+    }
+    ctx.closePath();
+    ctx.clip();
+    clipped = true;
+  }
+
   const g = ctx.createRadialGradient(P.x, P.y, 0, P.x, P.y, lightR);
   g.addColorStop(0, 'rgba(240,232,200,0.30)');
   g.addColorStop(0.42, 'rgba(226,216,180,0.15)');
@@ -6354,6 +6451,7 @@ function drawPlayerLight() {
   ctx.arc(P.x, P.y, lightR, 0, TAU);
   ctx.fill();
 
+  if (clipped) ctx.restore();   // 摘掉墙遮挡裁剪
   ctx.restore();
 }
 
