@@ -82,7 +82,7 @@ setTimeout(() => {
     T('左侧（面向东的北边）：pan 为负', o.left.pan < -0.5 && !o.left.behind);
     T('右侧（面向东的南边）：pan 为正', o.right.pan > 0.5 && !o.right.behind);
     T('正后方：behind=true 且声像居中', o.back.behind === true && Math.abs(o.back.pan) < 0.01);
-    T('听力半径 460 之外听不见', o.far === null && o.ear === 460);
+    T('听力半径 520 之外听不见', o.far === null && o.ear === 520);
     T('重甲脚步音量 ×1.8', o.heavyRatio === 1.8);
     T('战斗状态脚步更响', o.combatLouder);
     T('距离衰减：近响远轻', o.nearLouder);

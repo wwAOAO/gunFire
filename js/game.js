@@ -7143,19 +7143,22 @@ function breakShield(e) {
 
 /* ── 敌人脚步声（3D 方位）──
    以玩家准星朝向为「正前」：左右决定声像 pan，身后套低通闷掉高频。
-   听力半径 460 世界像素；重甲（brute / boss）脚步又沉又响。 */
-const FOOTSTEP_EAR = 460;
+   听力半径 520 世界像素；重甲（brute / boss）脚步又沉又响。
+   音量：本体 0.18 × 距离曲线。曲线曾经是 0.10 与 ^1.35，300px 处只剩 0.024
+   （枪声的 1/12），巡逻兵几乎全靠到脸上才听得见 —— 现在 300px 约 0.067，
+   400px 还有 0.033，仍然远低于枪声，但耳朵能提前拿到「有人在附近转」这条信息。 */
+const FOOTSTEP_EAR = 520;
 function footPanVol(e, heavy) {
   const ear = FOOTSTEP_EAR * (P.helmetHear || 1);       // 拾音范围：头盔把听力圈放大 / 收窄
   const dx = e.x - P.x, dy = e.y - P.y;
   const dist = Math.hypot(dx, dy);
   if (dist > ear || dist < 14) return null;             // 太远听不见；贴脸的近战声归近战音效管
   const rel = Math.atan2(dy, dx) - P.aim;               // 相对玩家朝向的方位角
-  const k = Math.pow(1 - dist / ear, 1.35);             // 距离衰减（曲线偏近，近处更清晰）
+  const k = Math.pow(1 - dist / ear, 1.15);             // 距离衰减（中远段别掉太狠，巡逻才听得见）
   return {
     pan: clamp(Math.sin(rel) * 0.9, -1, 1),
     behind: Math.cos(rel) < 0,
-    vol: 0.10 * k * (e.state === 'combat' ? 1.15 : 1) * (heavy ? 1.8 : 1),
+    vol: 0.18 * k * (e.state === 'combat' ? 1.15 : 1) * (heavy ? 1.8 : 1),
   };
 }
 function enemyFootstep(e) {

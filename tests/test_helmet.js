@@ -83,7 +83,7 @@ setTimeout(() => {
     T('阵亡结算丢头上这顶（件数减一 + 损失行）',
       /SAVE\.wornHelmet\) \{\s*const hid = SAVE\.wornHelmet;/.test(src) && /损失头盔/.test(src));
 
-    // ── 3. 拾音范围：听力半径 460 × 倍率 ──
+    // ── 3. 拾音范围：听力半径 520 × 倍率 ──
     const hear = w.eval(`(function(){
       var out = {};
       function probe(helmetId, dist) {
@@ -93,19 +93,19 @@ setTimeout(() => {
         e.x = 1000 + dist; e.y = 1000; e.state = 'patrol'; e.type = 'grunt';
         return { heard: !!footPanVol(e, false), mul: +P.helmetHear.toFixed(3) };
       }
-      out.plain = probe(null, 450);
-      out.plainFar = probe(null, 470);
-      out.mcNear = probe(4, 500);      // +20% → 552
-      out.mcFar = probe(4, 560);
-      out.motoNear = probe(2, 450);    // -5% → 437
-      out.motoFar = probe(2, 430);
-      out.cap = probe(1, 490);         // +10% → 506
+      out.plain = probe(null, 510);
+      out.plainFar = probe(null, 530);
+      out.mcNear = probe(4, 600);      // +20% → 624
+      out.mcFar = probe(4, 640);
+      out.motoNear = probe(2, 510);    // -5% → 494
+      out.motoFar = probe(2, 480);
+      out.cap = probe(1, 560);         // +10% → 572
       return out;
     })()`);
-    T('裸头：450px 听得到、470px 听不到（半径 460）', hear.plain.heard && !hear.plainFar.heard && hear.plain.mul === 1);
-    T('MC201 拾音 +20%：500px 听得到、560px 听不到（半径 552）', hear.mcNear.heard && !hear.mcFar.heard && hear.mcNear.mul === 1.2);
-    T('摩托盔 拾音 -5%：450px 听不到、430px 听得到（半径 437）', !hear.motoNear.heard && hear.motoFar.heard && hear.motoNear.mul === 0.95);
-    T('棒球帽 拾音 +10%：490px 听得到（半径 506）', hear.cap.heard && hear.cap.mul === 1.1);
+    T('裸头：510px 听得到、530px 听不到（半径 520）', hear.plain.heard && !hear.plainFar.heard && hear.plain.mul === 1);
+    T('MC201 拾音 +20%：600px 听得到、640px 听不到（半径 624）', hear.mcNear.heard && !hear.mcFar.heard && hear.mcNear.mul === 1.2);
+    T('摩托盔 拾音 -5%：510px 听不到、480px 听得到（半径 494）', !hear.motoNear.heard && hear.motoFar.heard && hear.motoNear.mul === 0.95);
+    T('棒球帽 拾音 +10%：560px 听得到（半径 572）', hear.cap.heard && hear.cap.mul === 1.1);
 
     // ── 4. 低级别子弹减伤 ──
     const dr = w.eval(`(function(){

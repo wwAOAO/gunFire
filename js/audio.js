@@ -208,7 +208,9 @@ const Sfx = {
   /* ── 3D 脚步：敌人方位声 ──
      pan：-1 左耳 / +1 右耳（以玩家准星朝向为「正前」算出来的声像）；
      behind：身后的脚步套低通把高频闷掉 —— 戴上耳机就能听出「这人在我后面」；
-     heavy：重甲敌人（ brute / boss ）降转速，声音又沉又慢。 */
+     heavy：重甲敌人（ brute / boss ）降转速，声音又沉又慢。
+     两层：上面那层是鞋底摩擦的噪声「唰」，下面补一口低频「咚」——
+     纯噪声全是高频，枪声一响就被盖掉；有了落地分量，混战里也能听出脚步。 */
   step3d(pan, vol, behind, heavy) {
     if (!this.ready || vol <= 0.004) return;
     const c = this.ctx, t = c.currentTime;
@@ -229,5 +231,9 @@ const Sfx = {
     }
     g.connect(this.master);
     src.start(t); src.stop(t + 0.11);
+
+    /* 落地分量：低频短促下滑，音量跟着本体走，重甲更低更长 */
+    const thump = heavy ? rand(70, 88) : rand(96, 118);
+    this.tone(thump, heavy ? 0.11 : 0.07, Math.min(0.12, vol * 0.42), 'sine', thump * 0.55);
   },
 };
