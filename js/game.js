@@ -1401,9 +1401,9 @@ function resetPlayer() {
     const cal = calOfWeapon(id);
     const src = ammoCellFor(cal);          // 弹挂/口袋里这个口径的弹药格
     const lv = src ? src.cell.lv : ammoPickOf(cal);
-    /* 请求整匣容量：drainReserve 只扣同弹级格子，多个同级格会挨个填进来 */
-    const inMag = src ? drainReserve(cal, WS.mag, src.cell.lv) : 0;
-    P.ammo[id] = { mag: inMag, tier: lv, cal };
+    /* 请求整匣容量：同级不够就近补别的弹级 —— rounds 记每发的弹级 */
+    const rounds = src ? drainReserve(cal, WS.mag, src.cell.lv) : [];
+    P.ammo[id] = { mag: rounds.length, tier: lv, cal, rounds };
   }
 
   /* 提醒：哪个口径一颗子弹都没有（弹匣 + 弹挂备弹都空） */
@@ -1453,7 +1453,7 @@ function currentAmmo() {
   if (!P.ammo[P.weapon]) {
     /* 没登记过的枪（理论上不会）当成空枪，绝不凭空发子弹 */
     const cal = calOfWeapon(P.weapon);
-    P.ammo[P.weapon] = { mag: 0, tier: ammoPickOf(cal), cal };
+    P.ammo[P.weapon] = { mag: 0, tier: ammoPickOf(cal), cal, rounds: [] };
   }
   return P.ammo[P.weapon];
 }
@@ -1518,12 +1518,13 @@ function addReserve(cal, n, lv) {
   }
   return n - left;
 }
-/* 扣备弹：只扣 preferLv 同弹级的格子 —— 弹匣纯级，不同弹级绝不混进同一个弹匣
-   （混进去也只能按枪上记的那一个 tier 结算，白亏白赚都说不清）。
-   弹匣打空想换弹种：finishReload 会先重挑弹级。返回实际扣到的发数。 */
+/* 扣备弹：返回**逐发弹级数组**（每发记自己的弹级）。
+   装填顺序：先扣 preferLv 同弹级的格子；同级不够就按离偏好弹级的远近逐级兜底 ——
+   弹匣允许混装，但优先补接近的那种（枪里是紫弹就先补金弹，不补修脚弹）。
+   每发各按各的弹级结算，价格与穿甲不再有「冒名顶替」的空间。 */
 function drainReserve(cal, n, preferLv) {
   let need = Math.max(0, Math.round(n));
-  let got = 0;
+  const taken = [];
   const grab = matchLv => {
     for (const arr of carryZones()) {
       for (let i = 0; i < arr.length; i++) {
@@ -1531,7 +1532,8 @@ function drainReserve(cal, n, preferLv) {
         if (c && c.t === 'ammo' && c.cal === cal && c.n > 0 &&
             (matchLv == null || c.lv === matchLv)) {
           const take = Math.min(c.n, need);
-          c.n -= take; got += take; need -= take;
+          for (let k = 0; k < take; k++) taken.push(c.lv);
+          c.n -= take; need -= take;
           if (c.n <= 0) arr[i] = null;       // 打空的格子腾出来
           if (need <= 0) return;
         }
@@ -1539,7 +1541,13 @@ function drainReserve(cal, n, preferLv) {
     }
   };
   grab(preferLv == null ? null : preferLv);
-  return got;
+  if (need > 0 && preferLv != null) {
+    for (let d = 1; d <= AMMO_LV_MAX && need > 0; d++) {
+      grab(preferLv - d);
+      if (need > 0) grab(preferLv + d);
+    }
+  } else if (need > 0) grab(null);
+  return taken;
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -2496,13 +2504,6 @@ function startReload() {
   const a = currentAmmo();
   const cal = a.cal || calOfWeapon(P.weapon);
   if (P.reloading > 0 || a.mag >= W.mag || reserveOf(cal) <= 0) return;
-  /* 弹匣纯级：枪里还有弹时只认同弹级备弹；同级弹没了就提示 ——
-     打空弹匣（或打完这匣）再按 R，才会按整备偏好就近换弹种 */
-  if (a.mag > 0 && reserveOfLv(cal, a.tier) <= 0) {
-    const T = ammoTier(a.tier);
-    popup(P.x, P.y - 56, '弹匣里是' + T.grade + '弹 · 备弹没有同级，打空可换弹种', T.color, 12);
-    return;
-  }
   P.burstLeft = 0;
   /* 手臂骨折时单手换弹，慢一截；止痛能压住 */
   P.reloading = W.reload * (armHurt() ? DEBUFF.armReload : 1);
@@ -2513,18 +2514,18 @@ function finishReload() {
   const W = weaponStats(P.weapon);
   const a = currentAmmo();
   const cal = a.cal || calOfWeapon(P.weapon);
-  /* 弹匣打空 = 可以换弹种：按整备偏好挑身上实际带着的最近弹级 */
+  if (!Array.isArray(a.rounds)) a.rounds = [];     // 老状态兜底
+  /* 装填偏好：弹匣打空按整备偏好就近挑；续装则对齐枪里正要打的那种 */
+  let prefer = a.tier;
   if (a.mag <= 0) {
     const lv = carriedTierOf(cal);
-    if (lv != null) a.tier = lv;
+    if (lv != null) { a.tier = lv; prefer = lv; }
+  } else if (a.rounds.length) {
+    prefer = a.rounds[0];
   }
-  const need = W.mag - a.mag;
-  const take = drainReserve(cal, need, a.tier);   // 只装同弹级：不够就半匣，不混
-  a.mag += take;
-  if (take <= 0 && a.mag < W.mag) {
-    const T = ammoTier(a.tier);
-    popup(P.x, P.y - 56, '备弹里没有' + T.grade + '弹', T.color, 12);
-  }
+  const got = drainReserve(cal, W.mag - a.mag, prefer);
+  a.rounds.push(...got);
+  a.mag = a.rounds.length;
 }
 
 /* 扣扳机：全自动按住就连，半自动每发都要重新按，点射一次打三发 */
@@ -2559,9 +2560,10 @@ function playerShoot() {
     return;
   }
 
+  if (!Array.isArray(a.rounds)) a.rounds = [];     // 老状态兜底
   a.mag--;
-  /* 这一发吃的是什么弹：弹级决定穿甲和肉伤倍率 */
-  const T = ammoTier(a.tier == null ? 1 : a.tier);
+  /* 这一发吃的是什么弹：弹匣逐发记录弹级，混装也各按各的结算 */
+  const T = ammoTier(a.rounds.length ? a.rounds.shift() : (a.tier == null ? 1 : a.tier));
   const calId = a.cal || calOfWeapon(P.weapon);
   /* 点射内的间隔很短，打完整轮才进入循环冷却 */
   P.fireCd = (P.burstLeft > 1) ? (W.burstGap || 0.06) : W.rate;

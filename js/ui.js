@@ -3644,7 +3644,8 @@ function groundGunTake(c, gx, gy) {
   if (P.curSlot === target) P.weapon = wid;      // 换的就是手里这把：枪口立刻跟上
   if (!P.owned[wid]) {
     P.owned[wid] = true;
-    P.ammo[wid] = { mag: weaponStats(wid).mag, tier: ammoPickOf(calOfWeapon(wid)), cal: calOfWeapon(wid) };
+    P.ammo[wid] = { mag: weaponStats(wid).mag, tier: ammoPickOf(calOfWeapon(wid)), cal: calOfWeapon(wid),
+      rounds: Array(weaponStats(wid).mag).fill(ammoPickOf(calOfWeapon(wid))) };
     addReserve(calOfWeapon(wid), weaponStats(wid).mag * 2, P.ammo[wid].tier);   // 缴获自带两个弹匣
   }
   P.gunLoot[wid] = (P.gunLoot[wid] | 0) + 1;     // 缴获台账：撤离时仓库 +1 把（新枪、同款都算）
@@ -3881,7 +3882,8 @@ function pkPlaceInto(arr, i, zone) {
     if (cell.t === 'gun' && WEAPONS[cell.id]) {
       if (!P.owned[cell.id]) {
         P.owned[cell.id] = true;
-        P.ammo[cell.id] = { mag: weaponStats(cell.id).mag, tier: ammoPickOf(calOfWeapon(cell.id)), cal: calOfWeapon(cell.id) };
+        P.ammo[cell.id] = { mag: weaponStats(cell.id).mag, tier: ammoPickOf(calOfWeapon(cell.id)), cal: calOfWeapon(cell.id),
+          rounds: Array(weaponStats(cell.id).mag).fill(ammoPickOf(calOfWeapon(cell.id))) };
       }
       P.gunLoot[cell.id] = (P.gunLoot[cell.id] | 0) + 1;
     } else if (cell.t === 'gear' && GEAR[cell.key]) {
@@ -4071,7 +4073,8 @@ function pkBuildGunSlot(sl, refresh) {            // 武器槽：拖枪装上（
       if (WEAPONS[wid]) {
         if (!P.owned[wid]) {
           P.owned[wid] = true;
-          P.ammo[wid] = { mag: weaponStats(wid).mag, tier: ammoPickOf(calOfWeapon(wid)), cal: calOfWeapon(wid) };
+          P.ammo[wid] = { mag: weaponStats(wid).mag, tier: ammoPickOf(calOfWeapon(wid)), cal: calOfWeapon(wid),
+            rounds: Array(weaponStats(wid).mag).fill(ammoPickOf(calOfWeapon(wid))) };
         }
         P.gunLoot[wid] = (P.gunLoot[wid] | 0) + 1;
       }

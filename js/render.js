@@ -5359,14 +5359,16 @@ function drawHUD() {
   ctx.fillText(headTxt, wx, wy - 58);      // 下面那行 wy-44 是小方格弹匣条
 
   if (inHand) {
-    /* 弹种一行：口径 + 弹级 —— 打不动甲的时候先看这里是不是白弹 */
-    const AT = ammoTier(a.tier == null ? 1 : a.tier);
+    /* 弹种一行：口径 + 下一发的弹级 —— 混装弹匣会随着击发逐发跳级，打不动甲先看这里 */
+    const nlv = (Array.isArray(a.rounds) && a.rounds.length) ? a.rounds[0] : (a.tier == null ? 1 : a.tier);
+    const AT = ammoTier(nlv);
+    const mixed = Array.isArray(a.rounds) && a.rounds.length > 0 && new Set(a.rounds).size > 1;
     const CAL = CALIBERS[a.cal] || CALIBERS['919'];
     ctx.textAlign = 'right';
     ctx.font = '700 10px ' + mono;
     ctx.fillStyle = AT.color;
     /* 放在「1主 2副…」快捷栏上面一行，那里正好空着 */
-    ctx.fillText(CAL.short + ' · ' + AT.grade + ' ' + AT.name + ' · 穿甲 ' + AT.lv, wx, wy - 90);
+    ctx.fillText(CAL.short + ' · ' + AT.grade + ' ' + AT.name + ' · 穿甲 ' + AT.lv + (mixed ? ' · 混' : ''), wx, wy - 90);
 
     const magStr = String(a.mag).padStart(2, '0');
     const resStr = '/ ' + reserveOf(a.cal || calOfWeapon(P.weapon));
